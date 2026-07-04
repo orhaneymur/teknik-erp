@@ -198,6 +198,7 @@ export type Product = {
   quality?: string | null;
   description?: string | null;
   categoryId?: number | null;
+  category?: { id: number; name: string } | null;
   costPrice: number;
   priceTl: number;
   priceUsd: number;

@@ -27,6 +27,44 @@ function asNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/** Excel basliklarini esnek eslestir (StokKod/StokKodu, Marka, vb.) */
+function normalizeHeaderKey(key: string): string {
+  return key
+    .trim()
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ı/g, 'i')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function cell(row: Record<string, unknown>, ...aliases: string[]): unknown {
+  const map = new Map<string, unknown>();
+  for (const [key, value] of Object.entries(row)) {
+    map.set(normalizeHeaderKey(key), value);
+  }
+  for (const alias of aliases) {
+    const normalized = normalizeHeaderKey(alias);
+    if (map.has(normalized)) return map.get(normalized);
+  }
+  for (const alias of aliases) {
+    const normalized = normalizeHeaderKey(alias);
+    for (const [key, value] of map) {
+      if (key.startsWith(normalized) || normalized.startsWith(key)) {
+        return value;
+      }
+    }
+  }
+  return undefined;
+}
+
+function hasCell(row: Record<string, unknown>, ...aliases: string[]): boolean {
+  return cell(row, ...aliases) !== undefined;
+}
+
 function readRows<T extends Record<string, unknown>>(buffer: Buffer): T[] {
   const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: false });
   const sheetName = workbook.SheetNames[0];
@@ -453,13 +491,19 @@ export async function importProductsExcel(
     sku: string;
     name: string;
     categoryName: string | null;
+    hasCategory: boolean;
     brand: string | null;
+    hasBrand: boolean;
     model: string | null;
+    hasModel: boolean;
     quality: string | null;
+    hasQuality: boolean;
     appearance: string | null;
+    hasAppearance: boolean;
     description: string | null;
     hasDescriptionUpdate: boolean;
     rbmPrice: number | null;
+    hasRmb: boolean;
     costPrice: number;
     priceTl: number;
     priceUsd: number;
@@ -473,8 +517,9 @@ export async function importProductsExcel(
   const parsedRows: ParsedRow[] = [];
 
   for (const [index, row] of rows.entries()) {
-    const sku = asString(row.StokKodu);
-    const name = asString(row.StokAdi);
+    const record = row as Record<string, unknown>;
+    const sku = asString(cell(record, 'StokKodu', 'StokKod', 'SKU'));
+    const name = asString(cell(record, 'StokAdi', 'StokAd', 'UrunAdi', 'UrunAd'));
 
     if (!sku || !name) {
       skipped += 1;
@@ -482,43 +527,58 @@ export async function importProductsExcel(
       continue;
     }
 
-    const salePrice = asNumber(row.SatisFiyati, 0);
-    const saleUsd = asNumber(row.SatisUsd, 0);
+    const salePrice = asNumber(cell(record, 'SatisFiyati', 'SatisFiyat'), 0);
+    const saleUsd = asNumber(cell(record, 'SatisUsd'), 0);
     const priceUsd = saleUsd > 0 ? saleUsd : salePrice;
-    const gorunum = optionalString(row.Gorunum);
-    const renk = optionalString(row.Renk);
+    const hasGorunum = hasCell(record, 'Gorunum', 'Gorunun');
+    const hasRenk = hasCell(record, 'Renk');
+    const gorunum = optionalString(cell(record, 'Gorunum', 'Gorunun'));
+    const renk = optionalString(cell(record, 'Renk'));
     const hasDescriptionUpdate =
-      Object.prototype.hasOwnProperty.call(row, 'Aciklama') ||
-      (Boolean(gorunum) && Boolean(renk));
-    let description: string | null = optionalString(row.Aciklama);
+      hasCell(record, 'Aciklama', 'Aciklam') || (Boolean(gorunum) && Boolean(renk));
+    let description: string | null = optionalString(
+      cell(record, 'Aciklama', 'Aciklam')
+    );
+    // Renk ayri alan; gorunum varken aciklamaya ekle
     if (renk && gorunum) {
       description = description ? `${description} | Renk: ${renk}` : `Renk: ${renk}`;
     }
+
+    const hasBrand = hasCell(record, 'Marka');
+    const hasModel = hasCell(record, 'Model');
+    const hasCategory = hasCell(record, 'Kategori');
 
     parsedRows.push({
       rowIndex: index,
       sku,
       name,
-      categoryName: optionalString(row.Kategori),
-      brand: optionalString(row.Marka),
-      model: optionalString(row.Model),
-      quality: qualityCodeFromLabel(optionalString(row.Kalite)),
+      categoryName: optionalString(cell(record, 'Kategori')),
+      hasCategory,
+      brand: optionalString(cell(record, 'Marka')),
+      hasBrand,
+      model: optionalString(cell(record, 'Model')),
+      hasModel,
+      quality: qualityCodeFromLabel(
+        optionalString(cell(record, 'Kalite'))
+      ),
+      hasQuality: hasCell(record, 'Kalite'),
       appearance: appearanceCodeFromLabel(gorunum ?? renk),
+      hasAppearance: hasGorunum || hasRenk,
       description,
       hasDescriptionUpdate,
-      rbmPrice:
-        Object.prototype.hasOwnProperty.call(row, 'Rmb') && row.Rmb !== ''
-          ? asNumber(row.Rmb, 0)
-          : null,
-      costPrice: asNumber(row.AlisFiyati, 0),
+      rbmPrice: hasCell(record, 'Rmb', 'Rm', 'RMB')
+        ? asNumber(cell(record, 'Rmb', 'Rm', 'RMB'), 0)
+        : null,
+      hasRmb: hasCell(record, 'Rmb', 'Rm', 'RMB'),
+      costPrice: asNumber(cell(record, 'AlisFiyati', 'AlisFiyat'), 0),
       priceTl: priceUsd,
       priceUsd,
-      barcodeRaw: optionalString(row.Barkod),
-      hasBarcodeColumn: Object.prototype.hasOwnProperty.call(row, 'Barkod'),
+      barcodeRaw: optionalString(cell(record, 'Barkod')),
+      hasBarcodeColumn: hasCell(record, 'Barkod'),
       /** Bakiye = MERKEZ_DEPO stok adedi */
-      merkezQty: asNumber(row.Bakiye ?? row.MerkezDepo, 0),
-      cinIadeQty: asNumber(row.CinIadeDepo, 0),
-      hasCinIadeColumn: Object.prototype.hasOwnProperty.call(row, 'CinIadeDepo'),
+      merkezQty: asNumber(cell(record, 'Bakiye', 'MerkezDepo'), 0),
+      cinIadeQty: asNumber(cell(record, 'CinIadeDepo'), 0),
+      hasCinIadeColumn: hasCell(record, 'CinIadeDepo'),
     });
   }
 
@@ -530,18 +590,27 @@ export async function importProductsExcel(
     item: ParsedRow,
     existingBySku: Map<string, number>
   ) => {
+    const existingId = existingBySku.get(item.sku);
     let categoryId: number | null = null;
-    if (item.categoryName) {
+    if (item.hasCategory && item.categoryName) {
       categoryId = await findOrCreateCategory(
         tx,
         item.categoryName,
         categoryCache,
         categoriesCreated
       );
+    } else if (item.hasCategory) {
+      categoryId = null;
+    } else if (existingId) {
+      const existingProduct = await tx.product.findUnique({
+        where: { id: existingId },
+        select: { categoryId: true },
+      });
+      categoryId = existingProduct?.categoryId ?? null;
     }
 
     let brandModelId: number | null = null;
-    if (item.brand) {
+    if (item.hasBrand && item.brand) {
       await findOrCreateBrandModel(
         tx,
         item.brand,
@@ -551,7 +620,7 @@ export async function importProductsExcel(
         brandModelsCreated
       );
     }
-    if (item.model) {
+    if (item.hasModel && item.model) {
       brandModelId = await findOrCreateBrandModel(
         tx,
         item.model,
@@ -560,28 +629,28 @@ export async function importProductsExcel(
         brandModelCache,
         brandModelsCreated
       );
+    } else if (item.hasModel) {
+      brandModelId = null;
     }
 
-    const categoryUpdate =
-      item.categoryName != null ? { categoryId } : {};
+    // Excel'de sutun varsa her zaman yaz (Marka/Model/Kategori bos gelse bile)
+    const categoryUpdate = item.hasCategory ? { categoryId } : {};
 
     const detailUpdate = {
-      ...(item.brand != null ? { brand: item.brand || null } : {}),
-      ...(item.model != null ? { model: item.model || null } : {}),
-      ...(item.model != null ? { brandModelId } : {}),
-      ...(item.quality != null ? { quality: item.quality } : {}),
-      ...(item.appearance != null ? { appearance: item.appearance } : {}),
+      ...(item.hasBrand ? { brand: item.brand } : {}),
+      ...(item.hasModel ? { model: item.model, brandModelId } : {}),
+      ...(item.hasQuality ? { quality: item.quality } : {}),
+      ...(item.hasAppearance ? { appearance: item.appearance } : {}),
       ...(item.hasDescriptionUpdate
         ? { description: item.description || null }
         : {}),
-      ...(item.rbmPrice != null ? { rbmPrice: item.rbmPrice } : {}),
+      ...(item.hasRmb ? { rbmPrice: item.rbmPrice ?? 0 } : {}),
     };
 
     const barcodeUpdate = item.hasBarcodeColumn
       ? { barcode: item.barcodeRaw }
       : {};
 
-    const existingId = existingBySku.get(item.sku);
     const product = existingId
       ? await tx.product.update({
           where: { id: existingId },

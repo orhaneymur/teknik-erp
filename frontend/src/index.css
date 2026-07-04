@@ -207,11 +207,16 @@
   }
 }
 
-/* Termal fiş: 72.1mm × 297mm (standart rulo genişliği) */
+/*
+ * Yazdırma modları (html.print-pdf | html.print-thermal):
+ * - PDF / A4: eski geniş düzen (.print-pdf-doc)
+ * - Fiş yazıcı 72.1mm: dar termal düzen (.receipt-slip)
+ * Sayfa boyutu printMode.ts ile enjekte edilir.
+ */
 @media print {
   @page {
-    size: 72.1mm 297mm;
-    margin: 2mm;
+    size: A4 portrait;
+    margin: 12mm;
   }
 
   html {
@@ -241,7 +246,102 @@
     background: transparent !important;
   }
 
+  /* Varsayılan (Ctrl+P) ve PDF modu: A4 geniş düzen */
   .receipt-slip {
+    display: none !important;
+  }
+
+  .print-pdf-doc {
+    display: none !important;
+  }
+
+  /* —— PDF / A4 —— */
+  html.print-pdf .print-pdf-doc,
+  html:not(.print-thermal) .print-pdf-doc {
+    display: block !important;
+    width: 100%;
+    max-width: 190mm;
+    margin: 0 auto;
+    color: #0f172a;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 11pt;
+    line-height: 1.4;
+  }
+
+  html.print-pdf .print-pdf-doc h1 {
+    margin: 0 0 4px;
+    text-align: center;
+    font-size: 16pt;
+    font-weight: 700;
+  }
+
+  html.print-pdf .print-pdf-doc .pdf-meta {
+    margin: 0 0 2px;
+    text-align: center;
+    font-size: 10pt;
+    color: #334155;
+  }
+
+  html.print-pdf .print-pdf-doc .pdf-notes {
+    margin: 10px 0 0;
+    padding-top: 8px;
+    border-top: 1px solid #cbd5e1;
+    font-size: 10pt;
+    white-space: pre-wrap;
+  }
+
+  html.print-pdf .print-pdf-doc table {
+    width: 100%;
+    margin-top: 14px;
+    border-collapse: collapse;
+  }
+
+  html.print-pdf .print-pdf-doc th,
+  html.print-pdf .print-pdf-doc td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+
+  html.print-pdf .print-pdf-doc th {
+    font-size: 9pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    text-align: left;
+  }
+
+  html.print-pdf .print-pdf-doc th.pdf-num,
+  html.print-pdf .print-pdf-doc td.pdf-num {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  html.print-pdf .print-pdf-doc td.pdf-name {
+    font-weight: 500;
+    word-break: break-word;
+  }
+
+  html.print-pdf .print-pdf-doc .pdf-totals {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 2px solid #0f172a;
+    text-align: right;
+  }
+
+  html.print-pdf .print-pdf-doc .pdf-totals p {
+    margin: 4px 0;
+  }
+
+  html.print-pdf .print-pdf-doc .pdf-grand {
+    font-size: 14pt;
+    font-weight: 800;
+  }
+
+  /* —— Termal fiş 72.1mm —— */
+  html.print-thermal .receipt-slip {
     display: block !important;
     width: 68mm;
     max-width: 68mm;
@@ -253,7 +353,7 @@
     line-height: 1.2;
   }
 
-  .receipt-slip-title {
+  html.print-thermal .receipt-slip-title {
     margin: 0 0 2px;
     text-align: center;
     font-size: 11px;
@@ -261,7 +361,7 @@
     letter-spacing: 0.02em;
   }
 
-  .receipt-slip-customer {
+  html.print-thermal .receipt-slip-customer {
     margin: 0 0 1px;
     text-align: center;
     font-size: 9px;
@@ -271,7 +371,7 @@
     text-overflow: ellipsis;
   }
 
-  .receipt-slip-meta {
+  html.print-thermal .receipt-slip-meta {
     margin: 0;
     text-align: center;
     font-size: 8px;
@@ -280,26 +380,26 @@
     text-overflow: ellipsis;
   }
 
-  .receipt-slip-preorder {
+  html.print-thermal .receipt-slip-preorder {
     margin: 2px 0 0;
     text-align: center;
     font-size: 8px;
     font-weight: 700;
   }
 
-  .receipt-slip-notes {
+  html.print-thermal .receipt-slip-notes {
     margin: 3px 0 0;
     font-size: 8px;
     white-space: pre-wrap;
     word-break: break-word;
   }
 
-  .receipt-slip-divider {
+  html.print-thermal .receipt-slip-divider {
     margin: 3px 0;
     border-top: 1px dashed #000;
   }
 
-  .receipt-item-row {
+  html.print-thermal .receipt-item-row {
     display: flex;
     align-items: baseline;
     gap: 3px;
@@ -309,13 +409,13 @@
     line-height: 1.25;
   }
 
-  .receipt-item-head {
+  html.print-thermal .receipt-item-head {
     font-size: 8px;
     font-weight: 700;
     text-transform: uppercase;
   }
 
-  .receipt-item-name {
+  html.print-thermal .receipt-item-name {
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -323,21 +423,21 @@
     white-space: nowrap;
   }
 
-  .receipt-item-qty {
+  html.print-thermal .receipt-item-qty {
     flex: 0 0 1.5em;
     width: 1.5em;
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
 
-  .receipt-item-price {
+  html.print-thermal .receipt-item-price {
     flex: 0 0 4.2em;
     width: 4.2em;
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
 
-  .receipt-item-total {
+  html.print-thermal .receipt-item-total {
     flex: 0 0 4.4em;
     width: 4.4em;
     text-align: right;
@@ -345,17 +445,17 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .receipt-slip-summary .receipt-item-name {
+  html.print-thermal .receipt-slip-summary .receipt-item-name {
     flex: 1 1 auto;
   }
 
-  .receipt-slip-summary .receipt-item-total {
+  html.print-thermal .receipt-slip-summary .receipt-item-total {
     flex: 0 0 auto;
     width: auto;
     min-width: 4.4em;
   }
 
-  .receipt-slip-grand {
+  html.print-thermal .receipt-slip-grand {
     font-size: 10px;
     font-weight: 700;
   }

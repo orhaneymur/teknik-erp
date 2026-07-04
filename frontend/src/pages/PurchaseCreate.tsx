@@ -17,6 +17,7 @@ import {
   type PaginatedListResponse,
 } from '../lib/api';
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
+import { printDocument } from '../lib/printMode';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
 const EXCHANGE_RATE = 1;
@@ -104,8 +105,12 @@ export default function PurchaseCreate({
   const [removedItemIds, setRemovedItemIds] = useState<number[]>([]);
   const [shouldPrint, setShouldPrint] = useState(false);
 
-  const handlePrintReceipt = useCallback(() => {
-    window.print();
+  const handlePrintPdf = useCallback(() => {
+    printDocument('pdf');
+  }, []);
+
+  const handlePrintThermal = useCallback(() => {
+    printDocument('thermal');
   }, []);
 
   const totalQuantity = useMemo(
@@ -515,7 +520,7 @@ export default function PurchaseCreate({
 
         if (shouldPrint) {
           window.setTimeout(() => {
-            window.print();
+            printDocument('thermal');
             const onAfterPrint = () => {
               resetAfterPurchase();
               window.removeEventListener('afterprint', onAfterPrint);
@@ -556,7 +561,55 @@ export default function PurchaseCreate({
 
   return (
     <div className="space-y-4 print:space-y-0">
-      <div className="receipt-slip hidden print:block">
+      <div className="print-pdf-doc hidden">
+        <h1>{displayInvoiceNo || initData.nextInvoiceNo || 'Alış Fişi'}</h1>
+        {selectedSupplier && (
+          <p className="pdf-meta">
+            {selectedSupplier.code} — {selectedSupplier.name}
+          </p>
+        )}
+        <p className="pdf-meta">
+          {invoiceDate}
+          {processedBy ? ` · ${processedBy}` : ''}
+        </p>
+        <p className="pdf-meta">
+          {[paymentMethod, paymentType].filter(Boolean).join(' · ')}
+        </p>
+        {orderNotes.trim() && (
+          <div className="pdf-notes">
+            <strong>Açıklama:</strong> {orderNotes.trim()}
+          </div>
+        )}
+        <table>
+          <thead>
+            <tr>
+              <th>Ürün</th>
+              <th className="pdf-num">Adet</th>
+              <th className="pdf-num">Birim</th>
+              <th className="pdf-num">Toplam</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cart.map((item) => {
+              const lineTotal = roundPrice(item.quantity * item.unitPriceUsd);
+              return (
+                <tr key={item.rowId}>
+                  <td className="pdf-name">{item.product.name}</td>
+                  <td className="pdf-num">{item.quantity}</td>
+                  <td className="pdf-num">{formatUsd(item.unitPriceUsd)}</td>
+                  <td className="pdf-num">{formatUsd(lineTotal)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="pdf-totals">
+          <p>Toplam adet: {totalQuantity}</p>
+          <p className="pdf-grand">Net toplam: {formatUsd(totalUsd)}</p>
+        </div>
+      </div>
+
+      <div className="receipt-slip hidden">
         <p className="receipt-slip-title">
           {displayInvoiceNo || initData.nextInvoiceNo || 'Alış Fişi'}
         </p>
@@ -957,12 +1010,21 @@ export default function PurchaseCreate({
                   className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
                 />
                 <Printer className="w-4 h-4" />
-                Kayıttan sonra yazdır
+                Kayıttan sonra fiş yazdır
               </label>
             )}
             <button
               type="button"
-              onClick={handlePrintReceipt}
+              onClick={handlePrintPdf}
+              disabled={cart.length === 0}
+              className="btn border-2 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-50 sm:w-auto"
+            >
+              <Printer className="w-5 h-5" />
+              PDF Yazdır
+            </button>
+            <button
+              type="button"
+              onClick={handlePrintThermal}
               disabled={cart.length === 0}
               className="btn border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 sm:w-auto"
             >

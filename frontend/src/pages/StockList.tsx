@@ -23,6 +23,14 @@ import {
 } from '../lib/api';
 import { depotLabel } from '../lib/depots';
 
+type CategoryOption = { id: number; name: string };
+type BrandModelOption = {
+  id: number;
+  name: string;
+  kind: 'MARKA' | 'MODEL';
+  categoryId: number | null;
+};
+
 type StockListProps = {
   onNotify?: (type: 'success' | 'error', message: string) => void;
   title?: string;
@@ -35,6 +43,8 @@ export default function StockList({
   subtitle,
 }: StockListProps = {}) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [brandModels, setBrandModels] = useState<BrandModelOption[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -45,6 +55,7 @@ export default function StockList({
     sku: '',
     name: '',
     barcode: '',
+    categoryId: '' as number | '',
     brand: '',
     model: '',
     description: '',
@@ -93,6 +104,24 @@ export default function StockList({
   }, []);
 
   useEffect(() => {
+    void Promise.all([
+      axios.get<{ success: boolean; data: CategoryOption[] }>(
+        `${API_BASE}/api/settings/categories`
+      ),
+      axios.get<{ success: boolean; data: BrandModelOption[] }>(
+        `${API_BASE}/api/settings/brand-models`
+      ),
+    ])
+      .then(([catRes, brandRes]) => {
+        if (catRes.data.success) setCategories(ensureArray(catRes.data.data));
+        if (brandRes.data.success) setBrandModels(ensureArray(brandRes.data.data));
+      })
+      .catch(() => {
+        /* tanimlar opsiyonel */
+      });
+  }, []);
+
+  useEffect(() => {
     setPage(1);
   }, [search]);
 
@@ -115,6 +144,18 @@ export default function StockList({
 
   const totalPages = getTotalPages(totalCount, LIST_PAGE_SIZE);
 
+  const brandOptions = brandModels.filter((item) => {
+    if (item.kind !== 'MARKA') return false;
+    if (form.categoryId === '') return true;
+    return item.categoryId === form.categoryId || item.categoryId == null;
+  });
+
+  const modelOptions = brandModels.filter((item) => {
+    if (item.kind !== 'MODEL') return false;
+    if (form.categoryId === '') return true;
+    return item.categoryId === form.categoryId || item.categoryId == null;
+  });
+
   const openEdit = (product: Product, e?: React.MouseEvent) => {
     e?.stopPropagation();
     setEditing(product);
@@ -122,6 +163,7 @@ export default function StockList({
       sku: product.sku,
       name: product.name,
       barcode: product.barcode ?? '',
+      categoryId: product.categoryId ?? product.category?.id ?? '',
       brand: product.brand ?? '',
       model: product.model ?? '',
       description: product.description ?? '',
@@ -150,6 +192,7 @@ export default function StockList({
         sku: form.sku.trim(),
         name: form.name.trim(),
         barcode: form.barcode.trim() || null,
+        categoryId: form.categoryId === '' ? null : Number(form.categoryId),
         brand: form.brand.trim() || null,
         model: form.model.trim() || null,
         description: form.description.trim() || null,
@@ -321,7 +364,7 @@ export default function StockList({
                         <td className="px-4 py-3 text-sm font-semibold text-slate-900">
                           {product.sku}
                         </td>
-                        <td className="px-4 py-3 max-w-[220px]">
+                        <td className="px-4 py-3 max-w-[280px]">
                           <button
                             type="button"
                             onClick={(e) => openEdit(product, e)}
@@ -330,6 +373,15 @@ export default function StockList({
                           >
                             {product.name}
                           </button>
+                          <p className="mt-0.5 truncate text-caption text-slate-500">
+                            {[
+                              product.category?.name,
+                              product.brand,
+                              product.model,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ') || 'Kategori / marka / model yok'}
+                          </p>
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-500 font-mono">
                           {product.barcode ?? '—'}
@@ -460,7 +512,9 @@ export default function StockList({
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
               <div>
                 <h3 className="font-semibold text-slate-900">Ürün Düzenle</h3>
-                <p className="text-caption text-slate-500">Ad, fiyat, marka ve stok</p>
+                <p className="text-caption text-slate-500">
+                  Kategori, marka, model, fiyat ve stok
+                </p>
               </div>
               <button type="button" onClick={() => setEditing(null)}>
                 <X className="h-5 w-5 text-slate-400" />
@@ -495,22 +549,58 @@ export default function StockList({
                   />
                 </div>
               </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600">Kategori</label>
+                <select
+                  value={form.categoryId}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      categoryId: e.target.value ? Number(e.target.value) : '',
+                    }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Seçin...</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-medium text-slate-600">Marka</label>
                   <input
+                    list="stock-edit-brand-options"
                     value={form.brand}
                     onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="Listeden seçin veya yazın"
+                    autoComplete="off"
                   />
+                  <datalist id="stock-edit-brand-options">
+                    {brandOptions.map((item) => (
+                      <option key={item.id} value={item.name} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-slate-600">Model</label>
                   <input
+                    list="stock-edit-model-options"
                     value={form.model}
                     onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    placeholder="Listeden seçin veya yazın"
+                    autoComplete="off"
                   />
+                  <datalist id="stock-edit-model-options">
+                    {modelOptions.map((item) => (
+                      <option key={item.id} value={item.name} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">

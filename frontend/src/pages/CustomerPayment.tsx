@@ -3,6 +3,7 @@ import axios from 'axios';
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  FileText,
   Pencil,
   Printer,
   Search,
@@ -27,6 +28,7 @@ import {
   type Safe,
 } from '../lib/api';
 import { useExchangeRates } from '../hooks/useExchangeRates';
+import { printDocument, type PrintMode } from '../lib/printMode';
 
 type PaymentCurrency = 'USD' | 'TRY';
 
@@ -369,24 +371,30 @@ export default function CustomerPayment({
 
   const selectedSafeData = safes.find((s) => s.id === selectedSafe);
 
-  const printPaymentReceipt = useCallback((receipt: PaymentReceipt) => {
-    setPrintReceipt(receipt);
-    window.setTimeout(() => window.print(), 80);
-  }, []);
+  const printPaymentReceipt = useCallback(
+    (receipt: PaymentReceipt, mode: PrintMode = 'thermal') => {
+      setPrintReceipt(receipt);
+      window.setTimeout(() => printDocument(mode), 80);
+    },
+    []
+  );
 
   const printPaymentRow = useCallback(
-    (payment: PaymentRow) => {
-      printPaymentReceipt({
-        type: payment.type,
-        amount: payment.amount,
-        description: payment.description,
-        createdAt: payment.createdAt,
-        customerLabel: payment.customer
-          ? `${payment.customer.code} — ${payment.customer.name}`
-          : '—',
-        safeName: payment.safe.name,
-        balanceAfter: payment.customer?.balance ?? null,
-      });
+    (payment: PaymentRow, mode: PrintMode = 'thermal') => {
+      printPaymentReceipt(
+        {
+          type: payment.type,
+          amount: payment.amount,
+          description: payment.description,
+          createdAt: payment.createdAt,
+          customerLabel: payment.customer
+            ? `${payment.customer.code} — ${payment.customer.name}`
+            : '—',
+          safeName: payment.safe.name,
+          balanceAfter: payment.customer?.balance ?? null,
+        },
+        mode
+      );
     },
     [printPaymentReceipt]
   );
@@ -460,7 +468,7 @@ export default function CustomerPayment({
         };
 
         if (shouldPrint) {
-          printPaymentReceipt(receipt);
+          printPaymentReceipt(receipt, 'thermal');
           window.setTimeout(() => {
             void finishPayment();
           }, 400);
@@ -606,32 +614,53 @@ export default function CustomerPayment({
   return (
     <div className="space-y-6 print:space-y-0">
       {printReceipt && (
-        <div className="receipt-slip hidden print:block">
-          <p className="receipt-slip-title">
-            {printReceipt.type === 'GIRIS' ? 'TAHSİLAT FİŞİ' : 'ÖDEME FİŞİ'}
-          </p>
-          <p className="receipt-slip-customer">{printReceipt.customerLabel}</p>
-          <p className="receipt-slip-meta">{formatDate(printReceipt.createdAt)}</p>
-          <p className="receipt-slip-meta">Kasa: {printReceipt.safeName}</p>
-          {printReceipt.description && (
-            <p className="receipt-slip-notes">{printReceipt.description}</p>
-          )}
-          <div className="receipt-slip-divider" />
-          <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
-            <span className="receipt-item-name">Tutar</span>
-            <span className="receipt-item-total">
-              {formatMoney(printReceipt.amount)}
-            </span>
+        <>
+          <div className="print-pdf-doc hidden">
+            <h1>
+              {printReceipt.type === 'GIRIS' ? 'Tahsilat Fişi' : 'Ödeme Fişi'}
+            </h1>
+            <p className="pdf-meta">{printReceipt.customerLabel}</p>
+            <p className="pdf-meta">{formatDate(printReceipt.createdAt)}</p>
+            <p className="pdf-meta">Kasa: {printReceipt.safeName}</p>
+            {printReceipt.description && (
+              <div className="pdf-notes">
+                <strong>Açıklama:</strong> {printReceipt.description}
+              </div>
+            )}
+            <div className="pdf-totals">
+              <p className="pdf-grand">Tutar: {formatMoney(printReceipt.amount)}</p>
+              {printReceipt.balanceAfter != null && (
+                <p>Sonraki bakiye: {formatMoney(printReceipt.balanceAfter)}</p>
+              )}
+            </div>
           </div>
-          {printReceipt.balanceAfter != null && (
-            <div className="receipt-item-row receipt-slip-summary">
-              <span className="receipt-item-name">Sonraki bakiye</span>
+          <div className="receipt-slip hidden">
+            <p className="receipt-slip-title">
+              {printReceipt.type === 'GIRIS' ? 'TAHSİLAT FİŞİ' : 'ÖDEME FİŞİ'}
+            </p>
+            <p className="receipt-slip-customer">{printReceipt.customerLabel}</p>
+            <p className="receipt-slip-meta">{formatDate(printReceipt.createdAt)}</p>
+            <p className="receipt-slip-meta">Kasa: {printReceipt.safeName}</p>
+            {printReceipt.description && (
+              <p className="receipt-slip-notes">{printReceipt.description}</p>
+            )}
+            <div className="receipt-slip-divider" />
+            <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+              <span className="receipt-item-name">Tutar</span>
               <span className="receipt-item-total">
-                {formatMoney(printReceipt.balanceAfter)}
+                {formatMoney(printReceipt.amount)}
               </span>
             </div>
-          )}
-        </div>
+            {printReceipt.balanceAfter != null && (
+              <div className="receipt-item-row receipt-slip-summary">
+                <span className="receipt-item-name">Sonraki bakiye</span>
+                <span className="receipt-item-total">
+                  {formatMoney(printReceipt.balanceAfter)}
+                </span>
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       <div className="flex items-center gap-3 print:hidden">
@@ -765,7 +794,7 @@ export default function CustomerPayment({
               className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
             />
             <Printer className="w-4 h-4" />
-            Kayıttan sonra yazdır
+            Kayıttan sonra fiş yazdır
           </label>
 
           <div className="flex flex-wrap gap-3 pt-2">
@@ -914,7 +943,15 @@ export default function CustomerPayment({
                       <div className="inline-flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => printPaymentRow(payment)}
+                          onClick={() => printPaymentRow(payment, 'pdf')}
+                          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          title="PDF yazdır"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => printPaymentRow(payment, 'thermal')}
                           className="rounded p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
                           title="Fiş yazdır"
                         >

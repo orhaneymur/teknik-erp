@@ -3729,6 +3729,7 @@ app.get<{ Querystring: { search?: string; page?: string; limit?: string; take?: 
         take: pagination.limit,
         skip: pagination.skip,
         include: {
+          category: { select: { id: true, name: true } },
           stocks: {
             include: {
               branch: {
@@ -3808,6 +3809,7 @@ app.get<{ Params: { id: string } }>('/api/products/:id', async (request, reply) 
   const product = await prisma.product.findUnique({
     where: { id },
     include: {
+      category: { select: { id: true, name: true } },
       stocks: {
         include: {
           branch: { select: { id: true, name: true, type: true } },
@@ -3910,6 +3912,7 @@ app.put<{
         ...(description !== undefined ? { description: description?.trim() || null } : {}),
       },
       include: {
+        category: { select: { id: true, name: true } },
         stocks: {
           include: {
             branch: { select: { id: true, name: true, type: true } },

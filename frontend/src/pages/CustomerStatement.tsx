@@ -7,6 +7,7 @@ import {
   FileText,
   Printer,
 } from 'lucide-react';
+import { printDocument, type PrintMode } from '../lib/printMode';
 import CustomerNameLink from '../components/CustomerNameLink';
 import CustomerSearchPanel from '../components/CustomerSearchPanel';
 import {
@@ -142,10 +143,10 @@ export default function CustomerStatement({
     });
   };
 
-  const printReceipts = useCallback((toPrint: StatementLine[]) => {
+  const printReceipts = useCallback((toPrint: StatementLine[], mode: PrintMode) => {
     if (toPrint.length === 0) return;
     setPrintLines(toPrint);
-    window.setTimeout(() => window.print(), 80);
+    window.setTimeout(() => printDocument(mode), 80);
   }, []);
 
   const downloadCsv = () => {
@@ -177,8 +178,83 @@ export default function CustomerStatement({
 
   return (
     <div className="space-y-4 print:space-y-0">
-      {/* Termal fiş — seçili hareketler tek fişte */}
-      <div className="receipt-slip hidden print:block">
+      {/* PDF / A4 */}
+      <div className="print-pdf-doc hidden">
+        <h1>{printLines.length > 1 ? 'Toplu Ekstre Fişi' : 'Ekstre Fişi'}</h1>
+        {customer && (
+          <p className="pdf-meta">
+            {customer.code} — {customer.name}
+          </p>
+        )}
+        <p className="pdf-meta">
+          {printLines.length} hareket · {new Date().toLocaleDateString('tr-TR')}
+        </p>
+        {printLines.map((line) => (
+          <div key={lineKey(line)} style={{ marginTop: 14 }}>
+            {line.kind === 'invoice' ? (
+              <>
+                <p className="pdf-meta" style={{ textAlign: 'left', fontWeight: 700 }}>
+                  {line.invoiceNo} · {invoiceTypeLabel(line.invoiceType ?? '')}
+                </p>
+                <p className="pdf-meta" style={{ textAlign: 'left' }}>
+                  {formatDate(line.date)}
+                  {line.paymentMethod ? ` · ${line.paymentMethod}` : ''}
+                </p>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Ürün</th>
+                      <th className="pdf-num">Adet</th>
+                      <th className="pdf-num">Birim</th>
+                      <th className="pdf-num">Toplam</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(line.items ?? []).map((item) => (
+                      <tr key={item.id}>
+                        <td className="pdf-name">{item.productName}</td>
+                        <td className="pdf-num">{item.quantity}</td>
+                        <td className="pdf-num">{formatMoney(item.unitPrice)}</td>
+                        <td className="pdf-num">{formatMoney(item.lineTotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="pdf-totals">
+                  <p>
+                    Fiş toplam:{' '}
+                    {formatMoney(line.debit > 0 ? line.debit : line.credit)}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="pdf-meta" style={{ textAlign: 'left', fontWeight: 700 }}>
+                  {line.paymentType === 'GIRIS' ? 'Tahsilat' : 'Ödeme'}
+                </p>
+                <p className="pdf-meta" style={{ textAlign: 'left' }}>
+                  {formatDate(line.date)}
+                  {line.safeName ? ` · ${line.safeName}` : ''}
+                </p>
+                {line.description && (
+                  <div className="pdf-notes">{line.description}</div>
+                )}
+                <div className="pdf-totals">
+                  <p className="pdf-grand">Tutar: {formatMoney(line.amount ?? 0)}</p>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+        {printLines.length > 1 && (
+          <div className="pdf-totals">
+            <p className="pdf-grand">Genel toplam: {formatMoney(printTotal)}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Termal fiş — yalnızca fiş yazıcısı */}
+      <div className="receipt-slip hidden">
         <p className="receipt-slip-title">
           {printLines.length > 1 ? 'Toplu Fiş' : 'Fiş'}
         </p>
@@ -279,12 +355,22 @@ export default function CustomerStatement({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => printReceipts(selectedLines)}
+            onClick={() => printReceipts(selectedLines, 'pdf')}
+            disabled={selectedLines.length === 0}
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <FileText className="h-4 w-4" />
+            Seçilenleri PDF
+            {selectedLines.length > 0 ? ` (${selectedLines.length})` : ''}
+          </button>
+          <button
+            type="button"
+            onClick={() => printReceipts(selectedLines, 'thermal')}
             disabled={selectedLines.length === 0}
             className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
           >
             <Printer className="h-4 w-4" />
-            Seçilenleri Yazdır
+            Seçilenleri Fiş
             {selectedLines.length > 0 ? ` (${selectedLines.length})` : ''}
           </button>
           <button
@@ -436,15 +522,26 @@ export default function CustomerStatement({
                             {line.credit > 0 ? formatMoney(line.credit) : '—'}
                           </td>
                           <td className="px-3 py-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => printReceipts([line])}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                              title="Bu fişi yazdır"
-                            >
-                              <Printer className="h-3.5 w-3.5" />
-                              Fiş
-                            </button>
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => printReceipts([line], 'pdf')}
+                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                                title="PDF yazdır"
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                                PDF
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => printReceipts([line], 'thermal')}
+                                className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-800 hover:bg-indigo-100"
+                                title="Fiş yazdır"
+                              >
+                                <Printer className="h-3.5 w-3.5" />
+                                Fiş
+                              </button>
+                            </div>
                           </td>
                         </tr>
                         {isInvoice && expanded && (

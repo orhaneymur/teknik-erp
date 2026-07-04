@@ -20,6 +20,7 @@ import {
   type PaginatedListResponse,
 } from '../lib/api';
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
+import { printDocument } from '../lib/printMode';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
 type Branch = {
@@ -195,8 +196,12 @@ export default function SalesCreate({
   } | null>(null);
   const showCosts = useHoldKeyReveal('F8');
 
-  const handlePrintReceipt = useCallback(() => {
-    window.print();
+  const handlePrintPdf = useCallback(() => {
+    printDocument('pdf');
+  }, []);
+
+  const handlePrintThermal = useCallback(() => {
+    printDocument('thermal');
   }, []);
 
   const customerSearchRef = useRef<HTMLInputElement>(null);
@@ -828,7 +833,7 @@ export default function SalesCreate({
 
         if (shouldPrint) {
           window.setTimeout(() => {
-            window.print();
+            printDocument('thermal');
             const onAfterPrint = () => {
               resetAfterSale();
               window.removeEventListener('afterprint', onAfterPrint);
@@ -867,8 +872,71 @@ export default function SalesCreate({
 
   return (
     <div className="space-y-4 print:space-y-0">
-      {/* Termal fiş (72.1mm) — ekran tablosu yazdırılmaz */}
-      <div className="receipt-slip hidden print:block">
+      {/* PDF / A4 — geniş düzen */}
+      <div className="print-pdf-doc hidden">
+        <h1>{displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}</h1>
+        {selectedCustomer && (
+          <p className="pdf-meta">
+            {selectedCustomer.code} — {selectedCustomer.name}
+          </p>
+        )}
+        <p className="pdf-meta">
+          {invoiceDate}
+          {processedBy ? ` · ${processedBy}` : ''}
+        </p>
+        <p className="pdf-meta">
+          {[paymentMethod, paymentType, deliveryType].filter(Boolean).join(' · ')}
+        </p>
+        {isPreOrder && (
+          <p className="pdf-meta">
+            <strong>Ön Sipariş — Stok düşülmedi</strong>
+          </p>
+        )}
+        {orderNotes.trim() && (
+          <div className="pdf-notes">
+            <strong>Açıklama:</strong> {orderNotes.trim()}
+          </div>
+        )}
+        <table>
+          <thead>
+            <tr>
+              <th>Ürün</th>
+              <th className="pdf-num">Adet</th>
+              <th className="pdf-num">Birim</th>
+              <th className="pdf-num">Toplam</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cart.map((item) => {
+              const lineTotal = calcLineTotalUsd(item);
+              const unitNet = unitNetUsd(item);
+              return (
+                <tr key={item.rowId}>
+                  <td className="pdf-name">{item.product.name}</td>
+                  <td className="pdf-num">{item.quantity}</td>
+                  <td className="pdf-num">{formatUsd(unitNet)}</td>
+                  <td className="pdf-num">{formatUsd(lineTotal)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="pdf-totals">
+          <p>Toplam adet: {totalQuantity}</p>
+          <p className="pdf-grand">Net toplam: {formatUsd(totalUsd)}</p>
+          {receiptBalance && (
+            <>
+              <p>Önceki bakiye: {formatMoney(receiptBalance.before)}</p>
+              <p>
+                <strong>Sonraki bakiye: {formatMoney(receiptBalance.after)}</strong>
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Termal fiş (72.1mm) — yalnızca fiş yazıcısı */}
+      <div className="receipt-slip hidden">
         <p className="receipt-slip-title">
           {displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}
         </p>
@@ -1413,7 +1481,7 @@ export default function SalesCreate({
                   className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 />
                 <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
-                  <Printer className="w-4 h-4" /> Kayıttan sonra yazdır
+                  <Printer className="w-4 h-4" /> Kayıttan sonra fiş yazdır
                 </span>
               </label>
             )}
@@ -1449,7 +1517,16 @@ export default function SalesCreate({
 
           <button
             type="button"
-            onClick={handlePrintReceipt}
+            onClick={handlePrintPdf}
+            disabled={cart.length === 0}
+            className="btn btn-block border-2 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-50 print:hidden"
+          >
+            <Printer className="w-5 h-5" />
+            PDF Yazdır
+          </button>
+          <button
+            type="button"
+            onClick={handlePrintThermal}
             disabled={cart.length === 0}
             className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
           >

@@ -27,6 +27,7 @@ import {
   type PaginatedListResponse,
 } from '../lib/api';
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
+import { printDocument } from '../lib/printMode';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 import SalesCreate from './SalesCreate';
 
@@ -177,8 +178,12 @@ export default function SalesReturn({
 
   const showCosts = useHoldKeyReveal('F8');
 
-  const handlePrintReceipt = useCallback(() => {
-    window.print();
+  const handlePrintPdf = useCallback(() => {
+    printDocument('pdf');
+  }, []);
+
+  const handlePrintThermal = useCallback(() => {
+    printDocument('thermal');
   }, []);
 
   const f2 = useF2ProductSearch({
@@ -703,7 +708,7 @@ export default function SalesReturn({
 
       if (shouldPrint) {
         window.setTimeout(() => {
-          window.print();
+          printDocument('thermal');
           const onAfterPrint = () => {
             resetAfterReturn();
             window.removeEventListener('afterprint', onAfterPrint);
@@ -745,7 +750,48 @@ export default function SalesReturn({
 
     return (
       <div className="space-y-4 print:space-y-0">
-        <div className="receipt-slip hidden print:block">
+        <div className="print-pdf-doc hidden">
+          <h1>{displayInvoiceNo || 'İade Fişi'}</h1>
+          {editCustomerLabel && <p className="pdf-meta">{editCustomerLabel}</p>}
+          <p className="pdf-meta">
+            {editInvoiceDate}
+            {editProcessedBy ? ` · ${editProcessedBy}` : ''}
+          </p>
+          {editNotes.trim() && (
+            <div className="pdf-notes">
+              <strong>Açıklama:</strong> {editNotes.trim()}
+            </div>
+          )}
+          <table>
+            <thead>
+              <tr>
+                <th>Ürün</th>
+                <th className="pdf-num">Adet</th>
+                <th className="pdf-num">Birim</th>
+                <th className="pdf-num">Toplam</th>
+              </tr>
+            </thead>
+            <tbody>
+              {editLines.map((line) => {
+                const lineTotal = roundPrice(line.quantity * line.unitPriceTl);
+                return (
+                  <tr key={line.rowId}>
+                    <td className="pdf-name">{line.productName}</td>
+                    <td className="pdf-num">{line.quantity}</td>
+                    <td className="pdf-num">{formatUsd(line.unitPriceTl)}</td>
+                    <td className="pdf-num">{formatUsd(lineTotal)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="pdf-totals">
+            <p>Toplam adet: {editTotalQty}</p>
+            <p className="pdf-grand">Net toplam: {formatUsd(editTotalTl)}</p>
+          </div>
+        </div>
+
+        <div className="receipt-slip hidden">
           <p className="receipt-slip-title">{displayInvoiceNo || 'İade Fişi'}</p>
           {editCustomerLabel && (
             <p className="receipt-slip-customer">{editCustomerLabel}</p>
@@ -937,7 +983,16 @@ export default function SalesReturn({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={handlePrintReceipt}
+              onClick={handlePrintPdf}
+              disabled={editLines.length === 0}
+              className="btn inline-flex items-center gap-2 border-2 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-50"
+            >
+              <Printer className="h-5 w-5" />
+              PDF Yazdır
+            </button>
+            <button
+              type="button"
+              onClick={handlePrintThermal}
               disabled={editLines.length === 0}
               className="btn inline-flex items-center gap-2 border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
             >
@@ -986,7 +1041,44 @@ export default function SalesReturn({
 
   return (
     <div className="space-y-4 print:space-y-0">
-      <div className="receipt-slip hidden print:block">
+      <div className="print-pdf-doc hidden">
+        <h1>{displayInvoiceNo || 'İade Fişi'}</h1>
+        {selectedCustomer && (
+          <p className="pdf-meta">
+            {selectedCustomer.code} — {selectedCustomer.name}
+          </p>
+        )}
+        <p className="pdf-meta">Satış iade</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Ürün</th>
+              <th className="pdf-num">Adet</th>
+              <th className="pdf-num">Birim</th>
+              <th className="pdf-num">Toplam</th>
+            </tr>
+          </thead>
+          <tbody>
+            {activeLines.map((line) => {
+              const lineTotal = roundPrice(line.returnQty * line.unitPriceTl);
+              return (
+                <tr key={line.rowId}>
+                  <td className="pdf-name">{line.productName}</td>
+                  <td className="pdf-num">{line.returnQty}</td>
+                  <td className="pdf-num">{formatUsd(line.unitPriceTl)}</td>
+                  <td className="pdf-num">{formatUsd(lineTotal)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="pdf-totals">
+          <p>Toplam adet: {totalQuantity}</p>
+          <p className="pdf-grand">Net toplam: {formatUsd(totalUsd)}</p>
+        </div>
+      </div>
+
+      <div className="receipt-slip hidden">
         <p className="receipt-slip-title">{displayInvoiceNo || 'İade Fişi'}</p>
         {selectedCustomer && (
           <p className="receipt-slip-customer">
@@ -1352,11 +1444,20 @@ export default function SalesReturn({
               className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
             />
             <Printer className="w-4 h-4" />
-            Kayıttan sonra yazdır
+            Kayıttan sonra fiş yazdır
           </label>
           <button
             type="button"
-            onClick={handlePrintReceipt}
+            onClick={handlePrintPdf}
+            disabled={activeLines.length === 0}
+            className="btn btn-block border-2 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-50"
+          >
+            <Printer className="h-5 w-5" />
+            PDF Yazdır
+          </button>
+          <button
+            type="button"
+            onClick={handlePrintThermal}
             disabled={activeLines.length === 0}
             className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
           >
