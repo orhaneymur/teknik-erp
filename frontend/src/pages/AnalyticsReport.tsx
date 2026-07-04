@@ -1,14 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { BarChart3, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import {
+  AlertTriangle,
+  BarChart3,
+  Package,
+  TrendingUp,
+  Users,
+} from 'lucide-react';
 import {
   API_BASE,
   ensureArray,
   formatMoney,
 } from '../lib/api';
-import SimpleBarChart from '../components/SimpleBarChart';
-
-const COLLAPSED_ROWS = 6;
+import {
+  AreaTrendChart,
+  LowStockMeter,
+  RankingChart,
+} from '../components/DashboardCharts';
 
 type StaffTurnover = {
   userId: number;
@@ -46,157 +54,35 @@ type AnalyticsData = {
   lowStock: { id: number; sku: string; name: string; quantity: number }[];
 };
 
-function ExpandToggle({
-  expanded,
-  hiddenCount,
-  onToggle,
-}: {
-  expanded: boolean;
-  hiddenCount: number;
-  onToggle: () => void;
-}) {
-  if (hiddenCount <= 0) return null;
-
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
-    >
-      {expanded ? (
-        <>
-          <ChevronUp className="h-4 w-4" />
-          Daha az göster
-        </>
-      ) : (
-        <>
-          <ChevronDown className="h-4 w-4" />
-          Daha fazla göster ({hiddenCount} kalem daha)
-        </>
-      )}
-    </button>
-  );
-}
-
-function ExpandableBarSection({
+function SectionCard({
+  icon,
+  iconClass,
   title,
-  items,
-  barColor,
-  valueFormatter,
+  subtitle,
+  children,
+  className = '',
 }: {
+  icon: React.ReactNode;
+  iconClass: string;
   title: string;
-  items: { label: string; value: number }[];
-  barColor: string;
-  valueFormatter: (value: number) => string;
+  subtitle?: string;
+  children: React.ReactNode;
+  className?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? items : items.slice(0, COLLAPSED_ROWS);
-  const hiddenCount = Math.max(0, items.length - COLLAPSED_ROWS);
-
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="mb-4 font-semibold text-slate-800">{title}</h2>
-      <SimpleBarChart
-        items={visible.map((item) => ({
-          label: item.label,
-          value: item.value,
-          color: barColor,
-        }))}
-        valueFormatter={valueFormatter}
-      />
-      <ExpandToggle
-        expanded={expanded}
-        hiddenCount={hiddenCount}
-        onToggle={() => setExpanded((prev) => !prev)}
-      />
-    </section>
-  );
-}
-
-function ProductSalesSection({
-  topProducts,
-  bottomProducts,
-}: {
-  topProducts: ProductSaleRow[];
-  bottomProducts: ProductSaleRow[];
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const visibleTop = expanded ? topProducts : topProducts.slice(0, COLLAPSED_ROWS);
-  const hiddenTopCount = Math.max(0, topProducts.length - COLLAPSED_ROWS);
-  const canExpand = hiddenTopCount > 0 || bottomProducts.length > 0;
-  const expandLabelCount =
-    hiddenTopCount + (bottomProducts.length > 0 && expanded === false ? bottomProducts.length : 0);
-
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="mb-4 font-semibold text-slate-800">
-        En Çok Satan 10 Ürün (30 gün)
-      </h2>
-      <SimpleBarChart
-        items={visibleTop.map((p) => ({
-          label: p.name.length > 28 ? `${p.name.slice(0, 28)}…` : p.name,
-          value: p.quantity,
-          color: 'bg-violet-500',
-        }))}
-        valueFormatter={(v) => `${Math.round(v)} adet`}
-        emptyLabel="Son 30 günde satış kaydı yok."
-      />
-      {canExpand && (
-        <ExpandToggle
-          expanded={expanded}
-          hiddenCount={expandLabelCount || hiddenTopCount || bottomProducts.length}
-          onToggle={() => setExpanded((prev) => !prev)}
-        />
-      )}
-
-      {expanded && bottomProducts.length > 0 && (
-        <div className="mt-5 border-t border-slate-100 pt-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-700">
-            En Az Satan Ürünler (30 gün)
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-sm">
-              <thead>
-                <tr className="text-left text-xs font-semibold uppercase text-slate-500">
-                  <th className="pb-2 pr-3">Ürün</th>
-                  <th className="pb-2 text-right">Adet</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {bottomProducts.map((row, index) => (
-                  <tr key={`${row.name}-${index}`} className="hover:bg-slate-50/60">
-                    <td className="py-2 pr-3 text-slate-800">{row.name}</td>
-                    <td className="py-2 text-right font-medium text-slate-600">
-                      {Math.round(row.quantity)} adet
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+    <section
+      className={`rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 ${className}`}
+    >
+      <div className="mb-4 flex items-start gap-3">
+        <div className={`rounded-xl p-2.5 ${iconClass}`}>{icon}</div>
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
+          {subtitle && (
+            <p className="text-caption text-slate-400">{subtitle}</p>
+          )}
         </div>
-      )}
-
-      {expanded && topProducts.length > 0 && (
-        <div className="mt-4 overflow-x-auto">
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            En çok satanlar — tam liste
-          </h3>
-          <table className="min-w-full divide-y divide-slate-100 text-sm">
-            <tbody className="divide-y divide-slate-50">
-              {topProducts.map((row, index) => (
-                <tr key={`${row.name}-${index}`} className="hover:bg-slate-50/60">
-                  <td className="w-8 py-1.5 text-xs text-slate-400">{index + 1}.</td>
-                  <td className="py-1.5 text-slate-800">{row.name}</td>
-                  <td className="py-1.5 text-right font-medium text-violet-700">
-                    {Math.round(row.quantity)} adet
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      </div>
+      {children}
     </section>
   );
 }
@@ -217,8 +103,12 @@ export default function AnalyticsReport() {
             staffTurnover: ensureArray(payload.staffTurnover),
             charts: {
               ...payload.charts,
-              topProducts: ensureArray(payload.charts.topProducts),
-              bottomProducts: ensureArray(payload.charts.bottomProducts),
+              dailySales: ensureArray(payload.charts?.dailySales),
+              monthlySales: ensureArray(payload.charts?.monthlySales),
+              topProducts: ensureArray(payload.charts?.topProducts),
+              bottomProducts: ensureArray(payload.charts?.bottomProducts),
+              topCustomers: ensureArray(payload.charts?.topCustomers),
+              staffComparison: ensureArray(payload.charts?.staffComparison),
             },
             lowStock: ensureArray(payload.lowStock),
           });
@@ -226,6 +116,18 @@ export default function AnalyticsReport() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const summary = useMemo(() => {
+    if (!data) {
+      return { monthly: 0, weekly: 0, lowStock: 0, staff: 0 };
+    }
+    return {
+      monthly: data.staffTurnover.reduce((sum, s) => sum + s.monthly, 0),
+      weekly: data.charts.dailySales.reduce((sum, d) => sum + d.total, 0),
+      lowStock: data.lowStock.length,
+      staff: data.staffTurnover.length,
+    };
+  }, [data]);
 
   if (loading) {
     return (
@@ -235,131 +137,267 @@ export default function AnalyticsReport() {
 
   if (!data) {
     return (
-      <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+      <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
         Rapor yüklenemedi.
       </p>
     );
   }
 
-  const totalStaffMonthly = data.staffTurnover.reduce(
-    (sum, s) => sum + s.monthly,
-    0
-  );
+  const topCustomers = data.charts.topCustomers ?? [];
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="rounded-xl bg-indigo-600 p-2.5 text-white">
+        <div className="rounded-xl bg-slate-900 p-2.5 text-white">
           <BarChart3 className="h-5 w-5" />
         </div>
         <div>
           <h1 className="page-title">İşletme Özeti</h1>
-          <p className="text-sm text-slate-500">
-            Ciro grafikleri, personel performansı ve stok uyarıları
+          <p className="page-subtitle">
+            Ciro, ürün, müşteri ve stok görünümü
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs text-slate-500">Personel Aylık Ciro</p>
-          <p className="text-2xl font-bold text-indigo-700">
-            {formatMoney(totalStaffMonthly)}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
+          <p className="text-caption font-medium uppercase tracking-wide text-slate-400">
+            Son 7 gün
+          </p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
+            {formatMoney(summary.weekly)}
           </p>
         </div>
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-          <p className="text-xs text-amber-700">Kritik Stok (≤5 adet)</p>
-          <p className="text-2xl font-bold text-amber-900">
-            {data.lowStock.length} ürün
+        <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
+          <p className="text-caption font-medium uppercase tracking-wide text-slate-400">
+            Personel aylık
+          </p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
+            {formatMoney(summary.monthly)}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
+          <p className="text-caption font-medium uppercase tracking-wide text-slate-400">
+            Personel
+          </p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
+            {summary.staff}
+          </p>
+        </div>
+        <div
+          className={`rounded-2xl border px-4 py-3 shadow-sm ${
+            summary.lowStock > 0
+              ? 'border-amber-200 bg-amber-50'
+              : 'border-slate-200/80 bg-white'
+          }`}
+        >
+          <p
+            className={`text-caption font-medium uppercase tracking-wide ${
+              summary.lowStock > 0 ? 'text-amber-700' : 'text-slate-400'
+            }`}
+          >
+            Kritik stok
+          </p>
+          <p
+            className={`mt-1 text-lg font-bold tabular-nums ${
+              summary.lowStock > 0 ? 'text-amber-900' : 'text-slate-900'
+            }`}
+          >
+            {summary.lowStock} ürün
           </p>
         </div>
       </div>
 
-      {data.lowStock.length > 0 && (
-        <section className="rounded-xl border border-amber-200 bg-amber-50/80 p-4">
-          <h2 className="mb-3 font-semibold text-amber-900">Kritik Stok Listesi</h2>
-          <div className="flex flex-wrap gap-2">
-            {data.lowStock.map((item) => (
-              <span
-                key={item.id}
-                className="rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs text-amber-900"
-              >
-                {item.sku} · {item.quantity} adet
-              </span>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <ExpandableBarSection
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SectionCard
+          icon={<TrendingUp className="h-4 w-4" />}
+          iconClass="bg-emerald-50 text-emerald-700"
           title="Son 7 Gün Ciro"
-          items={data.charts.dailySales.map((d) => ({
-            label: d.label,
-            value: d.total,
-          }))}
-          barColor="bg-emerald-500"
-          valueFormatter={(v) => formatMoney(v)}
-        />
-        <ExpandableBarSection
-          title="Aylık Ciro (6 Ay)"
-          items={data.charts.monthlySales.map((d) => ({
-            label: d.label,
-            value: d.total,
-          }))}
-          barColor="bg-indigo-500"
-          valueFormatter={(v) => formatMoney(v)}
-        />
-        <ProductSalesSection
-          topProducts={data.charts.topProducts}
-          bottomProducts={data.charts.bottomProducts}
-        />
-        <ExpandableBarSection
-          title="Personel Ciroları (Aylık)"
-          items={data.charts.staffComparison.map((s) => ({
-            label: s.name.split(' ')[0],
-            value: s.monthly,
-          }))}
-          barColor="bg-sky-500"
-          valueFormatter={(v) => formatMoney(v)}
-        />
+          subtitle="Günlük satış trendi"
+        >
+          <AreaTrendChart
+            items={data.charts.dailySales.map((d) => ({
+              label: d.label,
+              value: d.total,
+            }))}
+            valueFormatter={(v) => formatMoney(v)}
+            emptyLabel="Satış verisi yok"
+            accent="emerald"
+          />
+        </SectionCard>
+
+        <SectionCard
+          icon={<TrendingUp className="h-4 w-4" />}
+          iconClass="bg-indigo-50 text-indigo-700"
+          title="Aylık Ciro"
+          subtitle="Son 6 ay"
+        >
+          <AreaTrendChart
+            items={data.charts.monthlySales.map((d) => ({
+              label: d.label,
+              value: d.total,
+            }))}
+            valueFormatter={(v) => formatMoney(v)}
+            emptyLabel="Aylık satış verisi yok"
+            accent="indigo"
+          />
+        </SectionCard>
+
+        <SectionCard
+          icon={<Package className="h-4 w-4" />}
+          iconClass="bg-violet-50 text-violet-700"
+          title="En Çok Satan Ürünler"
+          subtitle="Son 30 gün · adet"
+        >
+          <RankingChart
+            items={data.charts.topProducts.map((p) => ({
+              label: p.name,
+              sublabel: p.sku,
+              value: p.quantity,
+            }))}
+            valueFormatter={(v) => `${Math.round(v)} adet`}
+            emptyLabel="Son 30 günde satış yok"
+            accent="indigo"
+          />
+        </SectionCard>
+
+        <SectionCard
+          icon={<Package className="h-4 w-4" />}
+          iconClass="bg-slate-100 text-slate-600"
+          title="En Az Satan Ürünler"
+          subtitle="Son 30 gün · adet"
+        >
+          <RankingChart
+            items={data.charts.bottomProducts.map((p) => ({
+              label: p.name,
+              sublabel: p.sku,
+              value: p.quantity,
+            }))}
+            valueFormatter={(v) => `${Math.round(v)} adet`}
+            emptyLabel="Veri yok"
+            accent="amber"
+          />
+        </SectionCard>
+
+        {topCustomers.length > 0 && (
+          <SectionCard
+            icon={<Users className="h-4 w-4" />}
+            iconClass="bg-sky-50 text-sky-700"
+            title="En Çok Alış Yapan Müşteriler"
+            subtitle="Son 30 gün · ciro"
+          >
+            <RankingChart
+              items={topCustomers.map((c) => ({
+                label: c.name,
+                sublabel: `${c.code} · ${c.invoiceCount} fiş`,
+                value: c.amount,
+              }))}
+              valueFormatter={(v) => formatMoney(v)}
+              emptyLabel="Müşteri satışı yok"
+              accent="sky"
+            />
+          </SectionCard>
+        )}
+
+        <SectionCard
+          icon={<Users className="h-4 w-4" />}
+          iconClass="bg-emerald-50 text-emerald-700"
+          title="Personel Ciroları"
+          subtitle="Bu ay"
+          className={topCustomers.length > 0 ? '' : 'lg:col-span-2'}
+        >
+          <RankingChart
+            items={data.charts.staffComparison.map((s) => ({
+              label: s.name,
+              value: s.monthly,
+            }))}
+            valueFormatter={(v) => formatMoney(v)}
+            emptyLabel="Personel cirosu yok"
+            accent="emerald"
+          />
+        </SectionCard>
       </div>
+
+      <SectionCard
+        icon={<AlertTriangle className="h-4 w-4" />}
+        iconClass={
+          data.lowStock.length > 0
+            ? 'bg-amber-100 text-amber-800'
+            : 'bg-slate-100 text-slate-500'
+        }
+        title="Kritik Stok Uyarısı"
+        subtitle="MERKEZ_DEPO · 5 adet ve altı"
+      >
+        {data.lowStock.length === 0 ? (
+          <p className="py-8 text-center text-sm text-slate-400">
+            Kritik stokta ürün yok
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-x-10 gap-y-1 md:grid-cols-2">
+            <LowStockMeter
+              items={data.lowStock
+                .slice(0, Math.ceil(data.lowStock.length / 2))
+                .map((item) => ({
+                  id: item.id,
+                  label: item.name || item.sku,
+                  sublabel: item.name ? item.sku : undefined,
+                  value: item.quantity,
+                }))}
+            />
+            <LowStockMeter
+              items={data.lowStock
+                .slice(Math.ceil(data.lowStock.length / 2))
+                .map((item) => ({
+                  id: item.id,
+                  label: item.name || item.sku,
+                  sublabel: item.name ? item.sku : undefined,
+                  value: item.quantity,
+                }))}
+              emptyLabel=""
+            />
+          </div>
+        )}
+      </SectionCard>
 
       {data.staffTurnover.length > 0 && (
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/5">
           <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
-            <TrendingUp className="h-4 w-4 text-indigo-600" />
-            <h2 className="font-semibold text-slate-800">Personel Ciroları Detay</h2>
+            <TrendingUp className="h-4 w-4 text-slate-500" />
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">
+                Personel Detay
+              </h2>
+              <p className="text-caption text-slate-400">
+                Günlük · aylık · yıllık ciro
+              </p>
+            </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                    Personel
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
-                    Günlük
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
-                    Aylık
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
-                    Yıllık
-                  </th>
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-slate-100 text-left text-caption font-semibold uppercase tracking-wide text-slate-400">
+                  <th className="px-5 py-3">Personel</th>
+                  <th className="px-5 py-3 text-right">Günlük</th>
+                  <th className="px-5 py-3 text-right">Aylık</th>
+                  <th className="px-5 py-3 text-right">Yıllık</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody>
                 {data.staffTurnover.map((staff) => (
-                  <tr key={staff.userId} className="hover:bg-slate-50/60">
-                    <td className="px-4 py-3 text-sm font-medium">{staff.userName}</td>
-                    <td className="px-4 py-3 text-right text-sm">
+                  <tr
+                    key={staff.userId}
+                    className="border-b border-slate-50 last:border-0"
+                  >
+                    <td className="px-5 py-3 text-sm font-medium text-slate-800">
+                      {staff.userName}
+                    </td>
+                    <td className="px-5 py-3 text-right text-sm tabular-nums text-slate-600">
                       {formatMoney(staff.daily)}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm font-semibold text-emerald-700">
+                    <td className="px-5 py-3 text-right text-sm font-semibold tabular-nums text-emerald-700">
                       {formatMoney(staff.monthly)}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm">
+                    <td className="px-5 py-3 text-right text-sm tabular-nums text-slate-600">
                       {formatMoney(staff.yearly)}
                     </td>
                   </tr>
