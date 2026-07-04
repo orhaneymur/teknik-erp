@@ -5,6 +5,8 @@ export type ImportResult = {
   created: number;
   updated: number;
   skipped: number;
+  deleted?: number;
+  stockZeroed?: number;
   categoriesCreated?: number;
   brandModelsCreated?: number;
   errors: string[];
@@ -736,13 +738,62 @@ export async function importProductsExcel(
     }
   }
 
-  // Urun alanlarindan tanim listesini senkronize et (onceki importlar dahil)
+  // Excel'de olmayan urunleri kaldir (tam senkron)
+  let deleted = 0;
+  let stockZeroed = 0;
+
+  if (parsedRows.length === 0) {
+    errors.push('Excel bos veya gecerli satir yok. Silme yapilmadi.');
+  } else {
+    const excelSkus = [...new Set(parsedRows.map((row) => row.sku))];
+    const obsolete = await prisma.product.findMany({
+      where: { sku: { notIn: excelSkus } },
+      select: { id: true, sku: true },
+    });
+
+    if (obsolete.length > 0) {
+      const obsoleteIds = obsolete.map((product) => product.id);
+      const usedRows = await prisma.invoiceItem.findMany({
+        where: { productId: { in: obsoleteIds } },
+        select: { productId: true },
+        distinct: ['productId'],
+      });
+      const usedIds = new Set(usedRows.map((row) => row.productId));
+
+      const toDelete = obsoleteIds.filter((id) => !usedIds.has(id));
+      const toZero = obsoleteIds.filter((id) => usedIds.has(id));
+
+      const DELETE_BATCH = 200;
+      for (let offset = 0; offset < toDelete.length; offset += DELETE_BATCH) {
+        const batchIds = toDelete.slice(offset, offset + DELETE_BATCH);
+        const result = await prisma.product.deleteMany({
+          where: { id: { in: batchIds } },
+        });
+        deleted += result.count;
+      }
+
+      if (toZero.length > 0) {
+        await prisma.productStock.updateMany({
+          where: { productId: { in: toZero } },
+          data: { quantity: 0 },
+        });
+        stockZeroed = toZero.length;
+        errors.push(
+          `${stockZeroed} urun fatura gecmisinde oldugu icin silinemedi; stoklari 0 yapildi.`
+        );
+      }
+    }
+  }
+
+  // Urun alanlarindan tanim listesini senkronize et
   const synced = await syncBrandModelsFromProducts(prisma);
 
   return {
     created,
     updated,
     skipped,
+    deleted,
+    stockZeroed,
     categoriesCreated: categoriesCreated.count,
     brandModelsCreated: brandModelsCreated.count + synced.brandModelsCreated,
     errors,

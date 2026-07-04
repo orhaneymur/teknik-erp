@@ -6,7 +6,7 @@
 
 Dükkanın günlük operasyonları — satış, alış, stok, cari, kasa, iade ve raporlama — tek bir monorepo içinde birleştirilmiştir. Canlı veritabanı yedeği (`akgun_canli_data.sql`) repoda tutulur; **16.000+ ürün** ve **180+ müşteri** kaydı ile gerçek veri üzerinde çalışır.
 
-**Canlı ortam:** K3s kümesi · Docker Hub `since1907/akgun-backend:v1.8.13` · `since1907/akgun-frontend:v1.8.36`  
+**Canlı ortam:** K3s kümesi · Docker Hub `since1907/akgun-backend:v1.8.14` · `since1907/akgun-frontend:v1.8.37`  
 **Giriş:** `akgunteknik` / `123456`
 
 ---
@@ -243,7 +243,7 @@ Müşteri carileri, stoklar ve faturalar için **indir → Excel'de düzenle →
 
 \* **Kategori** sütunu içe aktarmada yoksa oluşturulur ve ürüne bağlanır (`TAMİR GEREÇLERİ` gibi).
 
-**Stok Excel formatı:** `Bakiye` = MERKEZ_DEPO stok adedi (üzerine yazılır). `AlisAdedi` / `SatisAdedi` yalnızca indirmede bilgi amaçlıdır (yüklemede yok sayılır). Eşleşme `StokKodu` ile yapılır; Excel’de olmayan ürünler silinmez. `Gorunum` → görünüm, `Kalite` → kalite, `Rmb` → RMB fiyatı, `SatisFiyati` → satış ($).
+**Stok Excel formatı (tam senkron):** Excel’deki ürünler `StokKodu` ile güncellenir (`Bakiye` = MERKEZ_DEPO stok adedi). Excel’de **olmayan** ürünler silinir; fatura geçmişi olanlar silinemez, stokları **0** yapılır. `AlisAdedi` / `SatisAdedi` yalnızca indirmede bilgi amaçlıdır. `Gorunum` → görünüm, `Kalite` → kalite, `Rmb` → RMB, `SatisFiyati` → satış ($).
 
 **API uçları:**
 

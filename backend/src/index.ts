@@ -3780,19 +3780,27 @@ app.post('/api/products/import/excel', async (request, reply) => {
   const buffer = await upload.toBuffer();
   const result = await importProductsExcel(prisma, buffer);
 
-  const notes: string[] = [];
+  const notes: string[] = [
+    `${result.created} yeni`,
+    `${result.updated} güncellendi`,
+  ];
+  if (result.deleted && result.deleted > 0) {
+    notes.push(`${result.deleted} silindi`);
+  }
+  if (result.stockZeroed && result.stockZeroed > 0) {
+    notes.push(`${result.stockZeroed} faturalı ürün stok=0`);
+  }
   if (result.categoriesCreated && result.categoriesCreated > 0) {
     notes.push(`${result.categoriesCreated} yeni kategori`);
   }
   if (result.brandModelsCreated && result.brandModelsCreated > 0) {
     notes.push(`${result.brandModelsCreated} yeni marka/model`);
   }
-  const noteSuffix = notes.length > 0 ? `, ${notes.join(', ')}` : '';
 
   return {
     success: true,
     data: result,
-    message: `${result.created} yeni, ${result.updated} güncellendi${noteSuffix}.`,
+    message: `Excel senkron: ${notes.join(', ')}.`,
   };
 });
 

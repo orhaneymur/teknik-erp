@@ -278,7 +278,7 @@ export default function StockList({
             importTimeoutMs={600_000}
             onImported={() => loadProducts(search, page)}
             onNotify={notify}
-            hint="Sütunlar: Id, StokKodu, StokAdi, Kategori, Marka, Model, Gorunum, Kalite, Renk, Aciklama, Rmb, AlisFiyati, SatisFiyati, AlisAdedi, SatisAdedi, Bakiye (stok adedi). Kategori yoksa otomatik oluşur."
+            hint="Tam senkron: Excel'deki ürünler güncellenir, Excel'de olmayanlar silinir (fatura geçmişi olanların stoğu 0 olur). Bakiye = stok adedi."
           />
           <div className="relative w-full sm:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
