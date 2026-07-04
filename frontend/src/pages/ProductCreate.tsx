@@ -22,8 +22,9 @@ type ProductCreateProps = {
 };
 
 function matchesCategory(item: BrandModelOption, categoryId: number | ''): boolean {
-  if (categoryId === '') return false;
-  return item.categoryId === categoryId;
+  if (categoryId === '') return true;
+  // Secili kategori veya kategori baglantisi olmayan tanimlar
+  return item.categoryId === categoryId || item.categoryId == null;
 }
 
 export default function ProductCreate({ onNotify }: ProductCreateProps) {
@@ -65,14 +66,27 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
 
   const brandOptions = useMemo(() => {
     const items = brandModels.filter((item) => item.kind === 'MARKA');
-    if (categoryId === '') return items;
-    return items.filter((item) => matchesCategory(item, categoryId));
+    const filtered = items.filter((item) => matchesCategory(item, categoryId));
+    // Ayni isimli kayitlari tekilleştir
+    const seen = new Set<string>();
+    return filtered.filter((item) => {
+      const key = item.name.toLocaleLowerCase('tr-TR');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [brandModels, categoryId]);
 
   const modelOptions = useMemo(() => {
     const items = brandModels.filter((item) => item.kind === 'MODEL');
-    if (categoryId === '') return items;
-    return items.filter((item) => matchesCategory(item, categoryId));
+    const filtered = items.filter((item) => matchesCategory(item, categoryId));
+    const seen = new Set<string>();
+    return filtered.filter((item) => {
+      const key = item.name.toLocaleLowerCase('tr-TR');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [brandModels, categoryId]);
 
   const filteredModelOptions = useMemo(() => {
@@ -222,7 +236,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
                 ))}
               </select>
               <p className="mt-1 text-caption text-slate-400">
-                Tanımlar → Kategori & Marka/Model
+                Excel ve mevcut stoklardan otomatik dolar · Tanımlar → Kategori / Marka
               </p>
             </div>
 

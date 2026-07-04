@@ -14,6 +14,7 @@ import {
   importCustomersExcel,
   importInvoicesExcel,
   importProductsExcel,
+  syncBrandModelsFromProducts,
 } from './utils/excelExchange.js';
 import { buildInvoiceCreatedAt, roundMoney } from './utils/datetime.js';
 
@@ -4393,8 +4394,11 @@ app.post<{ Body: { name: string } }>(
 );
 
 app.get('/api/settings/brand-models', async () => {
+  // Urunlerdeki marka/model metinlerini tanim listesine aktar
+  await syncBrandModelsFromProducts(prisma);
+
   const brandModels = await prisma.brandModel.findMany({
-    orderBy: { name: 'asc' },
+    orderBy: [{ kind: 'asc' }, { name: 'asc' }],
     include: {
       category: { select: { id: true, name: true } },
       _count: { select: { products: true } },

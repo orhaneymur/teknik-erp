@@ -112,7 +112,7 @@ export default function CategoryManager() {
             Kategori & Marka/Model
           </h1>
           <p className="text-sm text-slate-500">
-            Ürün sınıflandırma tanımları
+            Excel ve stok kartlarındaki marka/model otomatik listelenir; elle de ekleyebilirsiniz
           </p>
         </div>
       </div>

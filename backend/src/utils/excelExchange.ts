@@ -226,7 +226,7 @@ function brandModelCacheKey(
 }
 
 async function findOrCreateBrandModel(
-  tx: Prisma.TransactionClient,
+  tx: Prisma.TransactionClient | PrismaClient,
   rawName: string,
   kind: 'MARKA' | 'MODEL',
   categoryId: number | null,
@@ -234,6 +234,7 @@ async function findOrCreateBrandModel(
   brandModelsCreated: { count: number }
 ): Promise<number> {
   const name = rawName.trim();
+  if (!name) return 0;
   const key = brandModelCacheKey(kind, categoryId, name);
   if (cache.has(key)) return cache.get(key)!;
 
@@ -245,12 +246,82 @@ async function findOrCreateBrandModel(
     return existing.id;
   }
 
-  const created = await tx.brandModel.create({
-    data: { name, kind, categoryId },
+  try {
+    const created = await tx.brandModel.create({
+      data: { name, kind, categoryId },
+    });
+    cache.set(key, created.id);
+    brandModelsCreated.count += 1;
+    return created.id;
+  } catch {
+    const raced = await tx.brandModel.findFirst({
+      where: { name, kind, categoryId },
+    });
+    if (raced) {
+      cache.set(key, raced.id);
+      return raced.id;
+    }
+    // Kategori baglantisi olmadan da dene (eski kayitlar)
+    const anyKind = await tx.brandModel.findFirst({
+      where: { name, kind },
+    });
+    if (anyKind) {
+      cache.set(key, anyKind.id);
+      return anyKind.id;
+    }
+    throw new Error(`Marka/model olusturulamadi: ${name}`);
+  }
+}
+
+/** Urunlerdeki marka/model metinlerinden tanim listesini doldurur */
+export async function syncBrandModelsFromProducts(
+  prisma: PrismaClient
+): Promise<{ brandModelsCreated: number }> {
+  const brandModelsCreated = { count: 0 };
+  const cache = new Map<string, number>();
+
+  const existing = await prisma.brandModel.findMany({
+    select: { id: true, name: true, kind: true, categoryId: true },
   });
-  cache.set(key, created.id);
-  brandModelsCreated.count += 1;
-  return created.id;
+  for (const entry of existing) {
+    cache.set(
+      brandModelCacheKey(entry.kind, entry.categoryId, entry.name),
+      entry.id
+    );
+  }
+
+  const products = await prisma.product.findMany({
+    where: {
+      OR: [{ brand: { not: null } }, { model: { not: null } }],
+    },
+    select: { brand: true, model: true, categoryId: true },
+  });
+
+  for (const product of products) {
+    const categoryId = product.categoryId ?? null;
+    if (product.brand?.trim()) {
+      await findOrCreateBrandModel(
+        prisma,
+        product.brand,
+        'MARKA',
+        categoryId,
+        cache,
+        brandModelsCreated
+      );
+    }
+    if (product.model?.trim()) {
+      await findOrCreateBrandModel(
+        prisma,
+        product.model,
+        'MODEL',
+        categoryId,
+        cache,
+        brandModelsCreated
+      );
+    }
+  }
+
+  return { brandModelsCreated: brandModelsCreated.count };
 }
 
 async function getDepotIds(prisma: PrismaClient) {
@@ -596,12 +667,15 @@ export async function importProductsExcel(
     }
   }
 
+  // Urun alanlarindan tanim listesini senkronize et (onceki importlar dahil)
+  const synced = await syncBrandModelsFromProducts(prisma);
+
   return {
     created,
     updated,
     skipped,
     categoriesCreated: categoriesCreated.count,
-    brandModelsCreated: brandModelsCreated.count,
+    brandModelsCreated: brandModelsCreated.count + synced.brandModelsCreated,
     errors,
   };
 }
