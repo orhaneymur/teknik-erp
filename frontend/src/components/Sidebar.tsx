@@ -1,13 +1,16 @@
 import { ChevronDown, Keyboard, LogOut, X, Zap } from 'lucide-react';
-import type { MouseEvent } from 'react';
-import type { MenuCategoryId, NavigateFn, PageId } from '../lib/navigation';
-import { buildPageUrl, dashboardItem, menuCategories } from '../lib/navigation';
+import type { MenuCategoryId, PageId } from '../lib/navigation';
+import {
+  buildPageUrl,
+  dashboardItem,
+  dashboardQuickLinks,
+  menuCategories,
+} from '../lib/navigation';
 
 type SidebarProps = {
   activePage: PageId;
   openMenus: Record<MenuCategoryId, boolean>;
   mobileOpen?: boolean;
-  onNavigate: NavigateFn;
   onToggleMenu: (id: MenuCategoryId) => void;
   onLogout: () => void;
   onMobileClose?: () => void;
@@ -17,7 +20,6 @@ export default function Sidebar({
   activePage,
   openMenus,
   mobileOpen = false,
-  onNavigate,
   onToggleMenu,
   onLogout,
   onMobileClose,
@@ -37,16 +39,8 @@ export default function Sidebar({
     );
   };
 
-  const handleNavClick = (
-    event: MouseEvent<HTMLAnchorElement>,
-    page: PageId,
-    options?: Parameters<NavigateFn>[1]
-  ) => {
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) {
-      return;
-    }
-    event.preventDefault();
-    onNavigate(page, options);
+  /** Sol menü her zaman yeni sekmede açılır; sayfa içi gezinme geri butonu ile çalışır */
+  const handleMenuClick = () => {
     onMobileClose?.();
   };
 
@@ -86,8 +80,10 @@ export default function Sidebar({
       <nav className="scrollbar-thin flex-1 space-y-1 overflow-y-auto px-2 py-3">
         <a
           href={buildPageUrl('dashboard')}
-          onClick={(event) => handleNavClick(event, 'dashboard')}
-          className={`mb-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all no-underline ${
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleMenuClick}
+          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all no-underline ${
             isItemActive('dashboard')
               ? 'bg-indigo-500/20 text-indigo-200 ring-1 ring-indigo-400/30'
               : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
@@ -96,6 +92,42 @@ export default function Sidebar({
           <DashboardIcon className="h-4 w-4 shrink-0 text-indigo-300" />
           <span>{dashboardItem.label}</span>
         </a>
+
+        <div className="mb-2 space-y-0.5 border-b border-slate-800/80 pb-2 pl-2 pr-1">
+          <p className="px-3 py-1 text-caption font-semibold uppercase tracking-wide text-slate-500">
+            Hızlı İşlemler
+          </p>
+          {dashboardQuickLinks.map((item) => {
+            const active = isItemActive(item.id);
+            return (
+              <a
+                key={item.id}
+                href={buildPageUrl(item.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={handleMenuClick}
+                className={`flex w-full items-center gap-2 rounded-lg py-2 pl-7 pr-3 text-sm transition-all no-underline ${
+                  active
+                    ? 'bg-indigo-600/90 font-medium text-white shadow-sm'
+                    : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                }`}
+              >
+                <span className="flex-1 text-left">{item.label}</span>
+                {item.badge && (
+                  <kbd
+                    className={`rounded px-1.5 py-0.5 font-mono text-caption ${
+                      active
+                        ? 'bg-indigo-500/50 text-indigo-100'
+                        : 'bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {item.badge}
+                  </kbd>
+                )}
+              </a>
+            );
+          })}
+        </div>
 
         {menuCategories.map((category) => {
           const CategoryIcon = category.icon;
@@ -139,13 +171,13 @@ export default function Sidebar({
                         item.id,
                         item.id === 'pre-orders' ? { preOrderOnly: true } : undefined
                       );
-                      const navOptions =
-                        item.id === 'pre-orders' ? { preOrderOnly: true } : undefined;
                       return (
                         <a
                           key={item.id}
                           href={href}
-                          onClick={(event) => handleNavClick(event, item.id, navOptions)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={handleMenuClick}
                           className={`flex w-full items-center gap-2 rounded-lg py-2 pl-7 pr-3 text-sm transition-all no-underline ${
                             active
                               ? 'bg-indigo-600/90 font-medium text-white shadow-sm'
@@ -178,7 +210,7 @@ export default function Sidebar({
       <div className="space-y-3 border-t border-slate-800/80 px-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="flex items-center gap-2 px-2 text-xs text-slate-500">
           <Keyboard className="h-3.5 w-3.5" />
-          <span>F2 — Stok ara · Ctrl+tık yeni sekme</span>
+          <span>F2 — Stok ara · Menü yeni sekmede</span>
         </div>
         <button
           type="button"

@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { ArrowDownLeft, ArrowUpRight, Pencil, Search, Wallet, X } from 'lucide-react';
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Pencil,
+  Printer,
+  Search,
+  Wallet,
+  X,
+} from 'lucide-react';
 import F2CustomerList from '../components/F2CustomerList';
 import CustomerNameLink from '../components/CustomerNameLink';
 import ProductSearchPopover from '../components/ProductSearchPopover';
@@ -126,8 +134,18 @@ type PaymentRow = {
   amount: number;
   description: string;
   createdAt: string;
-  customer: { id: number; code: string; name: string; balance: number } | null;
-  safe: { id: number; name: string; currency: string; balance: number };
+  customer: { id: number; code: string; name: string; balance?: number } | null;
+  safe: { id: number; name: string; currency: string; balance?: number };
+};
+
+type PaymentReceipt = {
+  type: 'GIRIS' | 'CIKIS';
+  amount: number;
+  description: string;
+  createdAt: string;
+  customerLabel: string;
+  safeName: string;
+  balanceAfter?: number | null;
 };
 
 function pickCustomerFromSearch(query: string, results: Customer[]): Customer | null {
@@ -168,14 +186,26 @@ export default function CustomerPayment({
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
   const [editingPayment, setEditingPayment] = useState<PaymentRow | null>(null);
+  const [editCustomer, setEditCustomer] = useState<{
+    id: number;
+    code: string;
+    name: string;
+  } | null>(null);
+  const [editCustomerSearch, setEditCustomerSearch] = useState('');
+  const [editCustomerResults, setEditCustomerResults] = useState<Customer[]>([]);
+  const [editCustomerDropdownOpen, setEditCustomerDropdownOpen] = useState(false);
+  const [editCustomerSearchLoading, setEditCustomerSearchLoading] = useState(false);
   const [editAmount, setEditAmount] = useState('');
   const [editAmountCurrency, setEditAmountCurrency] = useState<PaymentCurrency>('USD');
   const [editDescription, setEditDescription] = useState('');
   const [editType, setEditType] = useState<'GIRIS' | 'CIKIS'>('GIRIS');
   const [editSafeId, setEditSafeId] = useState<number | ''>('');
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const [shouldPrint, setShouldPrint] = useState(false);
+  const [printReceipt, setPrintReceipt] = useState<PaymentReceipt | null>(null);
 
   const customerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editCustomerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const customerSearchRef = useRef<HTMLInputElement>(null);
 
   const f2 = useF2CustomerSearch({ open: f2Modal, f2Trigger });
@@ -339,6 +369,28 @@ export default function CustomerPayment({
 
   const selectedSafeData = safes.find((s) => s.id === selectedSafe);
 
+  const printPaymentReceipt = useCallback((receipt: PaymentReceipt) => {
+    setPrintReceipt(receipt);
+    window.setTimeout(() => window.print(), 80);
+  }, []);
+
+  const printPaymentRow = useCallback(
+    (payment: PaymentRow) => {
+      printPaymentReceipt({
+        type: payment.type,
+        amount: payment.amount,
+        description: payment.description,
+        createdAt: payment.createdAt,
+        customerLabel: payment.customer
+          ? `${payment.customer.code} — ${payment.customer.name}`
+          : '—',
+        safeName: payment.safe.name,
+        balanceAfter: payment.customer?.balance ?? null,
+      });
+    },
+    [printPaymentReceipt]
+  );
+
   const handlePayment = async (type: 'GIRIS' | 'CIKIS') => {
     let customer = selectedCustomer;
     if (!customer) {
@@ -376,11 +428,45 @@ export default function CustomerPayment({
             ? `${parsedAmount.toLocaleString('tr-TR')} ₺ (≈ ${formatUsd(storedAmount)})`
             : formatUsd(storedAmount);
         onNotify?.('success', `${label} kaydedildi: ${amountLabel}`);
-        setAmount('');
-        setAmountCurrency('USD');
-        setDescription('');
-        await Promise.all([refreshSelectedCustomer(customer.id), loadSafes(), loadPayments()]);
-        onDataChange?.();
+
+        const receipt: PaymentReceipt = {
+          type,
+          amount: storedAmount,
+          description:
+            description.trim() ||
+            (type === 'GIRIS'
+              ? `${customer.code} cari tahsilat`
+              : `${customer.code} cari ödeme`),
+          createdAt: new Date().toISOString(),
+          customerLabel: `${customer.code} — ${customer.name}`,
+          safeName: selectedSafeData?.name ?? '—',
+          balanceAfter:
+            type === 'GIRIS'
+              ? roundPrice(customer.balance - storedAmount)
+              : roundPrice(customer.balance + storedAmount),
+        };
+
+        const finishPayment = async () => {
+          setAmount('');
+          setAmountCurrency('USD');
+          setDescription('');
+          setShouldPrint(false);
+          await Promise.all([
+            refreshSelectedCustomer(customer.id),
+            loadSafes(),
+            loadPayments(),
+          ]);
+          onDataChange?.();
+        };
+
+        if (shouldPrint) {
+          printPaymentReceipt(receipt);
+          window.setTimeout(() => {
+            void finishPayment();
+          }, 400);
+        } else {
+          await finishPayment();
+        }
       }
     } catch (error) {
       const message =
@@ -394,7 +480,15 @@ export default function CustomerPayment({
   };
 
   const openEditPayment = (payment: PaymentRow) => {
+    if (!payment.customer) {
+      onNotify?.('error', 'Bu kasa hareketi cari kaydı olmadığı için düzenlenemez.');
+      return;
+    }
     setEditingPayment(payment);
+    setEditCustomer(payment.customer);
+    setEditCustomerSearch(`${payment.customer.code} — ${payment.customer.name}`);
+    setEditCustomerResults([]);
+    setEditCustomerDropdownOpen(false);
     setEditAmount(String(payment.amount));
     setEditAmountCurrency('USD');
     setEditDescription(payment.description);
@@ -404,10 +498,59 @@ export default function CustomerPayment({
 
   const closeEditPayment = () => {
     setEditingPayment(null);
+    setEditCustomer(null);
+    setEditCustomerSearch('');
+    setEditCustomerResults([]);
+    setEditCustomerDropdownOpen(false);
+  };
+
+  useEffect(() => {
+    if (!editingPayment || !editCustomerDropdownOpen) {
+      setEditCustomerResults([]);
+      return;
+    }
+    const query = editCustomerSearch.trim();
+    if (query.length < 1) {
+      setEditCustomerResults([]);
+      return;
+    }
+
+    if (editCustomerDebounceRef.current) clearTimeout(editCustomerDebounceRef.current);
+
+    editCustomerDebounceRef.current = setTimeout(async () => {
+      setEditCustomerSearchLoading(true);
+      try {
+        const response = await axios.get<PaginatedListResponse<Customer>>(
+          `${API_BASE}/api/customers`,
+          { params: { search: query, limit: 20, page: 1 } }
+        );
+        if (response.data.success) {
+          setEditCustomerResults(ensureArray(response.data.data));
+        }
+      } catch {
+        setEditCustomerResults([]);
+      } finally {
+        setEditCustomerSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (editCustomerDebounceRef.current) clearTimeout(editCustomerDebounceRef.current);
+    };
+  }, [editingPayment, editCustomerSearch, editCustomerDropdownOpen]);
+
+  const selectEditCustomer = (customer: Customer) => {
+    setEditCustomer({ id: customer.id, code: customer.code, name: customer.name });
+    setEditCustomerSearch(`${customer.code} — ${customer.name}`);
+    setEditCustomerDropdownOpen(false);
   };
 
   const handleSaveEdit = async () => {
     if (!editingPayment) return;
+    if (!editCustomer) {
+      onNotify?.('error', 'Müşteri seçin.');
+      return;
+    }
     const parsedAmount = Number(editAmount);
     const storedAmount = amountToStoredUsd(parsedAmount, editAmountCurrency, rates.usd);
     if (!storedAmount || storedAmount <= 0) {
@@ -428,7 +571,7 @@ export default function CustomerPayment({
           type: editType,
           description: editDescription.trim() || undefined,
           safeId: Number(editSafeId),
-          customerId: editingPayment.customer?.id,
+          customerId: editCustomer.id,
         }
       );
       if (response.data.success) {
@@ -461,8 +604,37 @@ export default function CustomerPayment({
     'w-full rounded-xl border-slate-300 text-sm px-3 py-2.5 border focus:border-emerald-500 focus:ring-emerald-500';
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
+    <div className="space-y-6 print:space-y-0">
+      {printReceipt && (
+        <div className="receipt-slip hidden print:block">
+          <p className="receipt-slip-title">
+            {printReceipt.type === 'GIRIS' ? 'TAHSİLAT FİŞİ' : 'ÖDEME FİŞİ'}
+          </p>
+          <p className="receipt-slip-customer">{printReceipt.customerLabel}</p>
+          <p className="receipt-slip-meta">{formatDate(printReceipt.createdAt)}</p>
+          <p className="receipt-slip-meta">Kasa: {printReceipt.safeName}</p>
+          {printReceipt.description && (
+            <p className="receipt-slip-notes">{printReceipt.description}</p>
+          )}
+          <div className="receipt-slip-divider" />
+          <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+            <span className="receipt-item-name">Tutar</span>
+            <span className="receipt-item-total">
+              {formatMoney(printReceipt.amount)}
+            </span>
+          </div>
+          {printReceipt.balanceAfter != null && (
+            <div className="receipt-item-row receipt-slip-summary">
+              <span className="receipt-item-name">Sonraki bakiye</span>
+              <span className="receipt-item-total">
+                {formatMoney(printReceipt.balanceAfter)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 print:hidden">
         <div className="p-2.5 rounded-xl bg-emerald-600 text-white">
           <Wallet className="w-5 h-5" />
         </div>
@@ -474,7 +646,7 @@ export default function CustomerPayment({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 print:hidden">
         <section className="xl:col-span-2 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="relative">
@@ -585,6 +757,17 @@ export default function CustomerPayment({
             />
           </div>
 
+          <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={shouldPrint}
+              onChange={(e) => setShouldPrint(e.target.checked)}
+              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <Printer className="w-4 h-4" />
+            Kayıttan sonra yazdır
+          </label>
+
           <div className="flex flex-wrap gap-3 pt-2">
             <button
               type="button"
@@ -647,7 +830,7 @@ export default function CustomerPayment({
         </aside>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm print:hidden">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <h2 className="font-semibold text-slate-800">
             {selectedCustomer ? `${selectedCustomer.code} — Son Ödemeler` : 'Son Cari Ödemeler'}
@@ -689,7 +872,7 @@ export default function CustomerPayment({
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                     Açıklama
                   </th>
-                  <th className="w-12 px-4 py-3" />
+                  <th className="w-24 px-4 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -728,14 +911,24 @@ export default function CustomerPayment({
                       {payment.description}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => openEditPayment(payment)}
-                        className="rounded p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
-                        title="Düzenle"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => printPaymentRow(payment)}
+                          className="rounded p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                          title="Fiş yazdır"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEditPayment(payment)}
+                          className="rounded p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                          title="Düzenle"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -759,6 +952,54 @@ export default function CustomerPayment({
               </button>
             </div>
             <div className="space-y-4">
+              <div className="relative">
+                <label className="field-label">Müşteri</label>
+                <input
+                  type="text"
+                  value={editCustomerSearch}
+                  onChange={(e) => {
+                    setEditCustomerSearch(e.target.value);
+                    setEditCustomerDropdownOpen(true);
+                    if (!e.target.value.trim()) setEditCustomer(null);
+                  }}
+                  onFocus={() => setEditCustomerDropdownOpen(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setEditCustomerDropdownOpen(false), 150);
+                  }}
+                  placeholder="Kod veya isim ile ara..."
+                  className="field-input"
+                  autoComplete="off"
+                />
+                {editCustomer && (
+                  <p className="mt-1.5 text-xs font-semibold text-emerald-800">
+                    Seçili: {editCustomer.code} — {editCustomer.name}
+                  </p>
+                )}
+                {editCustomerDropdownOpen &&
+                  (editCustomerSearch.trim() || editCustomerResults.length > 0) && (
+                    <ul className="absolute z-30 left-0 right-0 mt-1 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg divide-y divide-slate-100">
+                      {editCustomerSearchLoading && (
+                        <li className="px-3 py-2 text-sm text-slate-400">Aranıyor...</li>
+                      )}
+                      {!editCustomerSearchLoading &&
+                        editCustomerResults.map((customer) => (
+                          <li
+                            key={customer.id}
+                            onMouseDown={() => selectEditCustomer(customer)}
+                            className="cursor-pointer px-3 py-2 text-sm hover:bg-emerald-50"
+                          >
+                            <span className="font-medium">{customer.code}</span>
+                            <span className="text-slate-500"> — {customer.name}</span>
+                          </li>
+                        ))}
+                      {!editCustomerSearchLoading &&
+                        editCustomerSearch.trim() &&
+                        editCustomerResults.length === 0 && (
+                          <li className="px-3 py-2 text-sm text-slate-400">Sonuç yok</li>
+                        )}
+                    </ul>
+                  )}
+              </div>
               <div>
                 <label className="field-label">İşlem Tipi</label>
                 <select

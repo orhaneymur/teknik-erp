@@ -207,14 +207,30 @@
   }
 }
 
+/* Termal fiş: 72.1mm × 297mm (standart rulo genişliği) */
 @media print {
+  @page {
+    size: 72.1mm 297mm;
+    margin: 2mm;
+  }
+
+  html {
+    font-size: 100% !important;
+  }
+
   body {
     background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   main {
     padding: 0 !important;
-    max-width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
   }
 
   input,
@@ -225,29 +241,122 @@
     background: transparent !important;
   }
 
-  .receipt-cart-table {
-    width: 100% !important;
-    table-layout: fixed;
-    font-size: 9pt !important;
+  .receipt-slip {
+    display: block !important;
+    width: 68mm;
+    max-width: 68mm;
+    margin: 0 auto;
+    padding: 0;
+    color: #000;
+    font-family: "Consolas", "Courier New", ui-monospace, monospace;
+    font-size: 9px;
+    line-height: 1.2;
   }
 
-  .receipt-cart-table th,
-  .receipt-cart-table td {
-    overflow: visible !important;
-    vertical-align: top;
+  .receipt-slip-title {
+    margin: 0 0 2px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
   }
 
-  .receipt-cart-table th.receipt-col-name,
-  .receipt-cart-table td.receipt-col-name {
-    width: 55% !important;
+  .receipt-slip-customer {
+    margin: 0 0 1px;
+    text-align: center;
+    font-size: 9px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .receipt-product-name {
-    white-space: normal !important;
-    overflow: visible !important;
-    text-overflow: clip !important;
+  .receipt-slip-meta {
+    margin: 0;
+    text-align: center;
+    font-size: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .receipt-slip-preorder {
+    margin: 2px 0 0;
+    text-align: center;
+    font-size: 8px;
+    font-weight: 700;
+  }
+
+  .receipt-slip-notes {
+    margin: 3px 0 0;
+    font-size: 8px;
+    white-space: pre-wrap;
     word-break: break-word;
-    overflow-wrap: anywhere;
-    max-width: none !important;
+  }
+
+  .receipt-slip-divider {
+    margin: 3px 0;
+    border-top: 1px dashed #000;
+  }
+
+  .receipt-item-row {
+    display: flex;
+    align-items: baseline;
+    gap: 3px;
+    width: 100%;
+    white-space: nowrap;
+    font-size: 9px;
+    line-height: 1.25;
+  }
+
+  .receipt-item-head {
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .receipt-item-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .receipt-item-qty {
+    flex: 0 0 1.5em;
+    width: 1.5em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .receipt-item-price {
+    flex: 0 0 4.2em;
+    width: 4.2em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .receipt-item-total {
+    flex: 0 0 4.4em;
+    width: 4.4em;
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .receipt-slip-summary .receipt-item-name {
+    flex: 1 1 auto;
+  }
+
+  .receipt-slip-summary .receipt-item-total {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 4.4em;
+  }
+
+  .receipt-slip-grand {
+    font-size: 10px;
+    font-weight: 700;
   }
 }

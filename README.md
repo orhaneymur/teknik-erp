@@ -6,7 +6,7 @@
 
 Dükkanın günlük operasyonları — satış, alış, stok, cari, kasa, iade ve raporlama — tek bir monorepo içinde birleştirilmiştir. Canlı veritabanı yedeği (`akgun_canli_data.sql`) repoda tutulur; **16.000+ ürün** ve **180+ müşteri** kaydı ile gerçek veri üzerinde çalışır.
 
-**Canlı ortam:** K3s kümesi · Docker Hub `since1907/akgun-backend:v1.8.9` · `since1907/akgun-frontend:v1.8.30`  
+**Canlı ortam:** K3s kümesi · Docker Hub `since1907/akgun-backend:v1.8.10` · `since1907/akgun-frontend:v1.8.31`  
 **Giriş:** `akgunteknik` / `123456`
 
 ---
@@ -95,6 +95,42 @@ Hızlı Satış ekranı (`SalesCreate.tsx`) esnaf fatura düzenine göre **4 üs
 - Üst bardaki kur satış panelinde düzenlenebilir input olarak kullanılır
 - Müşteri değişince **Son Satın Aldığı Fiyat** otomatik USD'ye çevrilerek satıra yazılır
 
+#### Termal Fiş Yazdırma (72.1mm × 297mm)
+
+**Satış**, **Alış** ve **Satış İade** ekranlarında fiş yazdırma vardır:
+
+- **Fiş Yazdır** butonu (sepet doluyken anında)
+- **Kayıttan sonra yazdır** kutusu (yeni kayıt sonrası otomatik)
+- Ekran tablosu değil **ayrı termal fiş taslağı**: `@page size: 72.1mm 297mm`, içerik ~68mm
+- Her ürün **tek satır**: ürün adı · adet · birim fiyat · satır toplamı
+
+#### Stok Hareketleri Arama
+
+Sayfa açılışında liste boştur. **Stok no (SKU)** veya **stok adı** yazılınca hareketler listelenir (satış / alış / iade).
+
+#### Stok Listesi — Ürün Düzenleme / Silme
+
+Excel dışında ekrandan da yönetim:
+
+- Ürün adına tıklayınca veya kalem ikonu ile **düzenleme** (ad, SKU, barkod, marka, model, fiyat, açıklama, depo stokları)
+- **Sil** — faturada kullanılmamış ürünler silinir; geçmişi olanlar engellenir
+
+#### Müşteri Ekstre ve Ödeme Fişi
+
+- Ekstrede fatura satırına tıklayınca **kalem içeriği** (stok no, ad, adet, fiyat) açılır
+- Tek fiş yazdırma veya **birden fazla fiş seçip tek termal fişte** toplu yazdırma
+- Tahsilat/Ödeme ekranında **ödeme fişi** yazdırma (kayıttan sonra veya listedeki yazıcı ikonu)
+
+#### Ürün Stok Hareketleri Popup (v1.8.31)
+
+Satış Yap sepetinde **ürün adına tıklayınca** tam ekran popup açılır:
+
+- **Sol panel:** Müşteri arama (her zaman görünür). Yazarak müşteri seçilir; **Tüm müşteriler** ile filtre kaldırılır.
+- **Sağ panel:** Seçili ürünün satış / alış / iade hareketleri (tarih, müşteri, fiş no, yön, adet, birim fiyat, satır toplamı).
+- Satış ekranında **müşteri seçiliyse** popup açıldığında o müşteri varsayılan filtre olur; yalnızca o müşterinin bu ürünle ilgili hareketleri listelenir.
+- Müşteri seçilmeden ürün adına basılırsa **tüm müşterilerin** hareketleri gelir; sol panelden sonradan daraltılabilir.
+- API: `GET /api/reports/stock-history?productId=&customerId=` (silinmiş fişler hariç).
+
 #### POST `/api/sales/store` Davranışı
 
 - Tüm üst bilgiler (vade, ödeme, personel, açıklama, ön sipariş) kaydedilir
@@ -143,8 +179,10 @@ Satış İade ekranında artık **fatura seçimi yok**. Akış:
 
 ### Menü ve Müşteri Kartı (v1.8.24)
 
-- **Müşteri Borç / Alacak** raporu **Raporlar** menüsüne taşındı (Müşteri Ekstre altında)
-- **Müşteri İşlemleri** altına **Yeni Müşteri Kartı** ekranı eklendi — tam sayfa cari kartı oluşturma formu
+- **Müşteri Ekstre** ve **Müşteri Borç / Alacak** → **Müşteri İşlemleri** menüsünde
+- **Ana Sayfa** altında **Hızlı İşlemler**: Satış Yap, Alış Yap, İade Al, Stok Kartı Oluştur, Faturalar (yeni sekmede)
+- Ana sayfa rapor odaklı: son 7 gün satış, en çok satan ürünler, en çok alış yapan müşteriler, düşük stok; hızlı işlem kartları kaldırıldı
+- **Geri butonu** aynı sekme içinde çalışır: fatura düzenleme, müşteri kartı, listeye dönüş gibi sayfa içi geçmiş (`history.back`)
 
 ### Fatura Düzenleme ve Logo (v1.8.27)
 
@@ -198,14 +236,14 @@ Müşteri carileri, stoklar ve faturalar için **indir → Excel'de düzenle →
 | Ekran | İndir | Yükle | Excel sütunları |
 |-------|-------|-------|-----------------|
 | **Müşteri Listesi** | Tüm cariler | Yeni ekle / mevcut güncelle | `CariKodu`, `CariAdi`, `YetkiliAdi`, `Adres`, `Ilce`, `Il`, `Email`, `Gsm`, `VergiDairesi`, `VergiTcNo`, `KrediLimiti`, `Bakiye`* |
-| **Stok Listesi** | Tüm ürünler + depo miktarları | Yeni ekle / mevcut güncelle | `StokKodu`, `StokAdi`, `Kategori`*, `Barkod`, `AlisFiyati`, `SatisFiyati`, `SatisUsd`, `MerkezDepo` / `Bakiye`, `CinIadeDepo` |
+| **Stok Listesi / Ürün Tanımları** | Tüm ürünler | Yeni ekle / mevcut güncelle (StokKodu ile) | `Id`, `StokKodu`, `StokAdi`, `Kategori`, `Marka`, `Model`, `Gorunum`, `Kalite`, `Renk`, `Aciklama`, `Rmb`, `AlisFiyati`, `SatisFiyati`, `AlisAdedi`, `SatisAdedi`, `Bakiye` |
 | **Fatura Listesi** | Faturalar + Kalemler (2 sayfa) | Yalnızca mevcut faturaların üst bilgisi | `FaturaNo`, `Odeme`, `Personel`, `Aciklama`, `Teslimat` |
 
 \* **Bakiye** sütunu dışa aktarımda bilgi amaçlıdır; içe aktarmada **değiştirilmez** (cari bakiye fatura/tahsilat ile hesaplanır).
 
 \* **Kategori** sütunu içe aktarmada yoksa oluşturulur ve ürüne bağlanır (`TAMİR GEREÇLERİ` gibi).
 
-**Stok Excel formatı:** Harici sistemden gelen dosyalarda `Id`, `Marka`, `Model`, `AlisAdedi`, `SatisAdedi` gibi ek sütunlar olabilir; bunlar yok sayılır. Stok miktarı için `MerkezDepo` veya `Bakiye` kullanılır.
+**Stok Excel formatı:** `Bakiye` = MERKEZ_DEPO stok adedi (üzerine yazılır). `AlisAdedi` / `SatisAdedi` yalnızca indirmede bilgi amaçlıdır (yüklemede yok sayılır). Eşleşme `StokKodu` ile yapılır; Excel’de olmayan ürünler silinmez. `Gorunum` → görünüm, `Kalite` → kalite, `Rmb` → RMB fiyatı, `SatisFiyati` → satış ($).
 
 **API uçları:**
 
@@ -410,6 +448,7 @@ Manifestler: `k8s/apps.yaml`, `k8s/mysql-deployment.yaml` — `kubectl apply -f 
 | v1.8.13 | Fatura düzenlemede tekrar F2 basınca sayfanın başa dönmesi / sepet sıfırlanması düzeltmesi |
 | v1.8.28 | İki aşamalı fiş silme — önce Silinen İşlemler, oradan kalıcı silme; stok/cari geri alma |
 | v1.8.30 | F2 son arama hatırlama; maliyet altı satış fiyatında kırmızı satır uyarısı |
+| v1.8.31 / API v1.8.10 | Stok hareketi popup; termal fiş (satış/alış/iade/ödeme/ekstre); F2 boş açılış + son arama; menü yeni sekme + geri; cari varsayılan; kasa müşteri değiştirme; ekstre içerik/toplu yazdır; ürün düzenle-sil; Excel yeni şablon; rapor odaklı ana sayfa; hızlı işlemler menüde |
 ---
 
 ## Ingress / Domain (Rancher)

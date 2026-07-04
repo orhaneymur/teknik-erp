@@ -56,7 +56,7 @@ const initialOpenMenus = menuCategories.reduce(
   {} as Record<MenuCategoryId, boolean>
 );
 
-const FRONTEND_VERSION = 'v1.8.30';
+const FRONTEND_VERSION = 'v1.8.31';
 
 function App() {
   const initialUrl = parsePageFromUrl();
@@ -316,7 +316,6 @@ function App() {
             refreshKey={dashboardRefreshKey}
             f2Trigger={f2Trigger}
             initialEditInvoiceId={editInvoiceId}
-            onNavigate={navigateTo}
             onNotify={showNotification}
             onDataChange={handleDataChange}
             onF2ContextActive={setEmbeddedSalesEditorOpen}
@@ -447,6 +446,14 @@ function App() {
       case 'report-customer-statement':
         return <CustomerStatement initialCustomerId={activeCustomerId} />;
       case 'def-products':
+        return (
+          <StockList
+            onNotify={showNotification}
+            title="Ürün Tanımları"
+            subtitle="Ürün adı, fiyat ve stok düzenleme · silme · Excel isteğe bağlı"
+          />
+        );
+      case 'def-categories':
         return <CategoryManager />;
       case 'def-safes':
         return <SafeManager />;
@@ -474,7 +481,7 @@ function App() {
 
   return (
     <AppNavigationContext.Provider value={navigationValue}>
-    <div className="flex min-h-[100dvh] overflow-x-hidden bg-slate-100 text-slate-900">
+    <div className="flex min-h-[100dvh] overflow-x-hidden bg-slate-100 text-slate-900 print:block print:min-h-0 print:overflow-visible print:bg-white">
       {notification && (
         <div
           className={`fixed z-[60] px-4 py-3 text-sm font-medium text-white shadow-lg print:hidden sm:text-base ${
@@ -498,13 +505,12 @@ function App() {
         activePage={activePage}
         openMenus={openMenus}
         mobileOpen={mobileNavOpen}
-        onNavigate={navigateTo}
         onToggleMenu={toggleMenu}
         onLogout={handleLogout}
         onMobileClose={() => setMobileNavOpen(false)}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col print:block print:min-w-0">
         <header className="sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm print:hidden">
           <div className="flex flex-col gap-3 px-3 py-2.5 sm:px-6 sm:py-3">
             <div className="flex items-center justify-between gap-3">
@@ -560,7 +566,9 @@ function App() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6 print:p-0">{pageContent}</main>
+        <main className="flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6 print:overflow-visible print:p-0">
+          {pageContent}
+        </main>
       </div>
     </div>
     </AppNavigationContext.Provider>

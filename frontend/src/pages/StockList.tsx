@@ -7,6 +7,7 @@ import {
   Package,
   Pencil,
   Search,
+  Trash2,
   X,
 } from 'lucide-react';
 import PaginationBar from '../components/PaginationBar';
@@ -24,9 +25,15 @@ import { depotLabel } from '../lib/depots';
 
 type StockListProps = {
   onNotify?: (type: 'success' | 'error', message: string) => void;
+  title?: string;
+  subtitle?: string;
 };
 
-export default function StockList({ onNotify }: StockListProps = {}) {
+export default function StockList({
+  onNotify,
+  title = 'Stok Listesi',
+  subtitle,
+}: StockListProps = {}) {
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -38,6 +45,9 @@ export default function StockList({ onNotify }: StockListProps = {}) {
     sku: '',
     name: '',
     barcode: '',
+    brand: '',
+    model: '',
+    description: '',
     costPrice: '',
     priceUsd: '',
   });
@@ -45,6 +55,7 @@ export default function StockList({ onNotify }: StockListProps = {}) {
     []
   );
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const notify = useCallback(
@@ -104,13 +115,16 @@ export default function StockList({ onNotify }: StockListProps = {}) {
 
   const totalPages = getTotalPages(totalCount, LIST_PAGE_SIZE);
 
-  const openEdit = (product: Product, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const openEdit = (product: Product, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     setEditing(product);
     setForm({
       sku: product.sku,
       name: product.name,
       barcode: product.barcode ?? '',
+      brand: product.brand ?? '',
+      model: product.model ?? '',
+      description: product.description ?? '',
       costPrice: String(product.costPrice),
       priceUsd: String(product.priceUsd),
     });
@@ -126,12 +140,19 @@ export default function StockList({ onNotify }: StockListProps = {}) {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
+    if (!form.name.trim()) {
+      notify('error', 'Ürün adı zorunludur.');
+      return;
+    }
     setSubmitting(true);
     try {
       await axios.put(`${API_BASE}/api/products/${editing.id}`, {
         sku: form.sku.trim(),
         name: form.name.trim(),
         barcode: form.barcode.trim() || null,
+        brand: form.brand.trim() || null,
+        model: form.model.trim() || null,
+        description: form.description.trim() || null,
         costPrice: Number(form.costPrice),
         priceUsd: Number(form.priceUsd),
         priceTl: Number(form.priceUsd),
@@ -146,7 +167,7 @@ export default function StockList({ onNotify }: StockListProps = {}) {
         });
       }
 
-      notify('success', 'Ürün ve stok güncellendi.');
+      notify('success', 'Ürün güncellendi.');
       setEditing(null);
       await loadProducts(search, page);
     } catch (error) {
@@ -160,6 +181,30 @@ export default function StockList({ onNotify }: StockListProps = {}) {
     }
   };
 
+  const handleDelete = async (product: Product, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ok = window.confirm(
+      `"${product.name}" (${product.sku}) ürününü silmek istiyor musunuz?\n\nFaturada kullanılmış ürünler silinemez.`
+    );
+    if (!ok) return;
+
+    setDeletingId(product.id);
+    try {
+      await axios.delete(`${API_BASE}/api/products/${product.id}`);
+      notify('success', 'Ürün silindi.');
+      if (editing?.id === product.id) setEditing(null);
+      await loadProducts(search, page);
+    } catch (error) {
+      const message =
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? String(error.response.data.message)
+          : 'Ürün silinemedi.';
+      notify('error', message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -168,10 +213,13 @@ export default function StockList({ onNotify }: StockListProps = {}) {
             <Package className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="page-title">Stok Listesi</h1>
+            <h1 className="page-title">{title}</h1>
             <p className="text-sm text-slate-500">
-              Düzenlenebilir stok kartları · {LIST_PAGE_SIZE} kayıt / sayfa
-              {totalPages > 0 && ` · ${totalPages.toLocaleString('tr-TR')} sayfa`}
+              {subtitle ??
+                `Ad değiştir · düzenle · sil · Excel isteğe bağlı · ${LIST_PAGE_SIZE} kayıt / sayfa`}
+              {!subtitle &&
+                totalPages > 0 &&
+                ` · ${totalPages.toLocaleString('tr-TR')} sayfa`}
             </p>
           </div>
         </div>
@@ -184,7 +232,7 @@ export default function StockList({ onNotify }: StockListProps = {}) {
             importTimeoutMs={600_000}
             onImported={() => loadProducts(search, page)}
             onNotify={notify}
-            hint="Kategori yoksa otomatik oluşturulur. Büyük dosyalar birkaç dakika sürebilir."
+            hint="Sütunlar: Id, StokKodu, StokAdi, Kategori, Marka, Model, Gorunum, Kalite, Renk, Aciklama, Rmb, AlisFiyati, SatisFiyati, AlisAdedi, SatisAdedi, Bakiye (stok adedi). Kategori yoksa otomatik oluşur."
           />
           <div className="relative w-full sm:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -230,7 +278,9 @@ export default function StockList({ onNotify }: StockListProps = {}) {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">
                   Şube / Depo
                 </th>
-                <th className="px-4 py-3 w-12" />
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
+                  İşlem
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -271,8 +321,15 @@ export default function StockList({ onNotify }: StockListProps = {}) {
                         <td className="px-4 py-3 text-sm font-semibold text-slate-900">
                           {product.sku}
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-800 max-w-[220px] truncate">
-                          {product.name}
+                        <td className="px-4 py-3 max-w-[220px]">
+                          <button
+                            type="button"
+                            onClick={(e) => openEdit(product, e)}
+                            className="truncate text-left text-sm font-medium text-indigo-700 hover:underline"
+                            title="Düzenle"
+                          >
+                            {product.name}
+                          </button>
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-500 font-mono">
                           {product.barcode ?? '—'}
@@ -317,19 +374,30 @@ export default function StockList({ onNotify }: StockListProps = {}) {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={(e) => openEdit(product, e)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                            title="Düzenle"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
+                          <div className="inline-flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={(e) => openEdit(product, e)}
+                              className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                              title="Düzenle"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => void handleDelete(product, e)}
+                              disabled={deletingId === product.id}
+                              className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                              title="Sil"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                       {isExpanded && stocks.length > 0 && (
                         <tr className="bg-slate-50/50">
-                          <td colSpan={7} className="px-6 py-4">
+                          <td colSpan={8} className="px-6 py-4">
                             <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                               Tüm Şube Stokları — {product.name}
                             </p>
@@ -387,26 +455,20 @@ export default function StockList({ onNotify }: StockListProps = {}) {
           <div className="fixed inset-0 bg-slate-900/60" onClick={() => setEditing(null)} />
           <form
             onSubmit={handleSave}
-            className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl"
+            className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl"
           >
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <h3 className="font-semibold text-slate-900">Ürün Düzenle</h3>
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
+              <div>
+                <h3 className="font-semibold text-slate-900">Ürün Düzenle</h3>
+                <p className="text-caption text-slate-500">Ad, fiyat, marka ve stok</p>
+              </div>
               <button type="button" onClick={() => setEditing(null)}>
-                <X className="w-5 h-5 text-slate-400" />
+                <X className="h-5 w-5 text-slate-400" />
               </button>
             </div>
-            <div className="p-5 space-y-3">
+            <div className="space-y-3 p-5">
               <div>
-                <label className="text-xs font-medium text-slate-600">SKU</label>
-                <input
-                  required
-                  value={form.sku}
-                  onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-600">Ürün Adı</label>
+                <label className="text-xs font-medium text-slate-600">Ürün Adı *</label>
                 <input
                   required
                   value={form.name}
@@ -414,17 +476,46 @@ export default function StockList({ onNotify }: StockListProps = {}) {
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
-              <div>
-                <label className="text-xs font-medium text-slate-600">Barkod</label>
-                <input
-                  value={form.barcode}
-                  onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-slate-600">SKU *</label>
+                  <input
+                    required
+                    value={form.sku}
+                    onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Barkod</label>
+                  <input
+                    value={form.barcode}
+                    onChange={(e) => setForm((f) => ({ ...f, barcode: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-xs font-medium text-slate-600">Maliyet</label>
+                  <label className="text-xs font-medium text-slate-600">Marka</label>
+                  <input
+                    value={form.brand}
+                    onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Model</label>
+                  <input
+                    value={form.model}
+                    onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Maliyet ($)</label>
                   <input
                     type="number"
                     min="0"
@@ -450,9 +541,22 @@ export default function StockList({ onNotify }: StockListProps = {}) {
                   />
                 </div>
               </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600">Açıklama</label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, description: e.target.value }))
+                  }
+                  rows={2}
+                  className="mt-1 w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
               {stockForm.length > 0 && (
                 <div className="space-y-2 border-t border-slate-100 pt-3">
-                  <p className="text-xs font-semibold uppercase text-slate-500">Depo Stokları</p>
+                  <p className="text-xs font-semibold uppercase text-slate-500">
+                    Depo Stokları
+                  </p>
                   {stockForm.map((row, index) => (
                     <div key={row.branchId} className="flex items-center gap-2">
                       <span className="flex-1 text-sm text-slate-700">
@@ -469,32 +573,40 @@ export default function StockList({ onNotify }: StockListProps = {}) {
                             )
                           )
                         }
-                        className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-sm text-right"
+                        className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 text-right text-sm"
                       />
                       <span className="text-xs text-slate-400">adet</span>
                     </div>
                   ))}
                 </div>
               )}
-              <p className="text-xs text-slate-400">
-                Stok miktarını buradan düzeltebilir veya depo transferi kullanabilirsiniz.
-              </p>
             </div>
-            <div className="border-t border-slate-100 bg-slate-50 px-5 py-4 flex justify-end gap-2">
+            <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-slate-50 px-5 py-4">
               <button
                 type="button"
-                onClick={() => setEditing(null)}
-                className="rounded-lg px-4 py-2 text-sm text-slate-600"
+                onClick={(e) => void handleDelete(editing, e)}
+                disabled={deletingId === editing.id || submitting}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
               >
-                İptal
+                <Trash2 className="h-4 w-4" />
+                Sil
               </button>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-              >
-                {submitting ? 'Kaydediliyor...' : 'Kaydet'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditing(null)}
+                  className="rounded-lg px-4 py-2 text-sm text-slate-600"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {submitting ? 'Kaydediliyor...' : 'Kaydet'}
+                </button>
+              </div>
             </div>
           </form>
         </div>

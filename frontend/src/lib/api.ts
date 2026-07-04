@@ -192,6 +192,12 @@ export type Product = {
   sku: string;
   barcode: string | null;
   name: string;
+  brand?: string | null;
+  model?: string | null;
+  appearance?: string | null;
+  quality?: string | null;
+  description?: string | null;
+  categoryId?: number | null;
   costPrice: number;
   priceTl: number;
   priceUsd: number;

@@ -6,6 +6,7 @@ export type ImportResult = {
   updated: number;
   skipped: number;
   categoriesCreated?: number;
+  brandModelsCreated?: number;
   errors: string[];
 };
 
@@ -178,15 +179,21 @@ type ProductExcelRow = {
   Kategori?: string;
   Marka?: string;
   Model?: string;
+  Gorunum?: string;
   Kalite?: string;
   Renk?: string;
-  Barkod?: string | number;
+  Aciklama?: string;
+  Rmb?: string | number;
   AlisFiyati?: string | number;
   SatisFiyati?: string | number;
+  AlisAdedi?: string | number;
+  SatisAdedi?: string | number;
+  Bakiye?: string | number;
+  /** Eski şablon uyumu */
+  Barkod?: string | number;
   SatisUsd?: string | number;
   MerkezDepo?: string | number;
   CinIadeDepo?: string | number;
-  Bakiye?: string | number;
 };
 
 async function findOrCreateCategory(
@@ -207,6 +214,42 @@ async function findOrCreateCategory(
   const created = await tx.category.create({ data: { name } });
   cache.set(name, created.id);
   categoriesCreated.count += 1;
+  return created.id;
+}
+
+function brandModelCacheKey(
+  kind: 'MARKA' | 'MODEL',
+  categoryId: number | null,
+  name: string
+) {
+  return `${kind}:${categoryId ?? 0}:${name.toLocaleLowerCase('tr-TR')}`;
+}
+
+async function findOrCreateBrandModel(
+  tx: Prisma.TransactionClient,
+  rawName: string,
+  kind: 'MARKA' | 'MODEL',
+  categoryId: number | null,
+  cache: Map<string, number>,
+  brandModelsCreated: { count: number }
+): Promise<number> {
+  const name = rawName.trim();
+  const key = brandModelCacheKey(kind, categoryId, name);
+  if (cache.has(key)) return cache.get(key)!;
+
+  const existing = await tx.brandModel.findFirst({
+    where: { name, kind, categoryId },
+  });
+  if (existing) {
+    cache.set(key, existing.id);
+    return existing.id;
+  }
+
+  const created = await tx.brandModel.create({
+    data: { name, kind, categoryId },
+  });
+  cache.set(key, created.id);
+  brandModelsCreated.count += 1;
   return created.id;
 }
 
@@ -247,37 +290,54 @@ async function upsertStock(
 }
 
 export async function exportProductsExcel(prisma: PrismaClient): Promise<Buffer> {
-  const products = await prisma.product.findMany({
-    orderBy: { sku: 'asc' },
-    include: {
-      category: { select: { name: true } },
-      stocks: { include: { branch: { select: { name: true } } } },
-    },
-  });
+  const [products, purchaseQtyRows, salesQtyRows] = await Promise.all([
+    prisma.product.findMany({
+      orderBy: { sku: 'asc' },
+      include: {
+        category: { select: { name: true } },
+        stocks: { include: { branch: { select: { name: true } } } },
+      },
+    }),
+    prisma.invoiceItem.groupBy({
+      by: ['productId'],
+      where: { invoice: { type: 'ALIS', deletedAt: null } },
+      _sum: { quantity: true },
+    }),
+    prisma.invoiceItem.groupBy({
+      by: ['productId'],
+      where: { invoice: { type: 'SATIS', deletedAt: null } },
+      _sum: { quantity: true },
+    }),
+  ]);
+
+  const purchaseQty = new Map(
+    purchaseQtyRows.map((row) => [row.productId, row._sum.quantity ?? 0])
+  );
+  const salesQty = new Map(
+    salesQtyRows.map((row) => [row.productId, row._sum.quantity ?? 0])
+  );
 
   const rows = products.map((p) => {
-    const merkez =
+    const bakiye =
       p.stocks.find((s) => s.branch.name === 'MERKEZ_DEPO')?.quantity ?? 0;
-    const cinIade =
-      p.stocks.find((s) =>
-        ['CIN_IADE_DEPO', 'ARIZALI_DEPO'].includes(s.branch.name)
-      )?.quantity ?? 0;
 
     return {
+      Id: p.id,
       StokKodu: p.sku,
       StokAdi: p.name,
       Kategori: p.category?.name ?? '',
       Marka: p.brand ?? '',
       Model: p.model ?? '',
+      Gorunum: appearanceLabel(p.appearance),
       Kalite: qualityLabel(p.quality),
-      Renk: appearanceLabel(p.appearance),
-      Barkod: p.barcode ?? '',
+      Renk: '',
+      Aciklama: p.description ?? '',
+      Rmb: p.rbmPrice,
       AlisFiyati: p.costPrice,
-      SatisFiyati: p.priceTl,
-      SatisUsd: p.priceUsd,
-      MerkezDepo: merkez,
-      CinIadeDepo: cinIade,
-      Bakiye: merkez,
+      SatisFiyati: p.priceUsd > 0 ? p.priceUsd : p.priceTl,
+      AlisAdedi: purchaseQty.get(p.id) ?? 0,
+      SatisAdedi: salesQty.get(p.id) ?? 0,
+      Bakiye: bakiye,
     };
   });
 
@@ -297,11 +357,24 @@ export async function importProductsExcel(
   let skipped = 0;
   const errors: string[] = [];
   const categoryCache = new Map<string, number>();
+  const brandModelCache = new Map<string, number>();
   const categoriesCreated = { count: 0 };
+  const brandModelsCreated = { count: 0 };
 
-  const existingCategories = await prisma.category.findMany({ select: { id: true, name: true } });
+  const [existingCategories, existingBrandModels] = await Promise.all([
+    prisma.category.findMany({ select: { id: true, name: true } }),
+    prisma.brandModel.findMany({
+      select: { id: true, name: true, kind: true, categoryId: true },
+    }),
+  ]);
   for (const category of existingCategories) {
     categoryCache.set(category.name, category.id);
+  }
+  for (const entry of existingBrandModels) {
+    brandModelCache.set(
+      brandModelCacheKey(entry.kind, entry.categoryId, entry.name),
+      entry.id
+    );
   }
 
   type ParsedRow = {
@@ -313,10 +386,14 @@ export async function importProductsExcel(
     model: string | null;
     quality: string | null;
     appearance: string | null;
+    description: string | null;
+    hasDescriptionUpdate: boolean;
+    rbmPrice: number | null;
     costPrice: number;
     priceTl: number;
     priceUsd: number;
     barcodeRaw: string | null;
+    hasBarcodeColumn: boolean;
     merkezQty: number;
     cinIadeQty: number;
     hasCinIadeColumn: boolean;
@@ -334,6 +411,19 @@ export async function importProductsExcel(
       continue;
     }
 
+    const salePrice = asNumber(row.SatisFiyati, 0);
+    const saleUsd = asNumber(row.SatisUsd, 0);
+    const priceUsd = saleUsd > 0 ? saleUsd : salePrice;
+    const gorunum = optionalString(row.Gorunum);
+    const renk = optionalString(row.Renk);
+    const hasDescriptionUpdate =
+      Object.prototype.hasOwnProperty.call(row, 'Aciklama') ||
+      (Boolean(gorunum) && Boolean(renk));
+    let description: string | null = optionalString(row.Aciklama);
+    if (renk && gorunum) {
+      description = description ? `${description} | Renk: ${renk}` : `Renk: ${renk}`;
+    }
+
     parsedRows.push({
       rowIndex: index,
       sku,
@@ -342,15 +432,22 @@ export async function importProductsExcel(
       brand: optionalString(row.Marka),
       model: optionalString(row.Model),
       quality: qualityCodeFromLabel(optionalString(row.Kalite)),
-      appearance: appearanceCodeFromLabel(optionalString(row.Renk)),
+      appearance: appearanceCodeFromLabel(gorunum ?? renk),
+      description,
+      hasDescriptionUpdate,
+      rbmPrice:
+        Object.prototype.hasOwnProperty.call(row, 'Rmb') && row.Rmb !== ''
+          ? asNumber(row.Rmb, 0)
+          : null,
       costPrice: asNumber(row.AlisFiyati, 0),
-      priceTl: asNumber(row.SatisFiyati, 0),
-      priceUsd:
-        asNumber(row.SatisUsd, 0) || (asNumber(row.SatisFiyati, 0) > 0 ? asNumber(row.SatisFiyati, 0) / 46.37 : 0),
+      priceTl: priceUsd,
+      priceUsd,
       barcodeRaw: optionalString(row.Barkod),
-      merkezQty: asNumber(row.MerkezDepo ?? row.Bakiye, 0),
+      hasBarcodeColumn: Object.prototype.hasOwnProperty.call(row, 'Barkod'),
+      /** Bakiye = MERKEZ_DEPO stok adedi */
+      merkezQty: asNumber(row.Bakiye ?? row.MerkezDepo, 0),
       cinIadeQty: asNumber(row.CinIadeDepo, 0),
-      hasCinIadeColumn: row.CinIadeDepo != null && row.CinIadeDepo !== '',
+      hasCinIadeColumn: Object.prototype.hasOwnProperty.call(row, 'CinIadeDepo'),
     });
   }
 
@@ -362,7 +459,7 @@ export async function importProductsExcel(
     item: ParsedRow,
     existingBySku: Map<string, number>
   ) => {
-    let categoryId: number | undefined;
+    let categoryId: number | null = null;
     if (item.categoryName) {
       categoryId = await findOrCreateCategory(
         tx,
@@ -372,15 +469,46 @@ export async function importProductsExcel(
       );
     }
 
+    let brandModelId: number | null = null;
+    if (item.brand) {
+      await findOrCreateBrandModel(
+        tx,
+        item.brand,
+        'MARKA',
+        categoryId,
+        brandModelCache,
+        brandModelsCreated
+      );
+    }
+    if (item.model) {
+      brandModelId = await findOrCreateBrandModel(
+        tx,
+        item.model,
+        'MODEL',
+        categoryId,
+        brandModelCache,
+        brandModelsCreated
+      );
+    }
+
     const categoryUpdate =
-      item.categoryName != null ? { categoryId: categoryId ?? null } : {};
+      item.categoryName != null ? { categoryId } : {};
 
     const detailUpdate = {
       ...(item.brand != null ? { brand: item.brand || null } : {}),
       ...(item.model != null ? { model: item.model || null } : {}),
+      ...(item.model != null ? { brandModelId } : {}),
       ...(item.quality != null ? { quality: item.quality } : {}),
       ...(item.appearance != null ? { appearance: item.appearance } : {}),
+      ...(item.hasDescriptionUpdate
+        ? { description: item.description || null }
+        : {}),
+      ...(item.rbmPrice != null ? { rbmPrice: item.rbmPrice } : {}),
     };
+
+    const barcodeUpdate = item.hasBarcodeColumn
+      ? { barcode: item.barcodeRaw }
+      : {};
 
     const existingId = existingBySku.get(item.sku);
     const product = existingId
@@ -393,7 +521,7 @@ export async function importProductsExcel(
             priceUsd: item.priceUsd,
             ...categoryUpdate,
             ...detailUpdate,
-            ...(item.barcodeRaw ? { barcode: item.barcodeRaw } : { barcode: null }),
+            ...barcodeUpdate,
           },
         })
       : await tx.product.create({
@@ -405,7 +533,7 @@ export async function importProductsExcel(
             priceUsd: item.priceUsd,
             ...categoryUpdate,
             ...detailUpdate,
-            ...(item.barcodeRaw ? { barcode: item.barcodeRaw } : {}),
+            ...barcodeUpdate,
           },
         });
 
@@ -473,6 +601,7 @@ export async function importProductsExcel(
     updated,
     skipped,
     categoriesCreated: categoriesCreated.count,
+    brandModelsCreated: brandModelsCreated.count,
     errors,
   };
 }

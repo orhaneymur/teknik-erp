@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { AlertTriangle, ArrowLeft, Copy, Package, RotateCcw, Save, Search, Trash2, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Copy,
+  Package,
+  Printer,
+  RotateCcw,
+  Save,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import F2ProductList from '../components/F2ProductList';
 import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch';
@@ -162,8 +173,13 @@ export default function SalesReturn({
   const [editInvoiceDate, setEditInvoiceDate] = useState('');
   const [editCustomerLabel, setEditCustomerLabel] = useState('');
   const [editCustomerId, setEditCustomerId] = useState<number | ''>('');
+  const [shouldPrint, setShouldPrint] = useState(false);
 
   const showCosts = useHoldKeyReveal('F8');
+
+  const handlePrintReceipt = useCallback(() => {
+    window.print();
+  }, []);
 
   const f2 = useF2ProductSearch({
     open: searchModal,
@@ -188,6 +204,11 @@ export default function SalesReturn({
       roundPrice(
         activeLines.reduce((sum, row) => sum + row.returnQty * row.unitPriceTl, 0)
       ),
+    [activeLines]
+  );
+
+  const totalQuantity = useMemo(
+    () => activeLines.reduce((sum, row) => sum + row.returnQty, 0),
     [activeLines]
   );
 
@@ -662,12 +683,40 @@ export default function SalesReturn({
         parts.push(`${chinaReturnCount} kalem ${depotLabel('CIN_IADE_DEPO')}`);
       }
 
+      const invoiceLabel = createdNos.join(', ');
+      if (invoiceLabel) setDisplayInvoiceNo(invoiceLabel);
+
       notify(
         'success',
-        `İade kaydedildi · ${parts.join(' · ')} · ${createdNos.join(', ')}`
+        `İade kaydedildi · ${parts.join(' · ')} · ${invoiceLabel}`
       );
-      setCart([]);
-      onDataChange?.();
+
+      let formResetDone = false;
+      const resetAfterReturn = () => {
+        if (formResetDone) return;
+        formResetDone = true;
+        setCart([]);
+        setShouldPrint(false);
+        setDisplayInvoiceNo('');
+        onDataChange?.();
+      };
+
+      if (shouldPrint) {
+        window.setTimeout(() => {
+          window.print();
+          const onAfterPrint = () => {
+            resetAfterReturn();
+            window.removeEventListener('afterprint', onAfterPrint);
+          };
+          window.addEventListener('afterprint', onAfterPrint);
+          window.setTimeout(() => {
+            window.removeEventListener('afterprint', onAfterPrint);
+            resetAfterReturn();
+          }, 30_000);
+        }, 150);
+      } else {
+        resetAfterReturn();
+      }
     } catch (error) {
       const message =
         axios.isAxiosError(error) && error.response?.data?.message
@@ -692,10 +741,54 @@ export default function SalesReturn({
       (sum, line) => sum + line.quantity * line.unitPriceTl,
       0
     );
+    const editTotalQty = editLines.reduce((sum, line) => sum + line.quantity, 0);
 
     return (
-      <div className="space-y-4">
-        <div className="mb-2 flex items-center gap-3">
+      <div className="space-y-4 print:space-y-0">
+        <div className="receipt-slip hidden print:block">
+          <p className="receipt-slip-title">{displayInvoiceNo || 'İade Fişi'}</p>
+          {editCustomerLabel && (
+            <p className="receipt-slip-customer">{editCustomerLabel}</p>
+          )}
+          <p className="receipt-slip-meta">
+            {editInvoiceDate}
+            {editProcessedBy ? ` · ${editProcessedBy}` : ''}
+          </p>
+          {editNotes.trim() && (
+            <p className="receipt-slip-notes">{editNotes.trim()}</p>
+          )}
+          <div className="receipt-slip-divider" />
+          <div className="receipt-item-row receipt-item-head">
+            <span className="receipt-item-name">Ürün</span>
+            <span className="receipt-item-qty">Ad</span>
+            <span className="receipt-item-price">Fiyat</span>
+            <span className="receipt-item-total">Top.</span>
+          </div>
+          {editLines.map((line) => {
+            const lineTotal = roundPrice(line.quantity * line.unitPriceTl);
+            return (
+              <div key={line.rowId} className="receipt-item-row">
+                <span className="receipt-item-name" title={line.productName}>
+                  {line.productName}
+                </span>
+                <span className="receipt-item-qty">{line.quantity}</span>
+                <span className="receipt-item-price">{formatUsd(line.unitPriceTl)}</span>
+                <span className="receipt-item-total">{formatUsd(lineTotal)}</span>
+              </div>
+            );
+          })}
+          <div className="receipt-slip-divider" />
+          <div className="receipt-item-row receipt-slip-summary">
+            <span className="receipt-item-name">Toplam adet</span>
+            <span className="receipt-item-total">{editTotalQty}</span>
+          </div>
+          <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+            <span className="receipt-item-name">NET TOPLAM</span>
+            <span className="receipt-item-total">{formatUsd(editTotalTl)}</span>
+          </div>
+        </div>
+
+        <div className="mb-2 flex items-center gap-3 print:hidden">
           {onCancelEdit && (
             <button
               type="button"
@@ -717,7 +810,7 @@ export default function SalesReturn({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 print:hidden">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Fatura Tarihi</label>
             <input
@@ -738,7 +831,7 @@ export default function SalesReturn({
           </div>
         </div>
 
-        <div>
+        <div className="print:hidden">
           <label className="mb-1 block text-sm font-medium text-slate-700">Not</label>
           <textarea
             rows={2}
@@ -748,7 +841,7 @@ export default function SalesReturn({
           />
         </div>
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm print:hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100 text-sm">
               <thead className="bg-slate-50">
@@ -837,11 +930,20 @@ export default function SalesReturn({
           </div>
         </section>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
           <p className="text-sm font-semibold text-slate-700">
             Toplam: {formatUsd(editTotalTl)}
           </p>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrintReceipt}
+              disabled={editLines.length === 0}
+              className="btn inline-flex items-center gap-2 border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
+            >
+              <Printer className="h-5 w-5" />
+              Fiş Yazdır
+            </button>
             <button
               type="button"
               onClick={() => void handleTrashInvoice()}
@@ -883,8 +985,47 @@ export default function SalesReturn({
     roundPrice(rate > 0 ? tl / rate : 0);
 
   return (
-    <div className="space-y-4">
-      <div className="mb-2 flex items-center gap-3">
+    <div className="space-y-4 print:space-y-0">
+      <div className="receipt-slip hidden print:block">
+        <p className="receipt-slip-title">{displayInvoiceNo || 'İade Fişi'}</p>
+        {selectedCustomer && (
+          <p className="receipt-slip-customer">
+            {selectedCustomer.code} — {selectedCustomer.name}
+          </p>
+        )}
+        <p className="receipt-slip-meta">Satış iade</p>
+        <div className="receipt-slip-divider" />
+        <div className="receipt-item-row receipt-item-head">
+          <span className="receipt-item-name">Ürün</span>
+          <span className="receipt-item-qty">Ad</span>
+          <span className="receipt-item-price">Fiyat</span>
+          <span className="receipt-item-total">Top.</span>
+        </div>
+        {activeLines.map((line) => {
+          const lineTotal = roundPrice(line.returnQty * line.unitPriceTl);
+          return (
+            <div key={line.rowId} className="receipt-item-row">
+              <span className="receipt-item-name" title={line.productName}>
+                {line.productName}
+              </span>
+              <span className="receipt-item-qty">{line.returnQty}</span>
+              <span className="receipt-item-price">{formatUsd(line.unitPriceTl)}</span>
+              <span className="receipt-item-total">{formatUsd(lineTotal)}</span>
+            </div>
+          );
+        })}
+        <div className="receipt-slip-divider" />
+        <div className="receipt-item-row receipt-slip-summary">
+          <span className="receipt-item-name">Toplam adet</span>
+          <span className="receipt-item-total">{totalQuantity}</span>
+        </div>
+        <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+          <span className="receipt-item-name">NET TOPLAM</span>
+          <span className="receipt-item-total">{formatUsd(totalUsd)}</span>
+        </div>
+      </div>
+
+      <div className="mb-2 flex items-center gap-3 print:hidden">
         <div className="rounded-xl bg-amber-600 p-2.5 text-white">
           <RotateCcw className="h-5 w-5" />
         </div>
@@ -896,7 +1037,7 @@ export default function SalesReturn({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3 print:hidden">
         <div className="space-y-4 xl:col-span-2">
           <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1203,6 +1344,25 @@ export default function SalesReturn({
               <span className="font-medium text-orange-700">{chinaReturnCount} kalem</span>
             </div>
           </div>
+          <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={shouldPrint}
+              onChange={(e) => setShouldPrint(e.target.checked)}
+              className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+            />
+            <Printer className="w-4 h-4" />
+            Kayıttan sonra yazdır
+          </label>
+          <button
+            type="button"
+            onClick={handlePrintReceipt}
+            disabled={activeLines.length === 0}
+            className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
+          >
+            <Printer className="h-5 w-5" />
+            Fiş Yazdır
+          </button>
           <button
             type="button"
             onClick={handleSubmit}
@@ -1276,7 +1436,11 @@ export default function SalesReturn({
         loadingMore={f2.loadingMore}
         footer={`${f2.results.length.toLocaleString('tr-TR')} / ${f2.totalCount.toLocaleString('tr-TR')} ürün`}
         showEmpty={!f2.loading && f2.results.length === 0}
-        emptyHint={f2.searchQuery ? 'Sonuç bulunamadı.' : 'Ürün bulunamadı.'}
+        emptyHint={
+          f2.searchQuery.trim()
+            ? 'Sonuç bulunamadı.'
+            : 'Aramak için yazmaya başlayın...'
+        }
       >
         {!f2.loading && f2.results.length > 0 && (
           <F2ProductList

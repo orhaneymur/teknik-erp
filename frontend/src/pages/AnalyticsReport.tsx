@@ -18,7 +18,20 @@ type StaffTurnover = {
   yearly: number;
 };
 
-type ProductSaleRow = { name: string; quantity: number };
+type ProductSaleRow = {
+  name: string;
+  quantity: number;
+  sku?: string;
+  productId?: number;
+};
+
+type TopCustomerRow = {
+  customerId: number;
+  code: string;
+  name: string;
+  amount: number;
+  invoiceCount: number;
+};
 
 type AnalyticsData = {
   staffTurnover: StaffTurnover[];
@@ -27,6 +40,7 @@ type AnalyticsData = {
     monthlySales: { label: string; total: number }[];
     topProducts: ProductSaleRow[];
     bottomProducts: ProductSaleRow[];
+    topCustomers?: TopCustomerRow[];
     staffComparison: { name: string; monthly: number }[];
   };
   lowStock: { id: number; sku: string; name: string; quantity: number }[];

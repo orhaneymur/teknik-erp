@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { ArrowLeft, CheckCircle, Printer, Save, Search, ShoppingCart, Trash2, X } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
+import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import F2ProductList, {
   resolveSalesUnitPriceUsd,
 } from '../components/F2ProductList';
@@ -178,6 +179,11 @@ export default function SalesCreate({
   const [shouldPrint, setShouldPrint] = useState(false);
   const [processedBy, setProcessedBy] = useState('');
   const [f2Modal, setF2Modal] = useState(false);
+  const [historyProduct, setHistoryProduct] = useState<{
+    id: number;
+    sku: string;
+    name: string;
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [fulfilling, setFulfilling] = useState(false);
@@ -657,15 +663,17 @@ export default function SalesCreate({
     setCustomerSearch(`${customer.code} — ${customer.name}`);
     setCustomerDropdownOpen(false);
     setPrintBalance(null);
+    setPaymentMethod('Cari');
   };
 
   const handleSubmit = async () => {
     let customer = selectedCustomer;
+    let method = paymentMethod;
     if (!customer) {
       customer = pickCustomerFromSearch(customerSearch, customerResults);
       if (customer) {
-        setSelectedCustomer(customer);
-        setCustomerSearch(`${customer.code} — ${customer.name}`);
+        selectCustomer(customer);
+        method = 'Cari';
       }
     }
 
@@ -681,7 +689,7 @@ export default function SalesCreate({
 
     const branchId = selectedBranch !== '' ? Number(selectedBranch) : storeBranch!.id;
 
-    if (paymentMethod !== 'Cari' && selectedSafe === '') {
+    if (method !== 'Cari' && selectedSafe === '') {
       notify('error', 'Ödeme için kasa/banka seçin.');
       return;
     }
@@ -692,7 +700,7 @@ export default function SalesCreate({
     }
 
     const safeId =
-      paymentMethod === 'Cari'
+      method === 'Cari'
         ? (branchSafes[0]?.id ?? Number(selectedSafe))
         : Number(selectedSafe);
 
@@ -711,7 +719,7 @@ export default function SalesCreate({
 
         await axios.put(`${API_BASE}/api/sales/invoices/${editInvoiceId}`, {
           customerId: customer.id,
-          paymentMethod,
+          paymentMethod: method,
           paymentType,
           processedBy: processedBy || null,
           orderNotes: orderNotes || undefined,
@@ -744,7 +752,7 @@ export default function SalesCreate({
         customerId: customer.id,
         branchId,
         safeId,
-        paymentMethod,
+        paymentMethod: method,
         paymentType,
         exchangeRate: EXCHANGE_RATE,
         deliveryType,
@@ -770,19 +778,19 @@ export default function SalesCreate({
         const balanceAfter =
           typeof response.data.data?.balanceAfter === 'number'
             ? response.data.data.balanceAfter
-            : paymentMethod === 'Cari'
+            : method === 'Cari'
               ? roundPrice(balanceBefore + totalUsd)
               : balanceBefore;
 
         const showReceiptBalance =
-          paymentMethod === 'Cari' || Math.abs(balanceBefore) > 0.0001;
+          method === 'Cari' || Math.abs(balanceBefore) > 0.0001;
         if (showReceiptBalance) {
           setPrintBalance({ before: balanceBefore, after: balanceAfter });
         }
 
         if (savedCustomer?.balance != null) {
           setSelectedCustomer({ ...customer, balance: savedCustomer.balance });
-        } else if (paymentMethod === 'Cari') {
+        } else if (method === 'Cari') {
           setSelectedCustomer({ ...customer, balance: balanceAfter });
         }
 
@@ -858,30 +866,80 @@ export default function SalesCreate({
   }
 
   return (
-    <div className="space-y-4 print:space-y-2">
-      <div className="hidden print:block border-b border-slate-300 pb-3 mb-3 text-slate-900">
-        <p className="text-center text-lg font-bold">
+    <div className="space-y-4 print:space-y-0">
+      {/* Termal fiş (72.1mm) — ekran tablosu yazdırılmaz */}
+      <div className="receipt-slip hidden print:block">
+        <p className="receipt-slip-title">
           {displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}
         </p>
         {selectedCustomer && (
-          <p className="mt-1 text-center text-sm font-medium">
+          <p className="receipt-slip-customer">
             {selectedCustomer.code} — {selectedCustomer.name}
           </p>
         )}
-        <p className="mt-1 text-center text-xs text-slate-600">
+        <p className="receipt-slip-meta">
           {invoiceDate}
           {processedBy ? ` · ${processedBy}` : ''}
-          {paymentMethod ? ` · ${paymentMethod}` : ''}
-          {paymentType ? ` · ${paymentType}` : ''}
-          {deliveryType ? ` · ${deliveryType}` : ''}
         </p>
+        <p className="receipt-slip-meta">
+          {[paymentMethod, paymentType, deliveryType].filter(Boolean).join(' · ')}
+        </p>
+        {isPreOrder && <p className="receipt-slip-preorder">ÖN SİPARİŞ — Stok düşülmedi</p>}
         {orderNotes.trim() && (
-          <div className="mt-3 border-t border-slate-200 pt-2 text-sm">
-            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Açıklama
-            </p>
-            <p className="whitespace-pre-wrap">{orderNotes.trim()}</p>
-          </div>
+          <p className="receipt-slip-notes">{orderNotes.trim()}</p>
+        )}
+
+        <div className="receipt-slip-divider" />
+
+        <div className="receipt-item-row receipt-item-head">
+          <span className="receipt-item-name">Ürün</span>
+          <span className="receipt-item-qty">Ad</span>
+          <span className="receipt-item-price">Fiyat</span>
+          <span className="receipt-item-total">Top.</span>
+        </div>
+
+        {cart.map((item) => {
+          const lineTotal = calcLineTotalUsd(item);
+          const unitNet = unitNetUsd(item);
+          return (
+            <div key={item.rowId} className="receipt-item-row">
+              <span className="receipt-item-name" title={item.product.name}>
+                {item.product.name}
+              </span>
+              <span className="receipt-item-qty">{item.quantity}</span>
+              <span className="receipt-item-price">{formatUsd(unitNet)}</span>
+              <span className="receipt-item-total">{formatUsd(lineTotal)}</span>
+            </div>
+          );
+        })}
+
+        <div className="receipt-slip-divider" />
+
+        <div className="receipt-item-row receipt-slip-summary">
+          <span className="receipt-item-name">Toplam adet</span>
+          <span className="receipt-item-total">{totalQuantity}</span>
+        </div>
+        <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+          <span className="receipt-item-name">NET TOPLAM</span>
+          <span className="receipt-item-total">{formatUsd(totalUsd)}</span>
+        </div>
+
+        {receiptBalance && (
+          <>
+            <div className="receipt-slip-divider" />
+            <div className="receipt-item-row receipt-slip-summary">
+              <span className="receipt-item-name">Önceki bakiye</span>
+              <span className="receipt-item-total">
+                {formatMoney(receiptBalance.before)}
+              </span>
+            </div>
+            <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+              <span className="receipt-item-name">Sonraki bakiye</span>
+              <span className="receipt-item-total">
+                {formatMoney(receiptBalance.after)}
+              </span>
+            </div>
+          </>
         )}
       </div>
 
@@ -1127,16 +1185,16 @@ export default function SalesCreate({
         Hızlı Stok Kartı Bul (F2)
       </button>
 
-      {/* ORTA + SAĞ GRID */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
+      {/* ORTA + SAĞ GRID — yazdırmada receipt-slip kullanılır */}
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 print:hidden">
         {/* Sepet Tablosu */}
         <section className="xl:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           {isPreOrder && (
-            <p className="hidden border-b border-amber-200 bg-amber-50 px-5 py-2 text-center text-sm font-bold uppercase tracking-wide text-amber-800 print:block">
+            <p className="border-b border-amber-200 bg-amber-50 px-5 py-2 text-center text-sm font-bold uppercase tracking-wide text-amber-800">
               Ön Sipariş — Stok Düşülmedi
             </p>
           )}
-          <div className="px-5 py-3 border-b border-slate-200 flex items-center gap-2 bg-slate-50 print:bg-white">
+          <div className="px-5 py-3 border-b border-slate-200 flex items-center gap-2 bg-slate-50">
             <ShoppingCart className="w-5 h-5 text-indigo-600" />
             <h2 className="font-semibold text-slate-800">Akıllı Sepet</h2>
             <span className="text-sm text-slate-500">({cart.length} kalem)</span>
@@ -1191,9 +1249,20 @@ export default function SalesCreate({
                         {item.product.sku}
                       </td>
                       <td className="receipt-col-name px-3 py-2 align-top min-w-[11rem] max-w-[32rem] print:max-w-none print:px-1.5 print:py-1">
-                        <p className="receipt-product-name text-[11px] font-medium leading-snug text-slate-900 break-words sm:text-xs print:text-[9px] print:leading-tight">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setHistoryProduct({
+                              id: item.product.id,
+                              sku: item.product.sku,
+                              name: item.product.name,
+                            })
+                          }
+                          title="Stok hareketlerini gör"
+                          className="receipt-product-name print:pointer-events-none text-left text-[11px] font-medium leading-snug text-indigo-700 break-words underline-offset-2 hover:underline sm:text-xs print:text-[9px] print:leading-tight print:text-slate-900 print:no-underline"
+                        >
                           {item.product.name}
-                        </p>
+                        </button>
                       </td>
                       <td className="px-3 py-2 text-right print:hidden">
                         <input
@@ -1302,7 +1371,7 @@ export default function SalesCreate({
         </section>
 
         {/* Fintech Özet Paneli */}
-        <aside className="h-fit space-y-4 rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm sm:p-5 xl:col-span-1 xl:sticky xl:top-4 print:border-0 print:shadow-none print:p-0">
+        <aside className="h-fit space-y-4 rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm sm:p-5 xl:col-span-1 xl:sticky xl:top-4">
           <h2 className="border-b border-slate-200 pb-2 text-center font-bold text-slate-800">
             Fatura Özeti
           </h2>
@@ -1325,25 +1394,7 @@ export default function SalesCreate({
             </p>
           </div>
 
-          {receiptBalance && (
-            <div className="hidden print:block border-t border-slate-400 pt-3 mt-2 space-y-1 text-center text-slate-900">
-              <p className="text-xs uppercase tracking-wide text-slate-600">
-                Cari Bakiye Özeti
-              </p>
-              <p className="text-sm">
-                Önceki Bakiye:{' '}
-                <span className="font-semibold tabular-nums">
-                  {formatMoney(receiptBalance.before)}
-                </span>
-              </p>
-              <p className="text-sm font-bold">
-                Satış Sonrası Bakiye:{' '}
-                <span className="tabular-nums">{formatMoney(receiptBalance.after)}</span>
-              </p>
-            </div>
-          )}
-
-          <div className="space-y-2 border-t border-slate-200 pt-2 print:hidden">
+          <div className="space-y-2 border-t border-slate-200 pt-2">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -1396,17 +1447,15 @@ export default function SalesCreate({
             </button>
           )}
 
-          {isEditMode && (
-            <button
-              type="button"
-              onClick={handlePrintReceipt}
-              disabled={cart.length === 0}
-              className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
-            >
-              <Printer className="w-5 h-5" />
-              Fiş Yazdır
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handlePrintReceipt}
+            disabled={cart.length === 0}
+            className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
+          >
+            <Printer className="w-5 h-5" />
+            Fiş Yazdır
+          </button>
 
           {isEditMode && (
             <button
@@ -1453,7 +1502,11 @@ export default function SalesCreate({
         loadingMore={f2.loadingMore}
         footer={`${f2.results.length.toLocaleString('tr-TR')} / ${f2.totalCount.toLocaleString('tr-TR')} ürün`}
         showEmpty={!f2.loading && f2.results.length === 0}
-        emptyHint={f2.searchQuery ? 'Sonuç bulunamadı.' : 'Ürün bulunamadı.'}
+        emptyHint={
+          f2.searchQuery.trim()
+            ? 'Sonuç bulunamadı.'
+            : 'Aramak için yazmaya başlayın...'
+        }
       >
         {!f2.loading && f2.results.length > 0 && (
           <F2ProductList
@@ -1466,6 +1519,13 @@ export default function SalesCreate({
           />
         )}
       </ProductSearchPopover>
+
+      <ProductStockHistoryModal
+        open={historyProduct != null}
+        onClose={() => setHistoryProduct(null)}
+        product={historyProduct}
+        initialCustomer={selectedCustomer}
+      />
     </div>
   );
 }

@@ -47,10 +47,7 @@ export function getLastF2ProductId(
 
 const SEARCH_STORAGE_KEY = 'akgun-f2-last-search';
 
-function searchStorageKey(context: F2ProductContext, partyId?: number | null): string {
-  return `${context}:${partyId ?? 0}`;
-}
-
+/** Arama metni müşteriden bağımsız — son kapandığı haliyle geri gelir */
 function readSearchStore(): Record<string, string> {
   try {
     const raw = sessionStorage.getItem(SEARCH_STORAGE_KEY);
@@ -73,18 +70,18 @@ function writeSearchStore(store: Record<string, string>) {
 
 export function recordF2SearchQuery(
   context: F2ProductContext,
-  partyId: number | null | undefined,
+  _partyId: number | null | undefined,
   query: string
 ) {
   const store = readSearchStore();
-  store[searchStorageKey(context, partyId)] = query;
+  store[context] = query;
   writeSearchStore(store);
 }
 
 export function getLastF2SearchQuery(
   context: F2ProductContext,
-  partyId?: number | null
+  _partyId?: number | null
 ): string {
-  const value = readSearchStore()[searchStorageKey(context, partyId)];
+  const value = readSearchStore()[context];
   return typeof value === 'string' ? value : '';
 }

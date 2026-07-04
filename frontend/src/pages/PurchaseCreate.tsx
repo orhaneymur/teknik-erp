@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { FileInput, Save, Search, ShoppingCart, Trash2, X, ArrowLeft } from 'lucide-react';
+import { FileInput, Printer, Save, Search, ShoppingCart, Trash2, X, ArrowLeft } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import F2ProductList, {
   resolvePurchaseUnitPriceUsd,
@@ -102,6 +102,16 @@ export default function PurchaseCreate({
   const [editLoading, setEditLoading] = useState(false);
   const [displayInvoiceNo, setDisplayInvoiceNo] = useState('');
   const [removedItemIds, setRemovedItemIds] = useState<number[]>([]);
+  const [shouldPrint, setShouldPrint] = useState(false);
+
+  const handlePrintReceipt = useCallback(() => {
+    window.print();
+  }, []);
+
+  const totalQuantity = useMemo(
+    () => cart.reduce((sum, item) => sum + item.quantity, 0),
+    [cart]
+  );
 
   const supplierSearchRef = useRef<HTMLInputElement>(null);
   const supplierDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -479,15 +489,46 @@ export default function PurchaseCreate({
       });
 
       if (response.data.success) {
+        const savedInvoiceNo =
+          typeof response.data.data?.invoiceNo === 'string'
+            ? response.data.data.invoiceNo
+            : '';
+        if (savedInvoiceNo) setDisplayInvoiceNo(savedInvoiceNo);
+
         notify(
           'success',
-          `Alış faturası kaydedildi! ${response.data.data?.invoiceNo ?? ''} · MERKEZ_DEPO stok güncellendi`
+          `Alış faturası kaydedildi! ${savedInvoiceNo} · MERKEZ_DEPO stok güncellendi`
         );
-        setCart([]);
-        setOrderNotes('');
-        setDueDate('');
-        onDataChange?.();
-        await loadInitData();
+
+        let formResetDone = false;
+        const resetAfterPurchase = () => {
+          if (formResetDone) return;
+          formResetDone = true;
+          setCart([]);
+          setOrderNotes('');
+          setDueDate('');
+          setShouldPrint(false);
+          setDisplayInvoiceNo('');
+          onDataChange?.();
+          void loadInitData();
+        };
+
+        if (shouldPrint) {
+          window.setTimeout(() => {
+            window.print();
+            const onAfterPrint = () => {
+              resetAfterPurchase();
+              window.removeEventListener('afterprint', onAfterPrint);
+            };
+            window.addEventListener('afterprint', onAfterPrint);
+            window.setTimeout(() => {
+              window.removeEventListener('afterprint', onAfterPrint);
+              resetAfterPurchase();
+            }, 30_000);
+          }, 150);
+        } else {
+          resetAfterPurchase();
+        }
       }
     } catch (error) {
       const message =
@@ -514,8 +555,63 @@ export default function PurchaseCreate({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
+    <div className="space-y-4 print:space-y-0">
+      <div className="receipt-slip hidden print:block">
+        <p className="receipt-slip-title">
+          {displayInvoiceNo || initData.nextInvoiceNo || 'Alış Fişi'}
+        </p>
+        {selectedSupplier && (
+          <p className="receipt-slip-customer">
+            {selectedSupplier.code} — {selectedSupplier.name}
+          </p>
+        )}
+        <p className="receipt-slip-meta">
+          {invoiceDate}
+          {processedBy ? ` · ${processedBy}` : ''}
+        </p>
+        <p className="receipt-slip-meta">
+          {[paymentMethod, paymentType].filter(Boolean).join(' · ')}
+        </p>
+        {orderNotes.trim() && (
+          <p className="receipt-slip-notes">{orderNotes.trim()}</p>
+        )}
+
+        <div className="receipt-slip-divider" />
+
+        <div className="receipt-item-row receipt-item-head">
+          <span className="receipt-item-name">Ürün</span>
+          <span className="receipt-item-qty">Ad</span>
+          <span className="receipt-item-price">Fiyat</span>
+          <span className="receipt-item-total">Top.</span>
+        </div>
+
+        {cart.map((item) => {
+          const lineTotal = roundPrice(item.quantity * item.unitPriceUsd);
+          return (
+            <div key={item.rowId} className="receipt-item-row">
+              <span className="receipt-item-name" title={item.product.name}>
+                {item.product.name}
+              </span>
+              <span className="receipt-item-qty">{item.quantity}</span>
+              <span className="receipt-item-price">{formatUsd(item.unitPriceUsd)}</span>
+              <span className="receipt-item-total">{formatUsd(lineTotal)}</span>
+            </div>
+          );
+        })}
+
+        <div className="receipt-slip-divider" />
+
+        <div className="receipt-item-row receipt-slip-summary">
+          <span className="receipt-item-name">Toplam adet</span>
+          <span className="receipt-item-total">{totalQuantity}</span>
+        </div>
+        <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+          <span className="receipt-item-name">NET TOPLAM</span>
+          <span className="receipt-item-total">{formatUsd(totalUsd)}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 print:hidden">
         {isEditMode && onCancelEdit && (
           <button
             type="button"
@@ -541,7 +637,7 @@ export default function PurchaseCreate({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 print:hidden">
         <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
           <h2 className="text-sm font-bold text-rose-700 border-b border-rose-100 pb-2">
             Evrak Bilgileri
@@ -726,7 +822,7 @@ export default function PurchaseCreate({
         </section>
       </div>
 
-      <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-4 h-4 text-rose-600" />
@@ -852,6 +948,27 @@ export default function PurchaseCreate({
             <p className="text-lg font-bold text-rose-700">
               Toplam: {formatUsd(totalUsd)}
             </p>
+            {!isEditMode && (
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={shouldPrint}
+                  onChange={(e) => setShouldPrint(e.target.checked)}
+                  className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                />
+                <Printer className="w-4 h-4" />
+                Kayıttan sonra yazdır
+              </label>
+            )}
+            <button
+              type="button"
+              onClick={handlePrintReceipt}
+              disabled={cart.length === 0}
+              className="btn border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 sm:w-auto"
+            >
+              <Printer className="w-5 h-5" />
+              Fiş Yazdır
+            </button>
             {isEditMode && (
               <button
                 type="button"
@@ -891,7 +1008,11 @@ export default function PurchaseCreate({
         loadingMore={f2.loadingMore}
         footer={`${f2.results.length.toLocaleString('tr-TR')} / ${f2.totalCount.toLocaleString('tr-TR')} ürün`}
         showEmpty={!f2.loading && f2.results.length === 0}
-        emptyHint={f2.searchQuery ? 'Sonuç bulunamadı.' : 'Ürün bulunamadı.'}
+        emptyHint={
+          f2.searchQuery.trim()
+            ? 'Sonuç bulunamadı.'
+            : 'Aramak için yazmaya başlayın...'
+        }
       >
         {!f2.loading && f2.results.length > 0 && (
           <F2ProductList

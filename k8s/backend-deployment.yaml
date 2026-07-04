@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: since1907/akgun-backend:v1.8.9
+          image: since1907/akgun-backend:v1.8.10
           imagePullPolicy: Always
           ports:
             - name: http

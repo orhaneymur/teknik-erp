@@ -33,6 +33,7 @@ export type PageId =
   | 'report-cash-flow'
   | 'report-customer-statement'
   | 'def-products'
+  | 'def-categories'
   | 'def-safes'
   | 'def-users'
   | 'invoices'
@@ -111,6 +112,8 @@ export const menuCategories: MenuCategory[] = [
       { id: 'customer-list', label: 'Müşteri Listesi' },
       { id: 'customer-create', label: 'Yeni Müşteri Kartı' },
       { id: 'customer-payments', label: 'Tahsilat / Ödeme', badge: 'F2' },
+      { id: 'report-customer-statement', label: 'Müşteri Ekstre' },
+      { id: 'customer-balance', label: 'Müşteri Borç / Alacak' },
     ],
   },
   {
@@ -122,8 +125,6 @@ export const menuCategories: MenuCategory[] = [
       { id: 'report-sales', label: 'Kâr-Zarar Raporu' },
       { id: 'report-stock-value', label: 'Stok Değeri' },
       { id: 'report-cash-flow', label: 'Kasa Raporu' },
-      { id: 'report-customer-statement', label: 'Müşteri Ekstre' },
-      { id: 'customer-balance', label: 'Müşteri Borç / Alacak' },
     ],
   },
   {
@@ -132,6 +133,7 @@ export const menuCategories: MenuCategory[] = [
     icon: Settings,
     items: [
       { id: 'def-products', label: 'Ürün Tanımları' },
+      { id: 'def-categories', label: 'Kategori / Marka' },
       { id: 'def-safes', label: 'Kasa Tanımları' },
       { id: 'def-users', label: 'Personel Tanımları' },
     ],
@@ -150,6 +152,9 @@ export const menuCategories: MenuCategory[] = [
 export function getCategoryForPage(pageId: PageId): MenuCategoryId | null {
   if (pageId === 'pre-orders') return 'sales';
   if (pageId === 'customer-detail') return 'customer';
+  if (pageId === 'report-customer-statement' || pageId === 'customer-balance') {
+    return 'customer';
+  }
   for (const category of menuCategories) {
     if (category.items.some((item) => item.id === pageId)) {
       return category.id;
@@ -163,6 +168,15 @@ export const dashboardItem = {
   label: 'Ana Sayfa',
   icon: Home,
 };
+
+/** Ana Sayfa altında sol menü hızlı işlemler */
+export const dashboardQuickLinks: MenuItem[] = [
+  { id: 'sales', label: 'Satış Yap', badge: 'F2' },
+  { id: 'invoice-purchase', label: 'Alış Yap' },
+  { id: 'sales-return', label: 'İade Al' },
+  { id: 'product-create', label: 'Stok Kartı Oluştur' },
+  { id: 'invoices', label: 'Faturalar' },
+];
 
 const VALID_PAGES = new Set<PageId>([
   'dashboard',
@@ -185,6 +199,7 @@ const VALID_PAGES = new Set<PageId>([
   'report-cash-flow',
   'report-customer-statement',
   'def-products',
+  'def-categories',
   'def-safes',
   'def-users',
   'invoices',

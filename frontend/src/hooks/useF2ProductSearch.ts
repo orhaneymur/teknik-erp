@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { API_BASE, ensureArray } from '../lib/api';
-import { getLastF2ProductId, getLastF2SearchQuery, recordF2SearchQuery } from '../lib/f2LastProduct';
+import { getLastF2SearchQuery, recordF2SearchQuery } from '../lib/f2LastProduct';
 
 export type F2ProductContext = 'sales' | 'purchase' | 'return';
 
@@ -39,7 +39,9 @@ export function useF2ProductSearch(options: {
 }) {
   const { open, f2Trigger = 0, context, partyId, exchangeRate } = options;
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() =>
+    getLastF2SearchQuery(context, partyId)
+  );
   const [results, setResults] = useState<F2Product[]>([]);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [loading, setLoading] = useState(false);
@@ -52,43 +54,62 @@ export function useF2ProductSearch(options: {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const lastF2TriggerRef = useRef(0);
+  const wasOpenRef = useRef(false);
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
 
-  const resetListState = useCallback(() => {
+  const clearResults = useCallback(() => {
     setResults([]);
     setFocusedIndex(-1);
     setPage(1);
     setTotalCount(0);
     setHasMore(false);
+    setLoading(false);
+    setLoadingMore(false);
   }, []);
 
+  /** Panel kapanırken sorguyu kaydet; açılırken son hali geri yükle */
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      const lastQuery = getLastF2SearchQuery(context, partyId);
+      setSearchQuery(lastQuery);
+      if (!lastQuery.trim()) {
+        clearResults();
+      }
+    } else if (!open && wasOpenRef.current) {
+      recordF2SearchQuery(context, partyId, searchQueryRef.current);
+      clearResults();
+    }
+    wasOpenRef.current = open;
+  }, [open, context, partyId, clearResults]);
+
+  /** F2 tetikleyicisi (panel zaten açıkken tekrar F2) — sorguyu koru, inputa odak */
   useEffect(() => {
     if (f2Trigger > lastF2TriggerRef.current) {
       lastF2TriggerRef.current = f2Trigger;
-      const lastQuery = getLastF2SearchQuery(context, partyId);
-      setSearchQuery(lastQuery);
-      resetListState();
+      if (open) {
+        const lastQuery = getLastF2SearchQuery(context, partyId);
+        if (lastQuery !== searchQueryRef.current) {
+          setSearchQuery(lastQuery);
+        }
+      }
     }
-  }, [f2Trigger, context, partyId, resetListState]);
+  }, [f2Trigger, open, context, partyId]);
 
+  /** Yazarken anlık kaydet (sekme kapanırsa da kalsın) */
   useEffect(() => {
-    if (!open) {
-      resetListState();
-      return;
-    }
-    const lastQuery = getLastF2SearchQuery(context, partyId);
-    if (lastQuery) {
-      setSearchQuery((prev) => (prev.trim() === lastQuery ? prev : lastQuery));
-    }
-  }, [open, context, partyId, resetListState]);
-
-  useEffect(() => {
-    if (open) {
-      recordF2SearchQuery(context, partyId, searchQuery);
-    }
+    if (!open) return;
+    recordF2SearchQuery(context, partyId, searchQuery);
   }, [open, searchQuery, context, partyId]);
 
   const fetchPage = useCallback(
     async (pageNumber: number, query: string, append: boolean) => {
+      const trimmed = query.trim();
+      if (!trimmed) {
+        clearResults();
+        return;
+      }
+
       if (append) setLoadingMore(true);
       else setLoading(true);
 
@@ -98,14 +119,9 @@ export function useF2ProductSearch(options: {
           limit: String(PAGE_SIZE),
           context,
           exchangeRate: String(exchangeRate),
+          search: trimmed,
         };
-        const trimmed = query.trim();
-        if (trimmed) params.search = trimmed;
         if (partyId) params.customerId = String(partyId);
-        if (!trimmed && pageNumber === 1) {
-          const pinId = getLastF2ProductId(context, partyId);
-          if (pinId) params.prioritizeProductId = String(pinId);
-        }
 
         const response = await axios.get<ProductsResponse>(`${API_BASE}/api/sales/products`, {
           params,
@@ -121,17 +137,14 @@ export function useF2ProductSearch(options: {
         }
       } catch {
         if (!append) {
-          setResults([]);
-          setTotalCount(0);
-          setHasMore(false);
-          setFocusedIndex(-1);
+          clearResults();
         }
       } finally {
         setLoading(false);
         setLoadingMore(false);
       }
     },
-    [context, exchangeRate, partyId]
+    [clearResults, context, exchangeRate, partyId]
   );
 
   useEffect(() => {
@@ -140,17 +153,23 @@ export function useF2ProductSearch(options: {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const trimmed = searchQuery.trim();
 
+    if (!trimmed) {
+      clearResults();
+      return;
+    }
+
     debounceRef.current = setTimeout(() => {
       void fetchPage(1, trimmed, false);
-    }, trimmed ? 250 : 0);
+    }, 250);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [open, searchQuery, partyId, fetchPage]);
+  }, [open, searchQuery, partyId, fetchPage, clearResults]);
 
   const loadMore = useCallback(() => {
     if (!open || loading || loadingMore || !hasMore) return;
+    if (!searchQuery.trim()) return;
     void fetchPage(page + 1, searchQuery.trim(), true);
   }, [open, loading, loadingMore, hasMore, fetchPage, page, searchQuery]);
 

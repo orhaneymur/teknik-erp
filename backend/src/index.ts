@@ -1144,7 +1144,7 @@ async function buildAnalyticsReport() {
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const [chartSales, chartPurchases, topProductRows, lowStockRows] =
+  const [chartSales, chartPurchases, topProductRows, topCustomerInvoices, lowStockRows] =
     await Promise.all([
       prisma.invoice.findMany({
         where: { type: 'SATIS', createdAt: { gte: sevenDaysAgo }, ...ACTIVE_INVOICE_FILTER },
@@ -1160,7 +1160,20 @@ async function buildAnalyticsReport() {
         },
         select: {
           quantity: true,
-          product: { select: { name: true } },
+          product: { select: { id: true, sku: true, name: true } },
+        },
+      }),
+      prisma.invoice.findMany({
+        where: {
+          type: 'SATIS',
+          createdAt: { gte: thirtyDaysAgo },
+          ...ACTIVE_INVOICE_FILTER,
+        },
+        select: {
+          totalAmountUsd: true,
+          totalAmountTl: true,
+          exchangeRate: true,
+          customer: { select: { id: true, code: true, name: true } },
         },
       }),
       prisma.branch
@@ -1225,17 +1238,71 @@ async function buildAnalyticsReport() {
     })
   );
 
-  const productQtyMap = new Map<string, number>();
+  type ProductAgg = {
+    productId: number;
+    sku: string;
+    name: string;
+    quantity: number;
+  };
+  const productQtyMap = new Map<number, ProductAgg>();
   for (const row of topProductRows) {
-    const name = row.product.name;
-    productQtyMap.set(name, (productQtyMap.get(name) ?? 0) + row.quantity);
+    const existing = productQtyMap.get(row.product.id);
+    if (existing) {
+      existing.quantity += row.quantity;
+    } else {
+      productQtyMap.set(row.product.id, {
+        productId: row.product.id,
+        sku: row.product.sku,
+        name: row.product.name,
+        quantity: row.quantity,
+      });
+    }
   }
-  const allProductsBySales = Array.from(productQtyMap.entries())
-    .map(([name, quantity]) => ({ name, quantity }))
-    .sort((a, b) => b.quantity - a.quantity);
-  const topProducts = allProductsBySales.slice(0, 10);
+  const allProductsBySales = Array.from(productQtyMap.values()).sort(
+    (a, b) => b.quantity - a.quantity
+  );
+  const topProducts = allProductsBySales.slice(0, 10).map((row) => ({
+    name: row.name,
+    quantity: row.quantity,
+    sku: row.sku,
+    productId: row.productId,
+  }));
   const bottomProducts = [...allProductsBySales]
     .sort((a, b) => a.quantity - b.quantity)
+    .slice(0, 10)
+    .map((row) => ({
+      name: row.name,
+      quantity: row.quantity,
+      sku: row.sku,
+      productId: row.productId,
+    }));
+
+  type CustomerAgg = {
+    customerId: number;
+    code: string;
+    name: string;
+    amount: number;
+    invoiceCount: number;
+  };
+  const customerSalesMap = new Map<number, CustomerAgg>();
+  for (const inv of topCustomerInvoices) {
+    const existing = customerSalesMap.get(inv.customer.id);
+    const amount = invoiceUsdAmount(inv);
+    if (existing) {
+      existing.amount += amount;
+      existing.invoiceCount += 1;
+    } else {
+      customerSalesMap.set(inv.customer.id, {
+        customerId: inv.customer.id,
+        code: inv.customer.code,
+        name: inv.customer.name,
+        amount,
+        invoiceCount: 1,
+      });
+    }
+  }
+  const topCustomers = Array.from(customerSalesMap.values())
+    .sort((a, b) => b.amount - a.amount)
     .slice(0, 10);
 
   const lowStock = lowStockRows.map((row) => ({
@@ -1252,6 +1319,7 @@ async function buildAnalyticsReport() {
       monthlySales,
       topProducts,
       bottomProducts,
+      topCustomers,
       staffComparison: staffTurnover.map((s) => ({
         name: s.userName,
         monthly: s.monthly,
@@ -1422,7 +1490,7 @@ app.get('/api/exchange-rates', async () => {
 });
 
 app.get('/api/sales/dashboard', async () => {
-  const [safes, recentInvoices, recentPayments] = await Promise.all([
+  const [safes, recentInvoices, recentPayments, analytics] = await Promise.all([
     prisma.safe.findMany({
       select: {
         id: true,
@@ -1434,7 +1502,7 @@ app.get('/api/sales/dashboard', async () => {
       orderBy: { name: 'asc' },
     }),
     prisma.invoice.findMany({
-      take: 5,
+      take: 10,
       where: ACTIVE_INVOICE_FILTER,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -1442,13 +1510,14 @@ app.get('/api/sales/dashboard', async () => {
       },
     }),
     prisma.transaction.findMany({
-      take: 5,
+      take: 10,
       orderBy: { createdAt: 'desc' },
       include: {
         safe: { select: { id: true, name: true, currency: true } },
         customer: { select: { id: true, code: true, name: true } },
       },
     }),
+    buildAnalyticsReport(),
   ]);
 
   return {
@@ -1457,6 +1526,12 @@ app.get('/api/sales/dashboard', async () => {
       safeBalances: safes,
       recentInvoices,
       recentPayments,
+      insights: {
+        dailySales: analytics.charts.dailySales,
+        topProducts: analytics.charts.topProducts,
+        topCustomers: analytics.charts.topCustomers,
+        lowStock: analytics.lowStock.slice(0, 8),
+      },
     },
     message: 'Dashboard data retrieved successfully.',
   };
@@ -3702,15 +3777,19 @@ app.post('/api/products/import/excel', async (request, reply) => {
   const buffer = await upload.toBuffer();
   const result = await importProductsExcel(prisma, buffer);
 
-  const categoryNote =
-    result.categoriesCreated && result.categoriesCreated > 0
-      ? `, ${result.categoriesCreated} yeni kategori`
-      : '';
+  const notes: string[] = [];
+  if (result.categoriesCreated && result.categoriesCreated > 0) {
+    notes.push(`${result.categoriesCreated} yeni kategori`);
+  }
+  if (result.brandModelsCreated && result.brandModelsCreated > 0) {
+    notes.push(`${result.brandModelsCreated} yeni marka/model`);
+  }
+  const noteSuffix = notes.length > 0 ? `, ${notes.join(', ')}` : '';
 
   return {
     success: true,
     data: result,
-    message: `${result.created} yeni, ${result.updated} güncellendi${categoryNote}.`,
+    message: `${result.created} yeni, ${result.updated} güncellendi${noteSuffix}.`,
   };
 });
 
@@ -3940,6 +4019,50 @@ app.put<{
       errors: null,
     });
   }
+});
+
+app.delete<{ Params: { id: string } }>('/api/products/:id', async (request, reply) => {
+  const id = Number(request.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return reply.status(400).send({
+      success: false,
+      message: 'Geçersiz ürün id.',
+      errors: null,
+    });
+  }
+
+  const existing = await prisma.product.findUnique({
+    where: { id },
+    select: { id: true, name: true, sku: true },
+  });
+
+  if (!existing) {
+    return reply.status(404).send({
+      success: false,
+      message: 'Ürün bulunamadı.',
+      errors: null,
+    });
+  }
+
+  const invoiceItemCount = await prisma.invoiceItem.count({
+    where: { productId: id },
+  });
+
+  if (invoiceItemCount > 0) {
+    return reply.status(409).send({
+      success: false,
+      message: `Bu ürün ${invoiceItemCount} fatura kaleminde kullanılmış; silinemez. Adını veya fiyatını düzenleyebilirsiniz.`,
+      errors: null,
+    });
+  }
+
+  await prisma.product.delete({ where: { id } });
+
+  return {
+    success: true,
+    data: existing,
+    message: 'Ürün silindi.',
+  };
 });
 
 app.post<{
@@ -4532,18 +4655,40 @@ app.get('/api/settings/branches', async () => {
   };
 });
 
-app.get<{ Querystring: { page?: string; limit?: string; search?: string; productId?: string } }>(
+app.get<{
+  Querystring: {
+    page?: string;
+    limit?: string;
+    search?: string;
+    productId?: string;
+    customerId?: string;
+  };
+}>(
   '/api/reports/stock-history',
   async (request) => {
     const pagination = parseListPageQuery(request.query);
-    const { search, productId: productIdQuery } = request.query;
+    const {
+      search,
+      productId: productIdQuery,
+      customerId: customerIdQuery,
+    } = request.query;
     const merkezDepo = await prisma.branch.findFirst({
       where: { name: 'MERKEZ_DEPO' },
       select: { id: true, name: true },
     });
 
+    const invoiceWhere: Prisma.InvoiceWhereInput = {
+      type: { in: ['SATIS', 'ALIS', 'IADE'] },
+      deletedAt: null,
+    };
+
+    const parsedCustomerId = customerIdQuery ? Number(customerIdQuery) : null;
+    if (parsedCustomerId && Number.isFinite(parsedCustomerId) && parsedCustomerId > 0) {
+      invoiceWhere.customerId = parsedCustomerId;
+    }
+
     const itemWhere: Prisma.InvoiceItemWhereInput = {
-      invoice: { type: { in: ['SATIS', 'ALIS', 'IADE'] } },
+      invoice: invoiceWhere,
     };
 
     const parsedProductId = productIdQuery ? Number(productIdQuery) : null;
@@ -4785,8 +4930,22 @@ app.get<{ Querystring: { customerId?: string } }>(
           invoiceNo: true,
           type: true,
           totalAmountTl: true,
+          totalAmountUsd: true,
+          exchangeRate: true,
           paymentMethod: true,
+          paymentType: true,
+          processedBy: true,
           createdAt: true,
+          items: {
+            select: {
+              id: true,
+              quantity: true,
+              unitPrice: true,
+              discountPercent: true,
+              totalPrice: true,
+              product: { select: { id: true, sku: true, name: true } },
+            },
+          },
         },
       }),
       prisma.transaction.findMany({
@@ -4798,12 +4957,31 @@ app.get<{ Querystring: { customerId?: string } }>(
       }),
     ]);
 
+    type StatementItem = {
+      id: number;
+      productSku: string;
+      productName: string;
+      quantity: number;
+      unitPrice: number;
+      discountPercent: number;
+      lineTotal: number;
+    };
+
     type StatementLine = {
+      id: number;
       date: Date;
       kind: 'invoice' | 'payment';
       description: string;
       debit: number;
       credit: number;
+      invoiceNo?: string;
+      invoiceType?: string;
+      paymentMethod?: string | null;
+      paymentType?: string | null;
+      processedBy?: string | null;
+      amount?: number;
+      safeName?: string | null;
+      items?: StatementItem[];
     };
 
     const lines: StatementLine[] = [];
@@ -4811,21 +4989,41 @@ app.get<{ Querystring: { customerId?: string } }>(
     for (const inv of invoices) {
       const isDebit = inv.type === 'SATIS';
       lines.push({
+        id: inv.id,
         date: inv.createdAt,
         kind: 'invoice',
         description: `${inv.invoiceNo} (${inv.type})`,
         debit: isDebit ? inv.totalAmountTl : 0,
         credit: !isDebit ? inv.totalAmountTl : 0,
+        invoiceNo: inv.invoiceNo,
+        invoiceType: inv.type,
+        paymentMethod: inv.paymentMethod,
+        paymentType: inv.paymentType,
+        processedBy: inv.processedBy,
+        amount: inv.totalAmountUsd ?? inv.totalAmountTl,
+        items: inv.items.map((item) => ({
+          id: item.id,
+          productSku: item.product.sku,
+          productName: item.product.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          discountPercent: item.discountPercent,
+          lineTotal: item.totalPrice,
+        })),
       });
     }
 
     for (const pay of payments) {
       lines.push({
+        id: pay.id,
         date: pay.createdAt,
         kind: 'payment',
         description: pay.description,
         debit: pay.type === 'CIKIS' ? pay.amount : 0,
         credit: pay.type === 'GIRIS' ? pay.amount : 0,
+        paymentType: pay.type,
+        amount: pay.amount,
+        safeName: pay.safe?.name ?? null,
       });
     }
 
