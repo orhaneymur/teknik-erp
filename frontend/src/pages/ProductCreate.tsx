@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Package, PlusCircle, Save } from 'lucide-react';
+import TypeaheadField from '../components/TypeaheadField';
 import { API_BASE, ensureArray, formatUsd, roundPrice } from '../lib/api';
 import { APPEARANCE_OPTIONS, QUALITY_OPTIONS } from '../lib/productOptions';
 
@@ -32,6 +33,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
   const [brandModels, setBrandModels] = useState<BrandModelOption[]>([]);
   const [name, setName] = useState('');
   const [categoryId, setCategoryId] = useState<number | ''>('');
+  const [categoryText, setCategoryText] = useState('');
   const [brandText, setBrandText] = useState('');
   const [modelText, setModelText] = useState('');
   const [appearance, setAppearance] = useState('');
@@ -122,6 +124,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
   const resetForm = () => {
     setName('');
     setCategoryId('');
+    setCategoryText('');
     setBrandText('');
     setModelText('');
     setAppearance('');
@@ -134,8 +137,9 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
     setInitialQuantity('0');
   };
 
-  const handleCategoryChange = (value: number | '') => {
+  const applyCategory = (value: number | '', label = '') => {
     setCategoryId(value);
+    setCategoryText(label);
     setBrandText('');
     setModelText('');
   };
@@ -221,74 +225,65 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
 
             <div>
               <label className={labelClass}>Kategori</label>
-              <select
-                value={categoryId}
-                onChange={(e) =>
-                  handleCategoryChange(e.target.value ? Number(e.target.value) : '')
-                }
-                className={fieldClass}
-              >
-                <option value="">Seçin...</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+              <TypeaheadField
+                value={categoryText}
+                onChange={(value) => {
+                  setCategoryText(value);
+                  const match = categories.find(
+                    (cat) =>
+                      cat.name.toLocaleLowerCase('tr-TR') ===
+                      value.trim().toLocaleLowerCase('tr-TR')
+                  );
+                  const nextId = match?.id ?? '';
+                  if (nextId !== categoryId) {
+                    setCategoryId(nextId);
+                    if (nextId !== '') {
+                      setBrandText('');
+                      setModelText('');
+                    }
+                  }
+                }}
+                onSelectOption={(option) => {
+                  applyCategory(Number(option.id), option.label);
+                }}
+                options={categories.map((cat) => ({
+                  id: cat.id,
+                  label: cat.name,
+                }))}
+                placeholder="Yazmaya başlayın..."
+                inputClassName={fieldClass}
+              />
               <p className="mt-1 text-caption text-slate-400">
-                Excel ve mevcut stoklardan otomatik dolar · Tanımlar → Kategori / Marka
+                Yazınca altta öneriler çıkar · Excel tanımlarından dolar
               </p>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Marka</label>
-                <input
-                  type="text"
-                  list="product-brand-options"
+                <TypeaheadField
                   value={brandText}
-                  onChange={(e) => setBrandText(e.target.value)}
-                  className={fieldClass}
-                  placeholder="Listeden seçin veya yazın..."
-                  autoComplete="off"
+                  onChange={setBrandText}
+                  options={brandOptions.map((item) => ({
+                    id: item.id,
+                    label: item.name,
+                  }))}
+                  placeholder="Yazmaya başlayın..."
+                  inputClassName={fieldClass}
                 />
-                <datalist id="product-brand-options">
-                  {brandOptions.map((item) => (
-                    <option key={item.id} value={item.name} />
-                  ))}
-                </datalist>
-                {categoryId !== '' && brandOptions.length === 0 && (
-                  <p className="mt-1 text-caption text-slate-500">
-                    Bu kategoride tanımlı marka yok — doğrudan yazabilirsiniz.
-                  </p>
-                )}
               </div>
               <div>
                 <label className={labelClass}>Model</label>
-                <input
-                  type="text"
-                  list="product-model-options"
+                <TypeaheadField
                   value={modelText}
-                  onChange={(e) => setModelText(e.target.value)}
-                  className={fieldClass}
-                  placeholder="Listeden seçin veya yazın..."
-                  autoComplete="off"
+                  onChange={setModelText}
+                  options={filteredModelOptions.map((item) => ({
+                    id: item.id,
+                    label: item.name,
+                  }))}
+                  placeholder="Yazmaya başlayın..."
+                  inputClassName={fieldClass}
                 />
-                <datalist id="product-model-options">
-                  {filteredModelOptions.map((item) => (
-                    <option key={item.id} value={item.name} />
-                  ))}
-                </datalist>
-                {brandText.trim() && filteredModelOptions.length === 0 && (
-                  <p className="mt-1 text-caption text-slate-500">
-                    Eşleşen model yok — doğrudan yazabilirsiniz.
-                  </p>
-                )}
-                {categoryId !== '' && !brandText.trim() && modelOptions.length === 0 && (
-                  <p className="mt-1 text-caption text-slate-500">
-                    Bu kategoride tanımlı model yok — doğrudan yazabilirsiniz.
-                  </p>
-                )}
               </div>
             </div>
 

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import PaginationBar from '../components/PaginationBar';
 import ExcelActions from '../components/ExcelActions';
+import TypeaheadField from '../components/TypeaheadField';
 import {
   API_BASE,
   ensureArray,
@@ -51,6 +52,7 @@ export default function StockList({
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [categoryText, setCategoryText] = useState('');
   const [form, setForm] = useState({
     sku: '',
     name: '',
@@ -159,6 +161,7 @@ export default function StockList({
   const openEdit = (product: Product, e?: React.MouseEvent) => {
     e?.stopPropagation();
     setEditing(product);
+    setCategoryText(product.category?.name ?? '');
     setForm({
       sku: product.sku,
       name: product.name,
@@ -551,56 +554,58 @@ export default function StockList({
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-600">Kategori</label>
-                <select
-                  value={form.categoryId}
-                  onChange={(e) =>
+                <TypeaheadField
+                  value={categoryText}
+                  onChange={(value) => {
+                    setCategoryText(value);
+                    const match = categories.find(
+                      (cat) =>
+                        cat.name.toLocaleLowerCase('tr-TR') ===
+                        value.trim().toLocaleLowerCase('tr-TR')
+                    );
                     setForm((f) => ({
                       ...f,
-                      categoryId: e.target.value ? Number(e.target.value) : '',
-                    }))
-                  }
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                >
-                  <option value="">Seçin...</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                      categoryId: match?.id ?? '',
+                    }));
+                  }}
+                  onSelectOption={(option) => {
+                    setCategoryText(option.label);
+                    setForm((f) => ({ ...f, categoryId: Number(option.id) }));
+                  }}
+                  options={categories.map((cat) => ({
+                    id: cat.id,
+                    label: cat.name,
+                  }))}
+                  placeholder="Yazmaya başlayın..."
+                  inputClassName="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-medium text-slate-600">Marka</label>
-                  <input
-                    list="stock-edit-brand-options"
+                  <TypeaheadField
                     value={form.brand}
-                    onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Listeden seçin veya yazın"
-                    autoComplete="off"
+                    onChange={(value) => setForm((f) => ({ ...f, brand: value }))}
+                    options={brandOptions.map((item) => ({
+                      id: item.id,
+                      label: item.name,
+                    }))}
+                    placeholder="Yazmaya başlayın..."
+                    inputClassName="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
-                  <datalist id="stock-edit-brand-options">
-                    {brandOptions.map((item) => (
-                      <option key={item.id} value={item.name} />
-                    ))}
-                  </datalist>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-slate-600">Model</label>
-                  <input
-                    list="stock-edit-model-options"
+                  <TypeaheadField
                     value={form.model}
-                    onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                    placeholder="Listeden seçin veya yazın"
-                    autoComplete="off"
+                    onChange={(value) => setForm((f) => ({ ...f, model: value }))}
+                    options={modelOptions.map((item) => ({
+                      id: item.id,
+                      label: item.name,
+                    }))}
+                    placeholder="Yazmaya başlayın..."
+                    inputClassName="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
-                  <datalist id="stock-edit-model-options">
-                    {modelOptions.map((item) => (
-                      <option key={item.id} value={item.name} />
-                    ))}
-                  </datalist>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
