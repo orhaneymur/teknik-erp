@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import {
   ArrowDownLeft,
+  ArrowRight,
   ArrowUpRight,
   Eye,
   Package,
@@ -24,9 +25,13 @@ import {
   type PaginatedListResponse,
 } from '../lib/api';
 import CustomerNameLink from '../components/CustomerNameLink';
-import SimpleBarChart from '../components/SimpleBarChart';
+import {
+  AreaTrendChart,
+  LowStockMeter,
+  RankingChart,
+} from '../components/DashboardCharts';
 import { useInvoiceEditorFromUrl } from '../hooks/useInvoiceEditorFromUrl';
-import { buildPageUrl } from '../lib/navigation';
+import { buildPageUrl, type PageId } from '../lib/navigation';
 import SalesCreate from './SalesCreate';
 import PurchaseCreate from './PurchaseCreate';
 import SalesReturn from './SalesReturn';
@@ -72,6 +77,7 @@ type RecentPayment = {
 
 type DashboardInsights = {
   dailySales: { label: string; total: number }[];
+  monthlySales: { label: string; total: number }[];
   topProducts: { name: string; quantity: number; sku?: string }[];
   topCustomers: {
     customerId: number;
@@ -82,6 +88,26 @@ type DashboardInsights = {
   }[];
   lowStock: { id: number; sku: string; name: string; quantity: number }[];
 };
+
+function SeeAllLink({
+  page,
+  label = 'Tümünü gör',
+}: {
+  page: PageId;
+  label?: string;
+}) {
+  return (
+    <a
+      href={buildPageUrl(page)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50"
+    >
+      {label}
+      <ArrowRight className="h-3.5 w-3.5" />
+    </a>
+  );
+}
 
 type DashboardData = {
   safeBalances: SafeBalance[];
@@ -141,6 +167,7 @@ export default function Dashboard({
         const payload = response.data.data;
         const insights = payload.insights ?? {
           dailySales: [],
+          monthlySales: [],
           topProducts: [],
           topCustomers: [],
           lowStock: [],
@@ -151,6 +178,7 @@ export default function Dashboard({
           recentPayments: ensureArray(payload.recentPayments).slice(0, 10),
           insights: {
             dailySales: ensureArray(insights.dailySales),
+            monthlySales: ensureArray(insights.monthlySales),
             topProducts: ensureArray(insights.topProducts),
             topCustomers: ensureArray(insights.topCustomers),
             lowStock: ensureArray(insights.lowStock),
@@ -365,24 +393,20 @@ export default function Dashboard({
         <div>
           <h1 className="page-title">Ana Sayfa</h1>
           <p className="page-subtitle mt-1">
-            Son 30 gün özet raporları · hızlı işlemler sol menüde
+            Canlı özet raporlar · detay için kartlardaki Tümünü gör
           </p>
         </div>
-        <a
-          href={buildPageUrl('report-analytics')}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm font-medium text-indigo-600 hover:underline"
-        >
-          Tüm işletme özeti →
-        </a>
+        <SeeAllLink page="report-analytics" label="İşletme özeti" />
       </div>
 
       <section className="flex gap-3 overflow-x-auto pb-1">
         {data.safeBalances.map((safe) => (
-          <div
+          <a
             key={safe.id}
-            className="min-w-[140px] shrink-0 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
+            href={buildPageUrl('report-cash-flow')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-w-[148px] shrink-0 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 px-4 py-3 shadow-sm no-underline transition hover:border-indigo-200 hover:shadow-md"
           >
             <div className="flex items-center gap-1.5 text-slate-500">
               <Wallet className="h-3.5 w-3.5" />
@@ -391,112 +415,172 @@ export default function Dashboard({
             <p className="mt-1 text-lg font-bold text-slate-900">
               {formatMoney(safe.balance, safe.currency)}
             </p>
-          </div>
+          </a>
         ))}
+        <a
+          href={buildPageUrl('report-cash-flow')}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex min-w-[120px] shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-3 text-xs font-semibold text-indigo-700 no-underline hover:border-indigo-300 hover:bg-indigo-50"
+        >
+          Tüm kasalar
+          <ArrowRight className="ml-1 h-3.5 w-3.5" />
+        </a>
       </section>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-indigo-600" />
-            <h2 className="text-sm font-semibold text-slate-800">Son 7 Gün Satış</h2>
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+          <div className="mb-4 flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-lg bg-indigo-100 p-2 text-indigo-700">
+                <TrendingUp className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800">Son 7 Gün Satış</h2>
+                <p className="text-caption text-slate-400">Günlük ciro trendi</p>
+              </div>
+            </div>
+            <SeeAllLink page="report-analytics" />
           </div>
-          <SimpleBarChart
+          <AreaTrendChart
             items={insights.dailySales.map((row) => ({
               label: row.label,
               value: row.total,
-              color: 'bg-indigo-500',
             }))}
             valueFormatter={(v) => formatMoney(v)}
             emptyLabel="Satış verisi yok"
+            accent="indigo"
           />
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center gap-2">
-            <Package className="h-4 w-4 text-emerald-600" />
-            <h2 className="text-sm font-semibold text-slate-800">
-              En Çok Satan Ürünler
-            </h2>
-            <span className="text-caption text-slate-400">30 gün</span>
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+          <div className="mb-4 flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-lg bg-violet-100 p-2 text-violet-700">
+                <TrendingUp className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800">Son 6 Ay Satış</h2>
+                <p className="text-caption text-slate-400">Aylık ciro trendi</p>
+              </div>
+            </div>
+            <SeeAllLink page="report-sales" label="Kâr-zarar" />
           </div>
-          <SimpleBarChart
+          <AreaTrendChart
+            items={insights.monthlySales.map((row) => ({
+              label: row.label,
+              value: row.total,
+            }))}
+            valueFormatter={(v) => formatMoney(v)}
+            emptyLabel="Aylık satış verisi yok"
+            accent="sky"
+          />
+        </section>
+
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+          <div className="mb-4 flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                <Package className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800">
+                  En Çok Satan Ürünler
+                </h2>
+                <p className="text-caption text-slate-400">Son 30 gün · adet</p>
+              </div>
+            </div>
+            <SeeAllLink page="report-analytics" />
+          </div>
+          <RankingChart
             items={insights.topProducts.slice(0, 8).map((row) => ({
               label: row.name,
+              sublabel: row.sku,
               value: row.quantity,
-              color: 'bg-emerald-500',
             }))}
             valueFormatter={(v) => `${Math.round(v)} adet`}
             emptyLabel="Ürün satışı yok"
+            accent="emerald"
           />
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center gap-2">
-            <Users className="h-4 w-4 text-sky-600" />
-            <h2 className="text-sm font-semibold text-slate-800">
-              En Çok Alış Yapan Müşteriler
-            </h2>
-            <span className="text-caption text-slate-400">30 gün</span>
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+          <div className="mb-4 flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-lg bg-sky-100 p-2 text-sky-700">
+                <Users className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800">
+                  En Çok Alış Yapan Müşteriler
+                </h2>
+                <p className="text-caption text-slate-400">Son 30 gün · ciro</p>
+              </div>
+            </div>
+            <SeeAllLink page="customer-balance" label="Borç / alacak" />
           </div>
-          {insights.topCustomers.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">Müşteri satışı yok</p>
-          ) : (
-            <ul className="divide-y divide-slate-100">
-              {insights.topCustomers.slice(0, 8).map((row, index) => (
-                <li
-                  key={row.customerId}
-                  className="flex items-center justify-between gap-2 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-800">
-                      <span className="mr-1.5 text-caption text-slate-400">
-                        {index + 1}.
-                      </span>
-                      <CustomerNameLink customerId={row.customerId}>
-                        {row.name}
-                      </CustomerNameLink>
-                    </p>
-                    <p className="text-caption text-slate-400">
-                      {row.code} · {row.invoiceCount} fiş
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
-                    {formatMoney(row.amount)}
-                  </span>
-                </li>
-              ))}
-            </ul>
+          <RankingChart
+            items={insights.topCustomers.slice(0, 8).map((row) => ({
+              label: row.name,
+              sublabel: `${row.code} · ${row.invoiceCount} fiş`,
+              value: row.amount,
+            }))}
+            valueFormatter={(v) => formatMoney(v)}
+            emptyLabel="Müşteri satışı yok"
+            accent="sky"
+          />
+          {insights.topCustomers.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+              <SeeAllLink page="report-customer-statement" label="Müşteri ekstre" />
+              <SeeAllLink page="report-analytics" label="İşletme özeti" />
+            </div>
           )}
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center gap-2">
-            <Package className="h-4 w-4 text-amber-600" />
-            <h2 className="text-sm font-semibold text-slate-800">Düşük Stok</h2>
-            <span className="text-caption text-slate-400">MERKEZ_DEPO ≤ 5</span>
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 lg:col-span-2">
+          <div className="mb-4 flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-lg bg-amber-100 p-2 text-amber-800">
+                <Package className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-slate-800">Düşük Stok Uyarısı</h2>
+                <p className="text-caption text-slate-400">
+                  MERKEZ_DEPO · 5 adet ve altı
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <SeeAllLink page="stock-list" label="Stok listesi" />
+              <SeeAllLink page="report-stock-value" label="Stok değeri" />
+            </div>
           </div>
           {insights.lowStock.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">Kritik stok yok</p>
+            <p className="py-10 text-center text-sm text-slate-400">Kritik stok yok</p>
           ) : (
-            <ul className="divide-y divide-slate-100">
-              {insights.lowStock.map((row) => (
-                <li
-                  key={row.id}
-                  className="flex items-center justify-between gap-2 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-800">
-                      {row.name}
-                    </p>
-                    <p className="font-mono text-caption text-slate-400">{row.sku}</p>
-                  </div>
-                  <span className="shrink-0 rounded-md bg-amber-50 px-2 py-0.5 text-sm font-semibold text-amber-800 ring-1 ring-amber-200">
-                    {row.quantity} adet
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="grid grid-cols-1 gap-x-10 gap-y-2 md:grid-cols-2">
+              <LowStockMeter
+                items={insights.lowStock
+                  .slice(0, Math.ceil(insights.lowStock.length / 2))
+                  .map((row) => ({
+                    id: row.id,
+                    label: row.name,
+                    sublabel: row.sku,
+                    value: row.quantity,
+                  }))}
+              />
+              <LowStockMeter
+                items={insights.lowStock
+                  .slice(Math.ceil(insights.lowStock.length / 2))
+                  .map((row) => ({
+                    id: row.id,
+                    label: row.name,
+                    sublabel: row.sku,
+                    value: row.quantity,
+                  }))}
+                emptyLabel=""
+              />
+            </div>
           )}
         </section>
       </div>
@@ -505,14 +589,7 @@ export default function Dashboard({
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
             <h2 className="text-sm font-semibold text-slate-800">Son Faturalar</h2>
-            <a
-              href={buildPageUrl('invoices')}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-medium text-indigo-600 hover:underline"
-            >
-              Tümünü gör
-            </a>
+            <SeeAllLink page="invoices" />
           </div>
           <ul className="divide-y divide-slate-50">
             {data.recentInvoices.map((inv) => (
@@ -583,14 +660,7 @@ export default function Dashboard({
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
             <h2 className="text-sm font-semibold text-slate-800">Son Kasa Hareketleri</h2>
-            <a
-              href={buildPageUrl('customer-payments')}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-medium text-indigo-600 hover:underline"
-            >
-              Tümünü gör
-            </a>
+            <SeeAllLink page="customer-payments" />
           </div>
           <ul className="divide-y divide-slate-50">
             {data.recentPayments.map((payment) => {

@@ -1528,6 +1528,7 @@ app.get('/api/sales/dashboard', async () => {
       recentPayments,
       insights: {
         dailySales: analytics.charts.dailySales,
+        monthlySales: analytics.charts.monthlySales,
         topProducts: analytics.charts.topProducts,
         topCustomers: analytics.charts.topCustomers,
         lowStock: analytics.lowStock.slice(0, 8),
