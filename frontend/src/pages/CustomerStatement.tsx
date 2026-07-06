@@ -7,7 +7,7 @@ import {
   FileText,
   Printer,
 } from 'lucide-react';
-import { printDocument, type PrintMode } from '../lib/printMode';
+import { printDocument } from '../lib/printMode';
 import CustomerNameLink from '../components/CustomerNameLink';
 import CustomerSearchPanel from '../components/CustomerSearchPanel';
 import {
@@ -143,10 +143,10 @@ export default function CustomerStatement({
     });
   };
 
-  const printReceipts = useCallback((toPrint: StatementLine[], mode: PrintMode) => {
+  const printReceipts = useCallback((toPrint: StatementLine[]) => {
     if (toPrint.length === 0) return;
     setPrintLines(toPrint);
-    window.setTimeout(() => printDocument(mode), 80);
+    window.setTimeout(() => printDocument(), 80);
   }, []);
 
   const downloadCsv = () => {
@@ -355,22 +355,12 @@ export default function CustomerStatement({
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => printReceipts(selectedLines, 'pdf')}
-            disabled={selectedLines.length === 0}
-            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-          >
-            <FileText className="h-4 w-4" />
-            Seçilenleri PDF
-            {selectedLines.length > 0 ? ` (${selectedLines.length})` : ''}
-          </button>
-          <button
-            type="button"
-            onClick={() => printReceipts(selectedLines, 'thermal')}
+            onClick={() => printReceipts(selectedLines)}
             disabled={selectedLines.length === 0}
             className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
           >
             <Printer className="h-4 w-4" />
-            Seçilenleri Fiş
+            Fiş Yazdır
             {selectedLines.length > 0 ? ` (${selectedLines.length})` : ''}
           </button>
           <button
@@ -525,21 +515,12 @@ export default function CustomerStatement({
                             <div className="inline-flex items-center gap-1">
                               <button
                                 type="button"
-                                onClick={() => printReceipts([line], 'pdf')}
-                                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                                title="PDF yazdır"
-                              >
-                                <FileText className="h-3.5 w-3.5" />
-                                PDF
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => printReceipts([line], 'thermal')}
+                                onClick={() => printReceipts([line])}
                                 className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-800 hover:bg-indigo-100"
                                 title="Fiş yazdır"
                               >
                                 <Printer className="h-3.5 w-3.5" />
-                                Fiş
+                                Fiş Yazdır
                               </button>
                             </div>
                           </td>

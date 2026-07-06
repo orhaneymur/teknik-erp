@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { API_BASE, ensureArray } from '../lib/api';
-import { getLastF2SearchQuery, recordF2SearchQuery } from '../lib/f2LastProduct';
+import {
+  getLastF2FocusedIndex,
+  getLastF2SearchQuery,
+  recordF2FocusedIndex,
+  recordF2SearchQuery,
+} from '../lib/f2LastProduct';
 
 export type F2ProductContext = 'sales' | 'purchase' | 'return';
 
@@ -57,6 +62,30 @@ export function useF2ProductSearch(options: {
   const wasOpenRef = useRef(false);
   const searchQueryRef = useRef(searchQuery);
   searchQueryRef.current = searchQuery;
+  const focusedIndexRef = useRef(focusedIndex);
+  focusedIndexRef.current = focusedIndex;
+
+  const persistFocusedIndex = useCallback(
+    (index: number, query = searchQueryRef.current) => {
+      if (index >= 0) {
+        recordF2FocusedIndex(context, query, index);
+      }
+    },
+    [context]
+  );
+
+  const setFocusedIndexTracked = useCallback(
+    (value: number | ((prev: number) => number)) => {
+      setFocusedIndex((prev) => {
+        const next = typeof value === 'function' ? value(prev) : value;
+        if (next >= 0) {
+          persistFocusedIndex(next);
+        }
+        return next;
+      });
+    },
+    [persistFocusedIndex]
+  );
 
   const clearResults = useCallback(() => {
     setResults([]);
@@ -78,10 +107,11 @@ export function useF2ProductSearch(options: {
       }
     } else if (!open && wasOpenRef.current) {
       recordF2SearchQuery(context, partyId, searchQueryRef.current);
+      persistFocusedIndex(focusedIndexRef.current);
       clearResults();
     }
     wasOpenRef.current = open;
-  }, [open, context, partyId, clearResults]);
+  }, [open, context, partyId, clearResults, persistFocusedIndex]);
 
   /** F2 tetikleyicisi (panel zaten açıkken tekrar F2) — sorguyu koru, inputa odak */
   useEffect(() => {
@@ -133,7 +163,19 @@ export function useF2ProductSearch(options: {
           setTotalCount(response.data.totalCount);
           setPage(response.data.page);
           setHasMore(response.data.page * response.data.limit < response.data.totalCount);
-          setFocusedIndex((prev) => (append ? prev : batch.length > 0 ? 0 : -1));
+          if (!append) {
+            const savedIndex = getLastF2FocusedIndex(context, trimmed);
+            const nextIndex =
+              savedIndex != null && savedIndex < batch.length
+                ? savedIndex
+                : batch.length > 0
+                  ? 0
+                  : -1;
+            setFocusedIndex(nextIndex);
+            if (nextIndex >= 0) {
+              persistFocusedIndex(nextIndex, trimmed);
+            }
+          }
         }
       } catch {
         if (!append) {
@@ -144,7 +186,7 @@ export function useF2ProductSearch(options: {
         setLoadingMore(false);
       }
     },
-    [clearResults, context, exchangeRate, partyId]
+    [clearResults, context, exchangeRate, partyId, persistFocusedIndex]
   );
 
   useEffect(() => {
@@ -183,7 +225,7 @@ export function useF2ProductSearch(options: {
 
   const navigateFocus = useCallback(
     (delta: number) => {
-      setFocusedIndex((prev) => {
+      setFocusedIndexTracked((prev) => {
         if (results.length === 0) return -1;
         const current = prev < 0 ? 0 : prev;
         const next = Math.max(0, Math.min(current + delta, results.length - 1));
@@ -193,7 +235,7 @@ export function useF2ProductSearch(options: {
         return next;
       });
     },
-    [results.length, hasMore, loadingMore, loading, page, searchQuery, fetchPage]
+    [results.length, hasMore, loadingMore, loading, page, searchQuery, fetchPage, setFocusedIndexTracked]
   );
 
   return {
@@ -201,7 +243,7 @@ export function useF2ProductSearch(options: {
     setSearchQuery,
     results,
     focusedIndex,
-    setFocusedIndex,
+    setFocusedIndex: setFocusedIndexTracked,
     loading,
     loadingMore,
     totalCount,

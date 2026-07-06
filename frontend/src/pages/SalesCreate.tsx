@@ -196,12 +196,8 @@ export default function SalesCreate({
   } | null>(null);
   const showCosts = useHoldKeyReveal('F8');
 
-  const handlePrintPdf = useCallback(() => {
-    printDocument('pdf');
-  }, []);
-
-  const handlePrintThermal = useCallback(() => {
-    printDocument('thermal');
+  const handlePrint = useCallback(() => {
+    printDocument();
   }, []);
 
   const customerSearchRef = useRef<HTMLInputElement>(null);
@@ -833,7 +829,7 @@ export default function SalesCreate({
 
         if (shouldPrint) {
           window.setTimeout(() => {
-            printDocument('thermal');
+            printDocument();
             const onAfterPrint = () => {
               resetAfterSale();
               window.removeEventListener('afterprint', onAfterPrint);
@@ -1517,16 +1513,7 @@ export default function SalesCreate({
 
           <button
             type="button"
-            onClick={handlePrintPdf}
-            disabled={cart.length === 0}
-            className="btn btn-block border-2 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-50 print:hidden"
-          >
-            <Printer className="w-5 h-5" />
-            PDF Yazdır
-          </button>
-          <button
-            type="button"
-            onClick={handlePrintThermal}
+            onClick={handlePrint}
             disabled={cart.length === 0}
             className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
           >

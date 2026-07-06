@@ -85,3 +85,51 @@ export function getLastF2SearchQuery(
   const value = readSearchStore()[context];
   return typeof value === 'string' ? value : '';
 }
+
+const FOCUS_STORAGE_KEY = 'akgun-f2-last-focus';
+
+type FocusState = { query: string; index: number };
+
+function readFocusStore(): Record<string, FocusState> {
+  try {
+    const raw = sessionStorage.getItem(FOCUS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed as Record<string, FocusState>;
+  } catch {
+    return {};
+  }
+}
+
+function writeFocusStore(store: Record<string, FocusState>) {
+  try {
+    sessionStorage.setItem(FOCUS_STORAGE_KEY, JSON.stringify(store));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+/** Son odaklanılan satır — aynı arama metniyle F2 yeniden açılınca geri gelir */
+export function recordF2FocusedIndex(
+  context: F2ProductContext,
+  query: string,
+  index: number
+) {
+  const trimmed = query.trim();
+  if (!trimmed || index < 0) return;
+  const store = readFocusStore();
+  store[context] = { query: trimmed, index };
+  writeFocusStore(store);
+}
+
+export function getLastF2FocusedIndex(
+  context: F2ProductContext,
+  query: string
+): number | null {
+  const trimmed = query.trim();
+  if (!trimmed) return null;
+  const state = readFocusStore()[context];
+  if (!state || state.query !== trimmed) return null;
+  return typeof state.index === 'number' && state.index >= 0 ? state.index : null;
+}

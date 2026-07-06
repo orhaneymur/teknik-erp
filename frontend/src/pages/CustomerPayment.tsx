@@ -3,7 +3,6 @@ import axios from 'axios';
 import {
   ArrowDownLeft,
   ArrowUpRight,
-  FileText,
   Pencil,
   Printer,
   Search,
@@ -28,7 +27,7 @@ import {
   type Safe,
 } from '../lib/api';
 import { useExchangeRates } from '../hooks/useExchangeRates';
-import { printDocument, type PrintMode } from '../lib/printMode';
+import { printDocument } from '../lib/printMode';
 
 type PaymentCurrency = 'USD' | 'TRY';
 
@@ -371,18 +370,14 @@ export default function CustomerPayment({
 
   const selectedSafeData = safes.find((s) => s.id === selectedSafe);
 
-  const printPaymentReceipt = useCallback(
-    (receipt: PaymentReceipt, mode: PrintMode = 'thermal') => {
-      setPrintReceipt(receipt);
-      window.setTimeout(() => printDocument(mode), 80);
-    },
-    []
-  );
+  const printPaymentReceipt = useCallback((receipt: PaymentReceipt) => {
+    setPrintReceipt(receipt);
+    window.setTimeout(() => printDocument(), 80);
+  }, []);
 
   const printPaymentRow = useCallback(
-    (payment: PaymentRow, mode: PrintMode = 'thermal') => {
-      printPaymentReceipt(
-        {
+    (payment: PaymentRow) => {
+      printPaymentReceipt({
           type: payment.type,
           amount: payment.amount,
           description: payment.description,
@@ -392,9 +387,7 @@ export default function CustomerPayment({
             : '—',
           safeName: payment.safe.name,
           balanceAfter: payment.customer?.balance ?? null,
-        },
-        mode
-      );
+        });
     },
     [printPaymentReceipt]
   );
@@ -468,7 +461,7 @@ export default function CustomerPayment({
         };
 
         if (shouldPrint) {
-          printPaymentReceipt(receipt, 'thermal');
+          printPaymentReceipt(receipt);
           window.setTimeout(() => {
             void finishPayment();
           }, 400);
@@ -943,15 +936,7 @@ export default function CustomerPayment({
                       <div className="inline-flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => printPaymentRow(payment, 'pdf')}
-                          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                          title="PDF yazdır"
-                        >
-                          <FileText className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => printPaymentRow(payment, 'thermal')}
+                          onClick={() => printPaymentRow(payment)}
                           className="rounded p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
                           title="Fiş yazdır"
                         >

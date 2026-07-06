@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { FileInput, Printer, Save, Search, ShoppingCart, Trash2, X, ArrowLeft } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
+import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import F2ProductList, {
   resolvePurchaseUnitPriceUsd,
 } from '../components/F2ProductList';
@@ -21,6 +22,33 @@ import { printDocument } from '../lib/printMode';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
 const EXCHANGE_RATE = 1;
+
+function pickSupplierFromSearch(query: string, results: Customer[]): Customer | null {
+  const trimmed = query.trim();
+  if (!trimmed || results.length === 0) return null;
+
+  const codePart = trimmed.split(/[—\-]/)[0].trim().toLocaleLowerCase('tr-TR');
+  const exactByCode = results.find(
+    (customer) => customer.code.toLocaleLowerCase('tr-TR') === codePart
+  );
+  if (exactByCode) return exactByCode;
+
+  const lower = trimmed.toLocaleLowerCase('tr-TR');
+  const exactByName = results.find(
+    (customer) => customer.name.toLocaleLowerCase('tr-TR') === lower
+  );
+  if (exactByName) return exactByName;
+
+  if (results.length === 1) return results[0];
+
+  return (
+    results.find(
+      (customer) =>
+        customer.name.toLocaleLowerCase('tr-TR').includes(lower) ||
+        customer.code.toLocaleLowerCase('tr-TR').includes(lower)
+    ) ?? null
+  );
+}
 
 type Branch = { id: number; name: string; type: string };
 type Safe = {
@@ -98,6 +126,11 @@ export default function PurchaseCreate({
   const [orderNotes, setOrderNotes] = useState('');
   const [processedBy, setProcessedBy] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [historyProduct, setHistoryProduct] = useState<{
+    id: number;
+    sku: string;
+    name: string;
+  } | null>(null);
   const [searchModal, setSearchModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
@@ -105,12 +138,8 @@ export default function PurchaseCreate({
   const [removedItemIds, setRemovedItemIds] = useState<number[]>([]);
   const [shouldPrint, setShouldPrint] = useState(false);
 
-  const handlePrintPdf = useCallback(() => {
-    printDocument('pdf');
-  }, []);
-
-  const handlePrintThermal = useCallback(() => {
-    printDocument('thermal');
+  const handlePrint = useCallback(() => {
+    printDocument();
   }, []);
 
   const totalQuantity = useMemo(
@@ -520,7 +549,7 @@ export default function PurchaseCreate({
 
         if (shouldPrint) {
           window.setTimeout(() => {
-            printDocument('thermal');
+            printDocument();
             const onAfterPrint = () => {
               resetAfterPurchase();
               window.removeEventListener('afterprint', onAfterPrint);
@@ -740,6 +769,16 @@ export default function PurchaseCreate({
                 if (!e.target.value.trim()) setSelectedSupplier(null);
               }}
               onFocus={() => setSupplierDropdownOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const picked = pickSupplierFromSearch(supplierSearch, supplierResults);
+                  if (picked) {
+                    selectSupplier(picked);
+                    setSupplierDropdownOpen(false);
+                  }
+                }
+              }}
               placeholder="Kod veya ünvan ile ara..."
               className={inputClass}
               autoComplete="off"
@@ -927,8 +966,21 @@ export default function PurchaseCreate({
                   <td className="px-4 py-3 text-sm font-mono font-semibold text-slate-900">
                     {item.product.sku}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-800 max-w-[240px] truncate">
-                    {item.product.name}
+                  <td className="px-4 py-3 text-sm max-w-[240px]">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setHistoryProduct({
+                          id: item.product.id,
+                          sku: item.product.sku,
+                          name: item.product.name,
+                        })
+                      }
+                      title="Stok hareketlerini gör"
+                      className="max-w-full truncate text-left font-medium text-rose-700 underline-offset-2 hover:underline"
+                    >
+                      {item.product.name}
+                    </button>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <input
@@ -1015,16 +1067,7 @@ export default function PurchaseCreate({
             )}
             <button
               type="button"
-              onClick={handlePrintPdf}
-              disabled={cart.length === 0}
-              className="btn border-2 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-50 sm:w-auto"
-            >
-              <Printer className="w-5 h-5" />
-              PDF Yazdır
-            </button>
-            <button
-              type="button"
-              onClick={handlePrintThermal}
+              onClick={handlePrint}
               disabled={cart.length === 0}
               className="btn border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 sm:w-auto"
             >
@@ -1087,6 +1130,13 @@ export default function PurchaseCreate({
           />
         )}
       </ProductSearchPopover>
+
+      <ProductStockHistoryModal
+        open={historyProduct != null}
+        onClose={() => setHistoryProduct(null)}
+        product={historyProduct}
+        initialCustomer={selectedSupplier}
+      />
     </div>
   );
 }

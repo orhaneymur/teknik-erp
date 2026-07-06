@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { History, Users, X } from 'lucide-react';
 import CustomerSearchPanel from './CustomerSearchPanel';
+import InvoiceDetailModal from './InvoiceDetailModal';
 import PaginationBar from './PaginationBar';
 import {
   API_BASE,
@@ -56,6 +57,7 @@ export default function ProductStockHistoryModal({
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -64,6 +66,7 @@ export default function ProductStockHistoryModal({
     setPage(1);
     setRows([]);
     setTotalCount(0);
+    setViewingInvoiceId(null);
   }, [open, product?.id, initialCustomer?.id]);
 
   useEffect(() => {
@@ -112,13 +115,17 @@ export default function ProductStockHistoryModal({
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        onClose();
+        if (viewingInvoiceId) {
+          setViewingInvoiceId(null);
+        } else {
+          onClose();
+        }
       }
     };
 
     window.addEventListener('keydown', handleEscape, true);
     return () => window.removeEventListener('keydown', handleEscape, true);
-  }, [open, onClose]);
+  }, [open, onClose, viewingInvoiceId]);
 
   if (!open || !product) return null;
 
@@ -277,7 +284,14 @@ export default function ProductStockHistoryModal({
                           <p className="text-caption text-slate-400">{row.customer.code}</p>
                         </td>
                         <td className="px-3 py-2.5 text-sm">
-                          <p className="font-medium text-slate-800">{row.invoiceNo}</p>
+                          <button
+                            type="button"
+                            onClick={() => setViewingInvoiceId(row.invoiceId)}
+                            className="text-left rounded-md px-1 -mx-1 py-0.5 font-medium text-cyan-800 underline-offset-2 hover:bg-cyan-50 hover:underline"
+                            title="Fiş içeriğini görüntüle"
+                          >
+                            {row.invoiceNo}
+                          </button>
                           <p className="text-caption text-slate-400">
                             {invoiceTypeLabel(row.invoiceType)}
                             {row.processedBy ? ` · ${row.processedBy}` : ''}
@@ -337,6 +351,11 @@ export default function ProductStockHistoryModal({
           </section>
         </div>
       </div>
+
+      <InvoiceDetailModal
+        invoiceId={viewingInvoiceId}
+        onClose={() => setViewingInvoiceId(null)}
+      />
     </div>
   );
 }

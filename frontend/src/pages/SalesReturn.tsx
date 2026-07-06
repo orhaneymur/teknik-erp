@@ -178,12 +178,8 @@ export default function SalesReturn({
 
   const showCosts = useHoldKeyReveal('F8');
 
-  const handlePrintPdf = useCallback(() => {
-    printDocument('pdf');
-  }, []);
-
-  const handlePrintThermal = useCallback(() => {
-    printDocument('thermal');
+  const handlePrint = useCallback(() => {
+    printDocument();
   }, []);
 
   const f2 = useF2ProductSearch({
@@ -708,7 +704,7 @@ export default function SalesReturn({
 
       if (shouldPrint) {
         window.setTimeout(() => {
-          printDocument('thermal');
+          printDocument();
           const onAfterPrint = () => {
             resetAfterReturn();
             window.removeEventListener('afterprint', onAfterPrint);
@@ -983,16 +979,7 @@ export default function SalesReturn({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={handlePrintPdf}
-              disabled={editLines.length === 0}
-              className="btn inline-flex items-center gap-2 border-2 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-50"
-            >
-              <Printer className="h-5 w-5" />
-              PDF Yazdır
-            </button>
-            <button
-              type="button"
-              onClick={handlePrintThermal}
+              onClick={handlePrint}
               disabled={editLines.length === 0}
               className="btn inline-flex items-center gap-2 border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
             >
@@ -1448,16 +1435,7 @@ export default function SalesReturn({
           </label>
           <button
             type="button"
-            onClick={handlePrintPdf}
-            disabled={activeLines.length === 0}
-            className="btn btn-block border-2 border-slate-300 bg-white font-bold text-slate-800 hover:bg-slate-50"
-          >
-            <Printer className="h-5 w-5" />
-            PDF Yazdır
-          </button>
-          <button
-            type="button"
-            onClick={handlePrintThermal}
+            onClick={handlePrint}
             disabled={activeLines.length === 0}
             className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
           >
