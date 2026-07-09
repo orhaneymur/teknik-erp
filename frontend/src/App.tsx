@@ -5,7 +5,9 @@ import Sidebar from './components/Sidebar';
 import { API_BASE, AUTH_STORAGE_KEY, AUTH_TOKEN_KEY } from './lib/api';
 import {
   buildPageUrl,
+  formatDocumentTitle,
   getCategoryForPage,
+  getDocumentTitle,
   getPageLabel,
   menuCategories,
   parsePageFromUrl,
@@ -56,7 +58,7 @@ const initialOpenMenus = menuCategories.reduce(
   {} as Record<MenuCategoryId, boolean>
 );
 
-const FRONTEND_VERSION = 'v1.8.38';
+const FRONTEND_VERSION = 'v1.8.39';
 
 function App() {
   const initialUrl = parsePageFromUrl();
@@ -237,6 +239,19 @@ function App() {
     setIsLoggedIn(false);
     navigateTo('dashboard', { replace: true });
   }, [navigateTo]);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      document.title = formatDocumentTitle('Giriş');
+      return;
+    }
+
+    document.title = getDocumentTitle(activePage, {
+      invoiceFilter,
+      preOrderOnly,
+      editInvoiceId,
+    });
+  }, [isLoggedIn, activePage, invoiceFilter, preOrderOnly, editInvoiceId]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -444,7 +459,12 @@ function App() {
       case 'report-cash-flow':
         return <CashFlowReport />;
       case 'report-customer-statement':
-        return <CustomerStatement initialCustomerId={activeCustomerId} />;
+        return (
+          <CustomerStatement
+            initialCustomerId={activeCustomerId}
+            onNotify={showNotification}
+          />
+        );
       case 'def-products':
         return (
           <StockList

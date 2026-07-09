@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { FileText, X } from 'lucide-react';
+import { FileText, Pencil, X } from 'lucide-react';
 import {
   API_BASE,
   formatDate,
@@ -9,6 +9,7 @@ import {
   invoiceAmountUsd,
   roundPrice,
 } from '../lib/api';
+import { isEditableInvoiceType } from './InvoiceInlineEditor';
 
 type InvoiceItemRow = {
   id: number;
@@ -47,9 +48,10 @@ type InvoiceDetail = {
 type InvoiceDetailModalProps = {
   invoiceId: number | null;
   onClose: () => void;
+  onEdit?: (invoice: { id: number; type: string }) => void;
 };
 
-export default function InvoiceDetailModal({ invoiceId, onClose }: InvoiceDetailModalProps) {
+export default function InvoiceDetailModal({ invoiceId, onClose, onEdit }: InvoiceDetailModalProps) {
   const [invoice, setInvoice] = useState<InvoiceDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -237,7 +239,17 @@ export default function InvoiceDetailModal({ invoiceId, onClose }: InvoiceDetail
                 </tbody>
               </table>
 
-              <div className="flex justify-end border-t border-slate-200 pt-3">
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-3">
+                {invoice && onEdit && isEditableInvoiceType(invoice.type) && (
+                  <button
+                    type="button"
+                    onClick={() => onEdit({ id: invoice.id, type: invoice.type })}
+                    className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-100"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Düzenle
+                  </button>
+                )}
                 <div className="text-right">
                   <p className="text-caption text-slate-500">Fiş toplamı</p>
                   <p className="text-lg font-bold tabular-nums text-slate-900">

@@ -10,7 +10,11 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import SalesCreate from './SalesCreate';
+import InvoiceDetailModal from '../components/InvoiceDetailModal';
+import InvoiceInlineEditor, {
+  isEditableInvoiceType,
+  type EditableInvoiceRef,
+} from '../components/InvoiceInlineEditor';
 import {
   API_BASE,
   balanceStyles,
@@ -23,6 +27,7 @@ import {
 } from '../lib/api';
 import type { NavigateFn } from '../lib/navigation';
 import { useAppNavigationOptional } from '../context/AppNavigationContext';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 type CustomerRecord = Customer & {
   phone?: string | null;
@@ -116,12 +121,13 @@ export default function CustomerDetail({
   const [statementLines, setStatementLines] = useState<StatementLine[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(
-    initialEditInvoiceId ?? null
-  );
+  const [editingInvoice, setEditingInvoice] = useState<EditableInvoiceRef | null>(null);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useDocumentTitle(customer?.name);
 
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => onNotify?.(type, message),
@@ -129,27 +135,64 @@ export default function CustomerDetail({
   );
 
   useEffect(() => {
-    setEditingInvoiceId(initialEditInvoiceId ?? null);
+    if (!initialEditInvoiceId) {
+      setEditingInvoice(null);
+      return;
+    }
+
+    let cancelled = false;
+    void axios
+      .get<{ success: boolean; data: { id: number; type: string } }>(
+        `${API_BASE}/api/sales/invoices/${initialEditInvoiceId}`
+      )
+      .then((res) => {
+        if (cancelled || !res.data.success) return;
+        const { id, type } = res.data.data;
+        if (isEditableInvoiceType(type)) {
+          setEditingInvoice({ id, type });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setEditingInvoice(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [initialEditInvoiceId]);
 
   const openInvoiceEditor = useCallback(
-    (invoiceId: number) => {
-      setEditingInvoiceId(invoiceId);
+    (inv: InvoiceRow) => {
+      if (!isEditableInvoiceType(inv.type)) {
+        notify('error', 'Bu fatura türü düzenlenemez.');
+        return;
+      }
+      setViewingInvoiceId(null);
+      setEditingInvoice({ id: inv.id, type: inv.type });
       navigation?.navigateTo('customer-detail', {
         customerId,
-        editInvoiceId: invoiceId,
+        editInvoiceId: inv.id,
       });
     },
-    [customerId, navigation]
+    [customerId, navigation, notify]
   );
+
+  const openInvoiceView = useCallback((invoiceId: number) => {
+    setViewingInvoiceId(invoiceId);
+  }, []);
 
   const closeInvoiceEditor = useCallback(() => {
     if (navigation) {
       navigation.goBack();
     } else {
-      setEditingInvoiceId(null);
+      setEditingInvoice(null);
     }
   }, [navigation]);
+
+  const handleInvoiceEditFromModal = useCallback((invoice: EditableInvoiceRef) => {
+    setViewingInvoiceId(null);
+    setEditingInvoice(invoice);
+  }, []);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -242,18 +285,18 @@ export default function CustomerDetail({
     }
   };
 
-  if (editingInvoiceId) {
+  if (editingInvoice) {
     return (
-      <SalesCreate
-        editInvoiceId={editingInvoiceId}
+      <InvoiceInlineEditor
+        invoice={editingInvoice}
+        onNotify={notify}
+        onDataChange={onDataChange}
         onCancelEdit={closeInvoiceEditor}
         onSaved={() => {
           closeInvoiceEditor();
           void loadAll();
           onDataChange?.();
         }}
-        onNotify={notify}
-        onDataChange={onDataChange}
       />
     );
   }
@@ -491,11 +534,11 @@ export default function CustomerDetail({
               {invoices.map((inv) => (
                 <tr key={inv.id} className="hover:bg-slate-50/60">
                   <td className="px-4 py-3 font-medium text-slate-900">
-                    {inv.type === 'SATIS' ? (
+                    {isEditableInvoiceType(inv.type) ? (
                       <button
                         type="button"
-                        onClick={() => openInvoiceEditor(inv.id)}
-                        className="text-violet-700 hover:text-violet-900 hover:underline"
+                        onClick={() => openInvoiceView(inv.id)}
+                        className="text-left text-indigo-700 hover:underline"
                       >
                         {inv.invoiceNo}
                       </button>
@@ -518,15 +561,25 @@ export default function CustomerDetail({
                     {formatDate(inv.createdAt)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    {inv.type === 'SATIS' && (
-                      <button
-                        type="button"
-                        onClick={() => openInvoiceEditor(inv.id)}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-violet-50 hover:text-violet-600"
-                        title="Faturayı aç"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
+                    {isEditableInvoiceType(inv.type) && (
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openInvoiceView(inv.id)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-indigo-600"
+                          title="Faturayı görüntüle"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openInvoiceEditor(inv)}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-700"
+                          title="Faturayı düzenle"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -682,6 +735,12 @@ export default function CustomerDetail({
           </form>
         </div>
       )}
+
+      <InvoiceDetailModal
+        invoiceId={viewingInvoiceId}
+        onClose={() => setViewingInvoiceId(null)}
+        onEdit={handleInvoiceEditFromModal}
+      />
     </div>
   );
 }

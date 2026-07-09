@@ -4,15 +4,16 @@ import {
   AlertTriangle,
   ArrowLeft,
   Copy,
-  Package,
   Printer,
   RotateCcw,
   Save,
   Search,
+  ShoppingCart,
   Trash2,
   X,
 } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
+import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList from '../components/F2ProductList';
 import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
@@ -22,11 +23,13 @@ import {
   API_BASE,
   ensureArray,
   formatDate,
+  formatMoney,
   formatUsd,
   roundPrice,
-  type PaginatedListResponse,
+  type Customer,
 } from '../lib/api';
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
+import { pickCustomerFromSearch } from '../lib/customerSearch';
 import { printDocument } from '../lib/printMode';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 import SalesCreate from './SalesCreate';
@@ -39,13 +42,6 @@ type Safe = {
   branchId: number;
   name: string;
   currency: string;
-  balance: number;
-};
-type Customer = {
-  id: number;
-  code: string;
-  name: string;
-  creditLimit: number;
   balance: number;
 };
 
@@ -95,22 +91,6 @@ function newRowId(prefix: string, productId: number) {
   return `${prefix}-${productId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function pickCustomerFromSearch(query: string, results: Customer[]): Customer | null {
-  const trimmed = query.trim();
-  if (!trimmed) return null;
-
-  const codePart = trimmed.split(/[—\-]/)[0].trim().toLocaleLowerCase('tr-TR');
-  const exactByCode = results.find(
-    (customer) => customer.code.toLocaleLowerCase('tr-TR') === codePart
-  );
-  if (exactByCode) return exactByCode;
-
-  const lower = trimmed.toLocaleLowerCase('tr-TR');
-  return (
-    results.find((customer) => customer.name.toLocaleLowerCase('tr-TR') === lower) ?? null
-  );
-}
-
 type WarningState = {
   title: string;
   message: string;
@@ -153,9 +133,6 @@ export default function SalesReturn({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerResults, setCustomerResults] = useState<Customer[]>([]);
-  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
-  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
-  const customerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const customerSearchRef = useRef<HTMLInputElement>(null);
   const [selectedBranch, setSelectedBranch] = useState<number | ''>('');
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');
@@ -175,6 +152,7 @@ export default function SalesReturn({
   const [editCustomerLabel, setEditCustomerLabel] = useState('');
   const [editCustomerId, setEditCustomerId] = useState<number | ''>('');
   const [shouldPrint, setShouldPrint] = useState(false);
+  const [orderNotes, setOrderNotes] = useState('');
 
   const showCosts = useHoldKeyReveal('F8');
 
@@ -341,41 +319,9 @@ export default function SalesReturn({
     setCart([]);
   }, [selectedCustomer?.id]);
 
-  useEffect(() => {
-    const query = customerSearch.trim();
-    if (!customerDropdownOpen || query.length < 1) {
-      setCustomerResults([]);
-      return;
-    }
-
-    if (customerDebounceRef.current) clearTimeout(customerDebounceRef.current);
-
-    customerDebounceRef.current = setTimeout(async () => {
-      setCustomerSearchLoading(true);
-      try {
-        const response = await axios.get<PaginatedListResponse<Customer>>(
-          `${API_BASE}/api/customers`,
-          { params: { search: query, limit: 20, page: 1 } }
-        );
-        if (response.data.success) {
-          setCustomerResults(response.data.data);
-        }
-      } catch {
-        setCustomerResults([]);
-      } finally {
-        setCustomerSearchLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      if (customerDebounceRef.current) clearTimeout(customerDebounceRef.current);
-    };
-  }, [customerSearch, customerDropdownOpen]);
-
   const selectCustomer = useCallback((customer: Customer) => {
     setSelectedCustomer(customer);
     setCustomerSearch(`${customer.code} — ${customer.name}`);
-    setCustomerDropdownOpen(false);
   }, []);
 
   const closeSearchModal = useCallback(() => {
@@ -632,6 +578,7 @@ export default function SalesReturn({
     setSubmitting(true);
     try {
       const createdNos: string[] = [];
+      let notesForPrint = orderNotes;
 
       for (const [invoiceId, lines] of byInvoice) {
         const exchangeRate = EXCHANGE_RATE;
@@ -641,6 +588,7 @@ export default function SalesReturn({
           safeId: Number(selectedSafe),
           originalInvoiceId: invoiceId,
           exchangeRate,
+          orderNotes: orderNotes.trim() || undefined,
           items: lines.map((row) => ({
             sourceInvoiceItemId: row.sourceInvoiceItemId,
             productId: row.productId,
@@ -653,6 +601,10 @@ export default function SalesReturn({
         if (response.data.success) {
           const no = response.data.data?.invoiceNo;
           if (no) createdNos.push(no);
+          const savedNotes = response.data.data?.orderNotes;
+          if (typeof savedNotes === 'string' && savedNotes.trim()) {
+            notesForPrint = savedNotes;
+          }
         }
       }
 
@@ -662,7 +614,7 @@ export default function SalesReturn({
           branchId: Number(selectedBranch),
           safeId: Number(selectedSafe),
           exchangeRate: EXCHANGE_RATE,
-          note: 'Kayıt dışı iade',
+          note: orderNotes.trim() || 'Kayıt dışı iade',
           items: manualLines.map((row) => ({
             productId: row.productId,
             quantity: row.returnQty,
@@ -673,6 +625,10 @@ export default function SalesReturn({
         if (response.data.success) {
           const no = response.data.data?.invoiceNo;
           if (no) createdNos.push(no);
+          const savedNotes = response.data.data?.orderNotes;
+          if (typeof savedNotes === 'string' && savedNotes.trim()) {
+            notesForPrint = savedNotes;
+          }
         }
       }
 
@@ -686,6 +642,9 @@ export default function SalesReturn({
 
       const invoiceLabel = createdNos.join(', ');
       if (invoiceLabel) setDisplayInvoiceNo(invoiceLabel);
+      if (notesForPrint.trim()) {
+        setOrderNotes(notesForPrint);
+      }
 
       notify(
         'success',
@@ -699,6 +658,7 @@ export default function SalesReturn({
         setCart([]);
         setShouldPrint(false);
         setDisplayInvoiceNo('');
+        setOrderNotes('');
         onDataChange?.();
       };
 
@@ -1026,6 +986,10 @@ export default function SalesReturn({
   const tlToUsd = (tl: number, rate: number) =>
     roundPrice(rate > 0 ? tl / rate : 0);
 
+  const inputClass = 'field-input';
+  const labelClass = 'field-label';
+  const returnInvoiceDate = new Date().toISOString().slice(0, 10);
+
   return (
     <div className="space-y-4 print:space-y-0">
       <div className="print-pdf-doc hidden">
@@ -1036,6 +1000,11 @@ export default function SalesReturn({
           </p>
         )}
         <p className="pdf-meta">Satış iade</p>
+        {orderNotes.trim() && (
+          <div className="pdf-notes">
+            <strong>Açıklama:</strong> {orderNotes.trim()}
+          </div>
+        )}
         <table>
           <thead>
             <tr>
@@ -1073,6 +1042,9 @@ export default function SalesReturn({
           </p>
         )}
         <p className="receipt-slip-meta">Satış iade</p>
+        {orderNotes.trim() && (
+          <p className="receipt-slip-notes">{orderNotes.trim()}</p>
+        )}
         <div className="receipt-slip-divider" />
         <div className="receipt-item-row receipt-item-head">
           <span className="receipt-item-name">Ürün</span>
@@ -1105,133 +1077,176 @@ export default function SalesReturn({
       </div>
 
       <div className="mb-2 flex items-center gap-3 print:hidden">
-        <div className="rounded-xl bg-amber-600 p-2.5 text-white">
+        <div className="p-2.5 rounded-xl bg-emerald-600 text-white">
           <RotateCcw className="h-5 w-5" />
         </div>
         <div>
-          <h1 className="page-title">Satış İade</h1>
-          <p className="text-sm text-slate-500">
-            Müşteri seçin, F2 ile ürün ekleyin — her F2 seçimi ayrı satır (adet 1). F8 basılı tutunca maliyet görünür
+          <h1 className="page-title">Hızlı İade Al</h1>
+          <p className="page-subtitle">
+            Esnaf fatura tezgâhı · F2 stok ara · Fiyatlar $ (USD) · F8 maliyet
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3 print:hidden">
-        <div className="space-y-4 xl:col-span-2">
-          <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="relative">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Müşteri
-                </label>
-                <input
-                  ref={customerSearchRef}
-                  type="text"
-                  value={customerSearch}
-                  onChange={(e) => {
-                    setCustomerSearch(e.target.value);
-                    setCustomerDropdownOpen(true);
-                    if (!e.target.value.trim()) setSelectedCustomer(null);
-                  }}
-                  onFocus={() => setCustomerDropdownOpen(true)}
-                  onBlur={() => {
-                    setTimeout(() => setCustomerDropdownOpen(false), 150);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      const picked = pickCustomerFromSearch(customerSearch, customerResults);
-                      if (picked) selectCustomer(picked);
-                    }
-                  }}
-                  placeholder="Kod veya isim ile ara..."
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  autoComplete="off"
-                />
-                {selectedCustomer && (
-                  <p className="mt-1 text-xs font-medium text-emerald-700">
-                    Seçili: {selectedCustomer.code} — {selectedCustomer.name}
-                  </p>
-                )}
-                {customerDropdownOpen && (customerSearch.trim() || customerResults.length > 0) && (
-                  <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg divide-y divide-slate-100">
-                    {customerSearchLoading && (
-                      <li className="px-3 py-2 text-sm text-slate-400">Aranıyor...</li>
-                    )}
-                    {!customerSearchLoading &&
-                      customerResults.map((customer) => (
-                        <li
-                          key={customer.id}
-                          onMouseDown={() => selectCustomer(customer)}
-                          className="cursor-pointer px-3 py-2 text-sm hover:bg-amber-50"
-                        >
-                          <span className="font-medium">{customer.code}</span>
-                          <span className="text-slate-500"> — {customer.name}</span>
-                        </li>
-                      ))}
-                    {!customerSearchLoading &&
-                      customerSearch.trim() &&
-                      customerResults.length === 0 && (
-                        <li className="px-3 py-2 text-sm text-slate-400">Sonuç yok</li>
-                      )}
-                  </ul>
-                )}
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Şube
-                </label>
-                <select
-                  value={selectedBranch}
-                  onChange={(e) =>
-                    setSelectedBranch(e.target.value ? Number(e.target.value) : '')
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                >
-                  {branches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Kasa
-                </label>
-                <select
-                  value={selectedSafe}
-                  onChange={(e) =>
-                    setSelectedSafe(e.target.value ? Number(e.target.value) : '')
-                  }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                >
-                  {branchSafes.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 print:hidden">
+        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
+          <h2 className="text-sm font-bold text-indigo-700 border-b border-indigo-100 pb-2">
+            Evrak Bilgileri
+          </h2>
+          <div>
+            <label className={labelClass}>İade Fiş No</label>
+            <input
+              type="text"
+              readOnly
+              value={displayInvoiceNo || 'Otomatik'}
+              className={`${inputClass} bg-slate-50 font-mono font-bold text-indigo-700`}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>İade Tarihi</label>
+            <input
+              type="date"
+              readOnly
+              value={returnInvoiceDate}
+              className={`${inputClass} bg-slate-50`}
+            />
+          </div>
+        </section>
+
+        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3 relative">
+          <h2 className="text-sm font-bold text-indigo-700 border-b border-indigo-100 pb-2">
+            Müşteri Bilgileri
+          </h2>
+          <div>
+            <label className={labelClass}>Müşteri Seçimi</label>
+            <InlineCustomerSearchInput
+              value={customerSearch}
+              onChange={(text) => {
+                setCustomerSearch(text);
+                if (!text.trim()) setSelectedCustomer(null);
+              }}
+              onSelect={selectCustomer}
+              onResultsChange={setCustomerResults}
+              selectedCustomer={selectedCustomer}
+              inputRef={customerSearchRef}
+              inputClassName={inputClass}
+              accentClass="indigo"
+              showSelectedHint
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className={labelClass}>Müşteri Limiti</label>
+              <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+                {selectedCustomer
+                  ? formatMoney(selectedCustomer.creditLimit)
+                  : '—'}
               </div>
             </div>
+            <div>
+              <label className={labelClass}>Müşteri Bakiyesi</label>
+              <div
+                className={`rounded-lg border px-3 py-2 text-sm font-bold ${
+                  selectedCustomer && selectedCustomer.balance > 0
+                    ? 'bg-red-50 border-red-200 text-red-700'
+                    : selectedCustomer && selectedCustomer.balance < 0
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      : 'bg-slate-50 border-slate-200 text-slate-700'
+                }`}
+              >
+                {selectedCustomer ? formatMoney(selectedCustomer.balance) : '—'}
+              </div>
+            </div>
+          </div>
+        </section>
 
-            <button
-              type="button"
-              onClick={openSearchModal}
-              disabled={!selectedCustomer || pickingProduct}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 py-4 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:px-6"
+        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
+          <h2 className="text-sm font-bold text-indigo-700 border-b border-indigo-100 pb-2">
+            Şube & Kasa
+          </h2>
+          <div>
+            <label className={labelClass}>Şube</label>
+            <select
+              value={selectedBranch}
+              onChange={(e) =>
+                setSelectedBranch(e.target.value ? Number(e.target.value) : '')
+              }
+              className={inputClass}
             >
-              <Search className="h-4 w-4" />
-              {pickingProduct ? 'Kontrol ediliyor...' : 'Ürün Ara (F2)'}
-            </button>
-          </section>
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Kasa Seçimi</label>
+            <select
+              value={selectedSafe}
+              onChange={(e) =>
+                setSelectedSafe(e.target.value ? Number(e.target.value) : '')
+              }
+              className={inputClass}
+            >
+              {branchSafes.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({formatMoney(s.balance, s.currency)})
+                </option>
+              ))}
+            </select>
+          </div>
+        </section>
 
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="flex items-center gap-2 border-b border-slate-200 px-5 py-4">
-              <Package className="h-5 w-5 text-amber-600" />
-              <h2 className="font-semibold text-slate-800">İade Sepeti</h2>
-            </div>
+        <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
+          <h2 className="text-sm font-bold text-indigo-700 border-b border-indigo-100 pb-2">
+            Teslimat & Açıklama
+          </h2>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 space-y-1">
+            <p>
+              <span className="font-semibold text-emerald-700">{depotLabel('MERKEZ_DEPO')}</span>
+              {' — '}normal iade stok girişi
+            </p>
+            <p>
+              <span className="font-semibold text-orange-700">{depotLabel('CIN_IADE_DEPO')}</span>
+              {' — '}satırda &quot;Çin İade&quot; işaretleyin
+            </p>
+          </div>
+          <div>
+            <label className={labelClass}>Sipariş Açıklaması</label>
+            <textarea
+              value={orderNotes}
+              onChange={(e) => setOrderNotes(e.target.value)}
+              rows={3}
+              placeholder="İade notu, açıklama..."
+              className={`${inputClass} resize-none`}
+            />
+          </div>
+        </section>
+      </div>
 
+      <button
+        type="button"
+        onClick={openSearchModal}
+        disabled={!selectedCustomer || pickingProduct}
+        className="btn btn-secondary btn-block print:hidden disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Search className="w-5 h-5" />
+        {pickingProduct ? 'Kontrol ediliyor...' : 'Hızlı Stok Kartı Bul (F2)'}
+      </button>
+
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 print:hidden">
+        <section className="xl:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-200 flex items-center gap-2 bg-slate-50">
+            <ShoppingCart className="w-5 h-5 text-indigo-600" />
+            <h2 className="font-semibold text-slate-800">Akıllı Sepet</h2>
+            <span className="text-sm text-slate-500">({cart.length} kalem)</span>
+            <span className="text-caption text-slate-400 hidden sm:inline">
+              Maliyet: F8 basılı tut
+            </span>
+          </div>
+
+          <section className="overflow-hidden">
             {cart.length === 0 ? (
               <p className="px-5 py-12 text-center text-sm text-slate-400">
                 Henüz ürün eklenmedi. Müşteri seçip{' '}
@@ -1408,12 +1423,32 @@ export default function SalesReturn({
               </div>
             )}
           </section>
-        </div>
+        </section>
 
-        <aside className="sticky top-6 h-fit space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-semibold text-slate-800">İade Özeti</h2>
-          <div className="page-title">{formatUsd(totalUsd)}</div>
-          <div className="space-y-2 text-sm">
+        <aside className="h-fit space-y-4 rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm sm:p-5 xl:col-span-1 xl:sticky xl:top-4">
+          <h2 className="border-b border-slate-200 pb-2 text-center font-bold text-slate-800">
+            Fatura Özeti
+          </h2>
+
+          <div className="text-center">
+            <p className="text-xs text-slate-500 uppercase tracking-wide">
+              Toplam Ürün Adedi
+            </p>
+            <p className="text-2xl font-extrabold text-blue-600">
+              {totalQuantity} Adet
+            </p>
+          </div>
+
+          <div className="text-center">
+            <p className="text-xs text-slate-500 uppercase tracking-wide">
+              Net Toplam ($)
+            </p>
+            <p className="text-3xl font-black text-red-600 tabular-nums">
+              {formatUsd(totalUsd)}
+            </p>
+          </div>
+
+          <div className="space-y-2 border-t border-slate-200 pt-2 text-sm">
             <div className="flex justify-between text-slate-600">
               <span>{depotLabel('MERKEZ_DEPO')}</span>
               <span className="font-medium text-emerald-700">{stockReturnCount} kalem</span>
@@ -1423,21 +1458,22 @@ export default function SalesReturn({
               <span className="font-medium text-orange-700">{chinaReturnCount} kalem</span>
             </div>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+          <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
               checked={shouldPrint}
               onChange={(e) => setShouldPrint(e.target.checked)}
-              className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
             />
-            <Printer className="w-4 h-4" />
-            Kayıttan sonra fiş yazdır
+            <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
+              <Printer className="w-4 h-4" /> Kayıttan sonra fiş yazdır
+            </span>
           </label>
           <button
             type="button"
             onClick={handlePrint}
             disabled={activeLines.length === 0}
-            className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
+            className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
           >
             <Printer className="h-5 w-5" />
             Fiş Yazdır
@@ -1446,10 +1482,10 @@ export default function SalesReturn({
             type="button"
             onClick={handleSubmit}
             disabled={submitting || activeLines.length === 0}
-            className="btn btn-lg btn-amber btn-block sm:w-auto"
+            className="btn btn-lg btn-primary btn-block uppercase tracking-wide print:hidden"
           >
             <Save className="h-5 w-5" />
-            {submitting ? 'Kaydediliyor...' : 'İADEYİ KAYDET'}
+            {submitting ? 'Kaydediliyor...' : 'KAYDET'}
           </button>
         </aside>
       </div>
@@ -1504,7 +1540,7 @@ export default function SalesReturn({
         onClose={closeSearchModal}
         title="İade Ürün Ara"
         hint="↑↓ · Enter · Esc"
-        headerClassName="bg-amber-600"
+        headerClassName="bg-indigo-600"
         searchQuery={f2.searchQuery}
         onSearchChange={f2.setSearchQuery}
         searchInputRef={f2.searchInputRef}
@@ -1528,7 +1564,7 @@ export default function SalesReturn({
             onFocusIndex={f2.setFocusedIndex}
             onSelect={(product) => void pickProductForReturn(product)}
             partySelected={!!selectedCustomer}
-            accentClass="amber"
+            accentClass="indigo"
             showCost={showCosts}
           />
         )}

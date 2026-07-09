@@ -15,9 +15,7 @@ import CustomerNameLink from '../components/CustomerNameLink';
 import { useInvoiceEditorFromUrl } from '../hooks/useInvoiceEditorFromUrl';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 import type { PageId } from '../lib/navigation';
-import SalesCreate from './SalesCreate';
-import PurchaseCreate from './PurchaseCreate';
-import SalesReturn from './SalesReturn';
+import InvoiceInlineEditor from '../components/InvoiceInlineEditor';
 
 type Invoice = {
   id: number;
@@ -175,36 +173,9 @@ export default function Invoices({
   ];
 
   if (editingInvoice) {
-    if (editingInvoice.type === 'ALIS') {
-      return (
-        <PurchaseCreate
-          key={editingInvoice.id}
-          editInvoiceId={editingInvoice.id}
-          f2Trigger={f2Trigger}
-          onNotify={onNotify}
-          onDataChange={onDataChange}
-          onCancelEdit={closeEditor}
-          onSaved={handleSaved}
-        />
-      );
-    }
-    if (editingInvoice.type === 'IADE') {
-      return (
-        <SalesReturn
-          key={editingInvoice.id}
-          editInvoiceId={editingInvoice.id}
-          f2Trigger={f2Trigger}
-          onNotify={onNotify}
-          onDataChange={onDataChange}
-          onCancelEdit={closeEditor}
-          onSaved={handleSaved}
-        />
-      );
-    }
     return (
-      <SalesCreate
-        key={editingInvoice.id}
-        editInvoiceId={editingInvoice.id}
+      <InvoiceInlineEditor
+        invoice={editingInvoice}
         f2Trigger={f2Trigger}
         onNotify={onNotify}
         onDataChange={onDataChange}

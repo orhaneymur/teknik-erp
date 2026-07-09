@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import {
   ArrowDownLeft,
@@ -22,9 +22,9 @@ import {
   invoiceTypeLabel,
   invoiceTypeStyles,
   type Customer,
-  type PaginatedListResponse,
 } from '../lib/api';
 import CustomerNameLink from '../components/CustomerNameLink';
+import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import {
   AreaTrendChart,
   LowStockMeter,
@@ -32,9 +32,7 @@ import {
 } from '../components/DashboardCharts';
 import { useInvoiceEditorFromUrl } from '../hooks/useInvoiceEditorFromUrl';
 import { buildPageUrl, type PageId } from '../lib/navigation';
-import SalesCreate from './SalesCreate';
-import PurchaseCreate from './PurchaseCreate';
-import SalesReturn from './SalesReturn';
+import InvoiceInlineEditor from '../components/InvoiceInlineEditor';
 
 type SafeBalance = {
   id: number;
@@ -134,15 +132,11 @@ export default function Dashboard({
     name: string;
   } | null>(null);
   const [editCustomerSearch, setEditCustomerSearch] = useState('');
-  const [editCustomerResults, setEditCustomerResults] = useState<Customer[]>([]);
-  const [editCustomerDropdownOpen, setEditCustomerDropdownOpen] = useState(false);
-  const [editCustomerSearchLoading, setEditCustomerSearchLoading] = useState(false);
   const [editAmount, setEditAmount] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editType, setEditType] = useState<'GIRIS' | 'CIKIS'>('GIRIS');
   const [editSafeId, setEditSafeId] = useState<number | ''>('');
   const [editSubmitting, setEditSubmitting] = useState(false);
-  const editCustomerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { editingInvoice, openEditor, closeEditor, setEditingInvoice } = useInvoiceEditorFromUrl(
     'dashboard',
@@ -226,8 +220,6 @@ export default function Dashboard({
     setEditingPayment(payment);
     setEditCustomer(payment.customer);
     setEditCustomerSearch(`${payment.customer.code} — ${payment.customer.name}`);
-    setEditCustomerResults([]);
-    setEditCustomerDropdownOpen(false);
     setEditAmount(String(payment.amount));
     setEditDescription(payment.description);
     setEditType(payment.type);
@@ -238,49 +230,11 @@ export default function Dashboard({
     setEditingPayment(null);
     setEditCustomer(null);
     setEditCustomerSearch('');
-    setEditCustomerResults([]);
-    setEditCustomerDropdownOpen(false);
   }, []);
-
-  useEffect(() => {
-    if (!editingPayment || !editCustomerDropdownOpen) {
-      setEditCustomerResults([]);
-      return;
-    }
-    const query = editCustomerSearch.trim();
-    if (query.length < 1) {
-      setEditCustomerResults([]);
-      return;
-    }
-
-    if (editCustomerDebounceRef.current) clearTimeout(editCustomerDebounceRef.current);
-
-    editCustomerDebounceRef.current = setTimeout(async () => {
-      setEditCustomerSearchLoading(true);
-      try {
-        const response = await axios.get<PaginatedListResponse<Customer>>(
-          `${API_BASE}/api/customers`,
-          { params: { search: query, limit: 20, page: 1 } }
-        );
-        if (response.data.success) {
-          setEditCustomerResults(ensureArray(response.data.data));
-        }
-      } catch {
-        setEditCustomerResults([]);
-      } finally {
-        setEditCustomerSearchLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      if (editCustomerDebounceRef.current) clearTimeout(editCustomerDebounceRef.current);
-    };
-  }, [editingPayment, editCustomerSearch, editCustomerDropdownOpen]);
 
   const selectEditCustomer = useCallback((customer: Customer) => {
     setEditCustomer({ id: customer.id, code: customer.code, name: customer.name });
     setEditCustomerSearch(`${customer.code} — ${customer.name}`);
-    setEditCustomerDropdownOpen(false);
   }, []);
 
   const handleSavePaymentEdit = async () => {
@@ -337,36 +291,9 @@ export default function Dashboard({
   }
 
   if (editingInvoice) {
-    if (editingInvoice.type === 'ALIS') {
-      return (
-        <PurchaseCreate
-          key={editingInvoice.id}
-          editInvoiceId={editingInvoice.id}
-          f2Trigger={f2Trigger}
-          onNotify={onNotify}
-          onDataChange={onDataChange}
-          onCancelEdit={closeEditor}
-          onSaved={handleSaved}
-        />
-      );
-    }
-    if (editingInvoice.type === 'IADE') {
-      return (
-        <SalesReturn
-          key={editingInvoice.id}
-          editInvoiceId={editingInvoice.id}
-          f2Trigger={f2Trigger}
-          onNotify={onNotify}
-          onDataChange={onDataChange}
-          onCancelEdit={closeEditor}
-          onSaved={handleSaved}
-        />
-      );
-    }
     return (
-      <SalesCreate
-        key={editingInvoice.id}
-        editInvoiceId={editingInvoice.id}
+      <InvoiceInlineEditor
+        invoice={editingInvoice}
         f2Trigger={f2Trigger}
         onNotify={onNotify}
         onDataChange={onDataChange}
@@ -767,51 +694,27 @@ export default function Dashboard({
                 <label className="mb-1 block text-sm font-medium text-slate-700">
                   Müşteri
                 </label>
-                <input
-                  type="text"
+                <InlineCustomerSearchInput
                   value={editCustomerSearch}
-                  onChange={(e) => {
-                    setEditCustomerSearch(e.target.value);
-                    setEditCustomerDropdownOpen(true);
-                    if (!e.target.value.trim()) setEditCustomer(null);
+                  onChange={(text) => {
+                    setEditCustomerSearch(text);
+                    if (!text.trim()) setEditCustomer(null);
                   }}
-                  onFocus={() => setEditCustomerDropdownOpen(true)}
-                  onBlur={() => {
-                    window.setTimeout(() => setEditCustomerDropdownOpen(false), 150);
-                  }}
-                  placeholder="Kod veya isim ile ara..."
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  autoComplete="off"
+                  onSelect={selectEditCustomer}
+                  selectedCustomer={
+                    editCustomer
+                      ? ({
+                          ...editCustomer,
+                          creditLimit: 0,
+                          balance: 0,
+                          createdAt: '',
+                          updatedAt: '',
+                        } as Customer)
+                      : null
+                  }
+                  inputClassName="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  accentClass="emerald"
                 />
-                {editCustomer && (
-                  <p className="mt-1.5 text-xs font-semibold text-emerald-800">
-                    Seçili: {editCustomer.code} — {editCustomer.name}
-                  </p>
-                )}
-                {editCustomerDropdownOpen &&
-                  (editCustomerSearch.trim() || editCustomerResults.length > 0) && (
-                    <ul className="absolute z-30 left-0 right-0 mt-1 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg divide-y divide-slate-100">
-                      {editCustomerSearchLoading && (
-                        <li className="px-3 py-2 text-sm text-slate-400">Aranıyor...</li>
-                      )}
-                      {!editCustomerSearchLoading &&
-                        editCustomerResults.map((customer) => (
-                          <li
-                            key={customer.id}
-                            onMouseDown={() => selectEditCustomer(customer)}
-                            className="cursor-pointer px-3 py-2 text-sm hover:bg-emerald-50"
-                          >
-                            <span className="font-medium">{customer.code}</span>
-                            <span className="text-slate-500"> — {customer.name}</span>
-                          </li>
-                        ))}
-                      {!editCustomerSearchLoading &&
-                        editCustomerSearch.trim() &&
-                        editCustomerResults.length === 0 && (
-                          <li className="px-3 py-2 text-sm text-slate-400">Sonuç yok</li>
-                        )}
-                    </ul>
-                  )}
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">

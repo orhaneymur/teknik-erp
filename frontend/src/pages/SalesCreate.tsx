@@ -3,6 +3,7 @@ import axios from 'axios';
 import { ArrowLeft, CheckCircle, Printer, Save, Search, ShoppingCart, Trash2, X } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
+import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList, {
   resolveSalesUnitPriceUsd,
 } from '../components/F2ProductList';
@@ -17,9 +18,9 @@ import {
   formatUsd,
   roundPrice,
   type Customer,
-  type PaginatedListResponse,
 } from '../lib/api';
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
+import { pickCustomerFromSearch } from '../lib/customerSearch';
 import { printDocument } from '../lib/printMode';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
@@ -117,22 +118,6 @@ function productCostUsd(product: Product) {
   return roundPrice(product.priceUsd);
 }
 
-function pickCustomerFromSearch(query: string, results: Customer[]): Customer | null {
-  const trimmed = query.trim();
-  if (!trimmed) return null;
-
-  const codePart = trimmed.split(/[—\-]/)[0].trim().toLocaleLowerCase('tr-TR');
-  const exactByCode = results.find(
-    (customer) => customer.code.toLocaleLowerCase('tr-TR') === codePart
-  );
-  if (exactByCode) return exactByCode;
-
-  const lower = trimmed.toLocaleLowerCase('tr-TR');
-  return (
-    results.find((customer) => customer.name.toLocaleLowerCase('tr-TR') === lower) ?? null
-  );
-}
-
 export default function SalesCreate({
   f2Trigger = 0,
   editInvoiceId = null,
@@ -164,8 +149,6 @@ export default function SalesCreate({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerResults, setCustomerResults] = useState<Customer[]>([]);
-  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
-  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<number | ''>('');
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Nakit');
@@ -201,7 +184,6 @@ export default function SalesCreate({
   }, []);
 
   const customerSearchRef = useRef<HTMLInputElement>(null);
-  const customerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAddedRowId = useRef<string | null>(null);
 
   const getCartRowIds = useCallback(() => cart.map((item) => item.rowId), [cart]);
@@ -333,37 +315,6 @@ export default function SalesCreate({
       setSelectedSafe(safeInBranch.id);
     }
   }, [selectedBranch, initData.safes]);
-
-  useEffect(() => {
-    const query = customerSearch.trim();
-    if (!customerDropdownOpen || query.length < 1) {
-      setCustomerResults([]);
-      return;
-    }
-
-    if (customerDebounceRef.current) clearTimeout(customerDebounceRef.current);
-
-    customerDebounceRef.current = setTimeout(async () => {
-      setCustomerSearchLoading(true);
-      try {
-        const response = await axios.get<PaginatedListResponse<Customer>>(
-          `${API_BASE}/api/customers`,
-          { params: { search: query, limit: 20, page: 1 } }
-        );
-        if (response.data.success) {
-          setCustomerResults(response.data.data);
-        }
-      } catch {
-        setCustomerResults([]);
-      } finally {
-        setCustomerSearchLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      if (customerDebounceRef.current) clearTimeout(customerDebounceRef.current);
-    };
-  }, [customerSearch, customerDropdownOpen]);
 
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
@@ -662,7 +613,6 @@ export default function SalesCreate({
   const selectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setCustomerSearch(`${customer.code} — ${customer.name}`);
-    setCustomerDropdownOpen(false);
     setPrintBalance(null);
     setPaymentMethod('Cari');
   };
@@ -1080,55 +1030,20 @@ export default function SalesCreate({
           </h2>
           <div>
             <label className={labelClass}>Müşteri Seçimi</label>
-            <input
-              ref={customerSearchRef}
-              type="text"
+            <InlineCustomerSearchInput
               value={customerSearch}
-              onChange={(e) => {
-                setCustomerSearch(e.target.value);
-                setCustomerDropdownOpen(true);
-                if (!e.target.value.trim()) setSelectedCustomer(null);
+              onChange={(text) => {
+                setCustomerSearch(text);
+                if (!text.trim()) setSelectedCustomer(null);
               }}
-              onFocus={() => setCustomerDropdownOpen(true)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  const picked = pickCustomerFromSearch(customerSearch, customerResults);
-                  if (picked) selectCustomer(picked);
-                }
-              }}
-              placeholder="Kod veya isim ile ara..."
-              className={inputClass}
-              autoComplete="off"
+              onSelect={selectCustomer}
+              onResultsChange={setCustomerResults}
+              selectedCustomer={selectedCustomer}
+              inputRef={customerSearchRef}
+              inputClassName={inputClass}
+              accentClass="indigo"
+              showSelectedHint
             />
-            {selectedCustomer && (
-              <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
-                Seçili: {selectedCustomer.code} — {selectedCustomer.name}
-              </p>
-            )}
-            {customerDropdownOpen && (customerSearch.trim() || customerResults.length > 0) && (
-              <ul className="absolute z-20 left-4 right-4 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg divide-y divide-slate-100">
-                {customerSearchLoading && (
-                  <li className="px-3 py-2 text-sm text-slate-400">Aranıyor...</li>
-                )}
-                {!customerSearchLoading &&
-                  customerResults.map((customer) => (
-                    <li
-                      key={customer.id}
-                      onMouseDown={() => selectCustomer(customer)}
-                      className="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50"
-                    >
-                      <span className="font-medium">{customer.code}</span>
-                      <span className="text-slate-500"> — {customer.name}</span>
-                    </li>
-                  ))}
-                {!customerSearchLoading &&
-                  customerSearch.trim() &&
-                  customerResults.length === 0 && (
-                    <li className="px-3 py-2 text-sm text-slate-400">Sonuç yok</li>
-                  )}
-              </ul>
-            )}
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>

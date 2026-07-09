@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import F2CustomerList from '../components/F2CustomerList';
+import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import CustomerNameLink from '../components/CustomerNameLink';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import { useF2CustomerSearch } from '../hooks/useF2CustomerSearch';
@@ -28,6 +29,7 @@ import {
 } from '../lib/api';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import { printDocument } from '../lib/printMode';
+import { pickCustomerFromSearch } from '../lib/customerSearch';
 
 type PaymentCurrency = 'USD' | 'TRY';
 
@@ -149,22 +151,6 @@ type PaymentReceipt = {
   balanceAfter?: number | null;
 };
 
-function pickCustomerFromSearch(query: string, results: Customer[]): Customer | null {
-  const trimmed = query.trim();
-  if (!trimmed) return null;
-
-  const codePart = trimmed.split(/[—\-]/)[0].trim().toLocaleLowerCase('tr-TR');
-  const exactByCode = results.find(
-    (customer) => customer.code.toLocaleLowerCase('tr-TR') === codePart
-  );
-  if (exactByCode) return exactByCode;
-
-  const lower = trimmed.toLocaleLowerCase('tr-TR');
-  return (
-    results.find((customer) => customer.name.toLocaleLowerCase('tr-TR') === lower) ?? null
-  );
-}
-
 export default function CustomerPayment({
   f2Trigger = 0,
   initialCustomerId,
@@ -175,8 +161,6 @@ export default function CustomerPayment({
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerResults, setCustomerResults] = useState<Customer[]>([]);
-  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
-  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');
   const [amount, setAmount] = useState('');
   const [amountCurrency, setAmountCurrency] = useState<PaymentCurrency>('USD');
@@ -193,9 +177,6 @@ export default function CustomerPayment({
     name: string;
   } | null>(null);
   const [editCustomerSearch, setEditCustomerSearch] = useState('');
-  const [editCustomerResults, setEditCustomerResults] = useState<Customer[]>([]);
-  const [editCustomerDropdownOpen, setEditCustomerDropdownOpen] = useState(false);
-  const [editCustomerSearchLoading, setEditCustomerSearchLoading] = useState(false);
   const [editAmount, setEditAmount] = useState('');
   const [editAmountCurrency, setEditAmountCurrency] = useState<PaymentCurrency>('USD');
   const [editDescription, setEditDescription] = useState('');
@@ -205,8 +186,6 @@ export default function CustomerPayment({
   const [shouldPrint, setShouldPrint] = useState(false);
   const [printReceipt, setPrintReceipt] = useState<PaymentReceipt | null>(null);
 
-  const customerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const editCustomerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const customerSearchRef = useRef<HTMLInputElement>(null);
 
   const f2 = useF2CustomerSearch({ open: f2Modal, f2Trigger });
@@ -291,41 +270,9 @@ export default function CustomerPayment({
     }
   }, [f2Trigger]);
 
-  useEffect(() => {
-    const query = customerSearch.trim();
-    if (!customerDropdownOpen || query.length < 1) {
-      setCustomerResults([]);
-      return;
-    }
-
-    if (customerDebounceRef.current) clearTimeout(customerDebounceRef.current);
-
-    customerDebounceRef.current = setTimeout(async () => {
-      setCustomerSearchLoading(true);
-      try {
-        const response = await axios.get<PaginatedListResponse<Customer>>(
-          `${API_BASE}/api/customers`,
-          { params: { search: query, limit: 20, page: 1 } }
-        );
-        if (response.data.success) {
-          setCustomerResults(ensureArray(response.data.data));
-        }
-      } catch {
-        setCustomerResults([]);
-      } finally {
-        setCustomerSearchLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      if (customerDebounceRef.current) clearTimeout(customerDebounceRef.current);
-    };
-  }, [customerSearch, customerDropdownOpen]);
-
   const selectCustomer = useCallback((customer: Customer) => {
     setSelectedCustomer(customer);
     setCustomerSearch(`${customer.code} — ${customer.name}`);
-    setCustomerDropdownOpen(false);
   }, []);
 
   const refreshSelectedCustomer = useCallback(async (customerId: number) => {
@@ -488,8 +435,6 @@ export default function CustomerPayment({
     setEditingPayment(payment);
     setEditCustomer(payment.customer);
     setEditCustomerSearch(`${payment.customer.code} — ${payment.customer.name}`);
-    setEditCustomerResults([]);
-    setEditCustomerDropdownOpen(false);
     setEditAmount(String(payment.amount));
     setEditAmountCurrency('USD');
     setEditDescription(payment.description);
@@ -501,49 +446,11 @@ export default function CustomerPayment({
     setEditingPayment(null);
     setEditCustomer(null);
     setEditCustomerSearch('');
-    setEditCustomerResults([]);
-    setEditCustomerDropdownOpen(false);
   };
-
-  useEffect(() => {
-    if (!editingPayment || !editCustomerDropdownOpen) {
-      setEditCustomerResults([]);
-      return;
-    }
-    const query = editCustomerSearch.trim();
-    if (query.length < 1) {
-      setEditCustomerResults([]);
-      return;
-    }
-
-    if (editCustomerDebounceRef.current) clearTimeout(editCustomerDebounceRef.current);
-
-    editCustomerDebounceRef.current = setTimeout(async () => {
-      setEditCustomerSearchLoading(true);
-      try {
-        const response = await axios.get<PaginatedListResponse<Customer>>(
-          `${API_BASE}/api/customers`,
-          { params: { search: query, limit: 20, page: 1 } }
-        );
-        if (response.data.success) {
-          setEditCustomerResults(ensureArray(response.data.data));
-        }
-      } catch {
-        setEditCustomerResults([]);
-      } finally {
-        setEditCustomerSearchLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      if (editCustomerDebounceRef.current) clearTimeout(editCustomerDebounceRef.current);
-    };
-  }, [editingPayment, editCustomerSearch, editCustomerDropdownOpen]);
 
   const selectEditCustomer = (customer: Customer) => {
     setEditCustomer({ id: customer.id, code: customer.code, name: customer.name });
     setEditCustomerSearch(`${customer.code} — ${customer.name}`);
-    setEditCustomerDropdownOpen(false);
   };
 
   const handleSaveEdit = async () => {
@@ -673,65 +580,19 @@ export default function CustomerPayment({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="relative">
               <label className="block text-sm font-medium text-slate-700 mb-1">Müşteri</label>
-              <input
-                ref={customerSearchRef}
-                type="text"
+              <InlineCustomerSearchInput
                 value={customerSearch}
-                onChange={(e) => {
-                  setCustomerSearch(e.target.value);
-                  setCustomerDropdownOpen(true);
-                  if (!e.target.value.trim()) setSelectedCustomer(null);
+                onChange={(text) => {
+                  setCustomerSearch(text);
+                  if (!text.trim()) setSelectedCustomer(null);
                 }}
-                onFocus={() => setCustomerDropdownOpen(true)}
-                onBlur={() => {
-                  window.setTimeout(() => setCustomerDropdownOpen(false), 150);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const picked = pickCustomerFromSearch(customerSearch, customerResults);
-                    if (picked) selectCustomer(picked);
-                  }
-                }}
-                placeholder="Kod veya isim ile ara..."
-                className={inputClass}
-                autoComplete="off"
+                onSelect={selectCustomer}
+                onResultsChange={setCustomerResults}
+                selectedCustomer={selectedCustomer}
+                inputRef={customerSearchRef}
+                inputClassName={inputClass}
+                accentClass="emerald"
               />
-              {selectedCustomer && (
-                <p className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
-                  Seçili: {selectedCustomer.code} — {selectedCustomer.name}
-                </p>
-              )}
-              {customerDropdownOpen && (customerSearch.trim() || customerResults.length > 0) && (
-                <ul className="absolute z-20 left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg divide-y divide-slate-100">
-                  {customerSearchLoading && (
-                    <li className="px-3 py-2 text-sm text-slate-400">Aranıyor...</li>
-                  )}
-                  {!customerSearchLoading &&
-                    customerResults.map((customer) => (
-                      <li
-                        key={customer.id}
-                        onMouseDown={() => selectCustomer(customer)}
-                        className="px-3 py-2 text-sm cursor-pointer hover:bg-emerald-50 flex items-center justify-between gap-2"
-                      >
-                        <span>
-                          <span className="font-medium">{customer.code}</span>
-                          <span className="text-slate-500"> — {customer.name}</span>
-                        </span>
-                        <span
-                          className={`text-xs font-semibold shrink-0 ${balanceStyles(customer.balance).text}`}
-                        >
-                          {formatMoney(customer.balance)}
-                        </span>
-                      </li>
-                    ))}
-                  {!customerSearchLoading &&
-                    customerSearch.trim() &&
-                    customerResults.length === 0 && (
-                      <li className="px-3 py-2 text-sm text-slate-400">Sonuç yok</li>
-                    )}
-                </ul>
-              )}
               <button
                 type="button"
                 onClick={openF2Modal}
@@ -976,51 +837,27 @@ export default function CustomerPayment({
             <div className="space-y-4">
               <div className="relative">
                 <label className="field-label">Müşteri</label>
-                <input
-                  type="text"
+                <InlineCustomerSearchInput
                   value={editCustomerSearch}
-                  onChange={(e) => {
-                    setEditCustomerSearch(e.target.value);
-                    setEditCustomerDropdownOpen(true);
-                    if (!e.target.value.trim()) setEditCustomer(null);
+                  onChange={(text) => {
+                    setEditCustomerSearch(text);
+                    if (!text.trim()) setEditCustomer(null);
                   }}
-                  onFocus={() => setEditCustomerDropdownOpen(true)}
-                  onBlur={() => {
-                    window.setTimeout(() => setEditCustomerDropdownOpen(false), 150);
-                  }}
-                  placeholder="Kod veya isim ile ara..."
-                  className="field-input"
-                  autoComplete="off"
+                  onSelect={selectEditCustomer}
+                  selectedCustomer={
+                    editCustomer
+                      ? ({
+                          ...editCustomer,
+                          creditLimit: 0,
+                          balance: 0,
+                          createdAt: '',
+                          updatedAt: '',
+                        } as Customer)
+                      : null
+                  }
+                  inputClassName="field-input"
+                  accentClass="emerald"
                 />
-                {editCustomer && (
-                  <p className="mt-1.5 text-xs font-semibold text-emerald-800">
-                    Seçili: {editCustomer.code} — {editCustomer.name}
-                  </p>
-                )}
-                {editCustomerDropdownOpen &&
-                  (editCustomerSearch.trim() || editCustomerResults.length > 0) && (
-                    <ul className="absolute z-30 left-0 right-0 mt-1 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg divide-y divide-slate-100">
-                      {editCustomerSearchLoading && (
-                        <li className="px-3 py-2 text-sm text-slate-400">Aranıyor...</li>
-                      )}
-                      {!editCustomerSearchLoading &&
-                        editCustomerResults.map((customer) => (
-                          <li
-                            key={customer.id}
-                            onMouseDown={() => selectEditCustomer(customer)}
-                            className="cursor-pointer px-3 py-2 text-sm hover:bg-emerald-50"
-                          >
-                            <span className="font-medium">{customer.code}</span>
-                            <span className="text-slate-500"> — {customer.name}</span>
-                          </li>
-                        ))}
-                      {!editCustomerSearchLoading &&
-                        editCustomerSearch.trim() &&
-                        editCustomerResults.length === 0 && (
-                          <li className="px-3 py-2 text-sm text-slate-400">Sonuç yok</li>
-                        )}
-                    </ul>
-                  )}
               </div>
               <div>
                 <label className="field-label">İşlem Tipi</label>

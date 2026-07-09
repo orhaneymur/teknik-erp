@@ -3304,6 +3304,7 @@ app.post<{
     safeId: number;
     exchangeRate?: number;
     originalInvoiceId: number;
+    orderNotes?: string;
     /** @deprecated Satır bazlı isChinaReturn kullanın */
     isDefective?: boolean;
     items: StoreItem[];
@@ -3315,6 +3316,7 @@ app.post<{
     safeId,
     exchangeRate,
     originalInvoiceId,
+    orderNotes: bodyOrderNotes,
     isDefective,
     items,
   } = request.body;
@@ -3407,7 +3409,9 @@ app.post<{
           totalAmountTl,
           totalAmountUsd,
           originalInvoiceId: sourceInvoice.id,
-          orderNotes: `Kaynak fatura: ${sourceInvoice.invoiceNo}`,
+          orderNotes: [bodyOrderNotes?.trim(), `Kaynak fatura: ${sourceInvoice.invoiceNo}`]
+            .filter(Boolean)
+            .join(' · '),
           items: {
             create: normalizedItems.map((item) => ({
               productId: item.productId,
@@ -4423,6 +4427,46 @@ app.get('/api/settings/brand-models', async () => {
   };
 });
 
+app.get<{ Querystring: { categoryId?: string; brand?: string } }>(
+  '/api/settings/model-suggestions',
+  async (request) => {
+    const categoryIdRaw = request.query.categoryId;
+    const brandQuery = request.query.brand?.trim().toLocaleLowerCase('tr-TR') ?? '';
+
+    const where: Prisma.ProductWhereInput = {
+      model: { not: null },
+      NOT: { model: '' },
+    };
+    if (categoryIdRaw) {
+      const categoryId = Number(categoryIdRaw);
+      if (!Number.isNaN(categoryId)) where.categoryId = categoryId;
+    }
+
+    const products = await prisma.product.findMany({
+      where,
+      select: { model: true, brand: true },
+    });
+
+    const names = new Set<string>();
+    for (const product of products) {
+      const model = product.model?.trim();
+      if (!model) continue;
+      if (brandQuery) {
+        const productBrand = product.brand?.trim().toLocaleLowerCase('tr-TR') ?? '';
+        if (productBrand !== brandQuery) continue;
+      }
+      names.add(model);
+    }
+
+    const data = [...names].sort((a, b) => a.localeCompare(b, 'tr'));
+    return {
+      success: true,
+      data,
+      message: 'Model suggestions retrieved successfully.',
+    };
+  }
+);
+
 app.post<{ Body: { name: string; categoryId?: number; kind?: 'MARKA' | 'MODEL' } }>(
   '/api/settings/brand-model',
   async (request, reply) => {
@@ -4951,6 +4995,7 @@ app.get<{ Querystring: { customerId?: string } }>(
           paymentMethod: true,
           paymentType: true,
           processedBy: true,
+          orderNotes: true,
           createdAt: true,
           items: {
             select: {
@@ -4995,6 +5040,7 @@ app.get<{ Querystring: { customerId?: string } }>(
       paymentMethod?: string | null;
       paymentType?: string | null;
       processedBy?: string | null;
+      orderNotes?: string | null;
       amount?: number;
       safeName?: string | null;
       items?: StatementItem[];
@@ -5016,6 +5062,7 @@ app.get<{ Querystring: { customerId?: string } }>(
         paymentMethod: inv.paymentMethod,
         paymentType: inv.paymentType,
         processedBy: inv.processedBy,
+        orderNotes: inv.orderNotes,
         amount: inv.totalAmountUsd ?? inv.totalAmountTl,
         items: inv.items.map((item) => ({
           id: item.id,

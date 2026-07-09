@@ -91,24 +91,60 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
     });
   }, [brandModels, categoryId]);
 
-  const filteredModelOptions = useMemo(() => {
-    const brandQuery = brandText.trim().toLocaleLowerCase('tr-TR');
-    if (!brandQuery) return modelOptions;
-    return modelOptions.filter((item) =>
-      item.name.toLocaleLowerCase('tr-TR').includes(brandQuery)
-    );
-  }, [modelOptions, brandText]);
+  const [productModelHints, setProductModelHints] = useState<string[]>([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (categoryId !== '') params.set('categoryId', String(categoryId));
+    if (brandText.trim()) params.set('brand', brandText.trim());
+
+    void axios
+      .get<{ success: boolean; data: string[] }>(
+        `${API_BASE}/api/settings/model-suggestions?${params.toString()}`
+      )
+      .then((res) => {
+        if (res.data.success) setProductModelHints(ensureArray(res.data.data));
+      })
+      .catch(() => setProductModelHints([]));
+  }, [categoryId, brandText]);
+
+  const modelTypeaheadOptions = useMemo(() => {
+    const options: { id: string | number; label: string }[] = modelOptions.map((item) => ({
+      id: item.id,
+      label: item.name,
+    }));
+    const seen = new Set(options.map((o) => o.label.toLocaleLowerCase('tr-TR')));
+    for (const name of productModelHints) {
+      const key = name.toLocaleLowerCase('tr-TR');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      options.push({ id: `product-${key}`, label: name });
+    }
+    return options.sort((a, b) => a.label.localeCompare(b.label, 'tr'));
+  }, [modelOptions, productModelHints]);
 
   const selectedBrandName = brandText.trim();
   const selectedModelName = modelText.trim();
 
+  const matchedBrandId = useMemo(() => {
+    if (!selectedBrandName) return undefined;
+    const match = brandOptions.find(
+      (item) =>
+        item.name.toLocaleLowerCase('tr-TR') === selectedBrandName.toLocaleLowerCase('tr-TR')
+    );
+    return match?.id;
+  }, [brandOptions, selectedBrandName]);
+
   const matchedModelId = useMemo(() => {
     if (!selectedModelName) return undefined;
     const match = modelOptions.find(
-      (item) => item.name.toLocaleLowerCase('tr-TR') === selectedModelName.toLocaleLowerCase('tr-TR')
+      (item) =>
+        item.name.toLocaleLowerCase('tr-TR') === selectedModelName.toLocaleLowerCase('tr-TR')
     );
     return match?.id;
   }, [modelOptions, selectedModelName]);
+
+  const resolvedBrandModelId = matchedModelId ?? matchedBrandId;
 
   const parsedCost = Number(costPriceUsd) || 0;
   const parsedSale = Number(priceUsd) || 0;
@@ -172,9 +208,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         barcode: barcode.trim() || undefined,
         initialQuantity: Number(initialQuantity) || 0,
         categoryId: categoryId !== '' ? Number(categoryId) : undefined,
-        brand: selectedBrandName || undefined,
-        model: selectedModelName || undefined,
-        brandModelId: matchedModelId,
+        brandModelId: resolvedBrandModelId,
         appearance: appearance || undefined,
         quality: quality || undefined,
         rbmPrice: parsedRbm,
@@ -211,7 +245,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         <div>
           <h1 className="page-title">Stok Kartı Oluştur</h1>
           <p className="page-subtitle">
-            Kategori ile tanımları filtreler · marka/model listeden veya elle yazılır
+            Yazınca altta tanımlar listelenir · yeni kategori/marka için Tanımlar → Kategori / Marka
           </p>
         </div>
       </div>
@@ -254,7 +288,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
                 inputClassName={fieldClass}
               />
               <p className="mt-1 text-caption text-slate-400">
-                Yazınca altta öneriler çıkar · Excel tanımlarından dolar
+                Yazınca altta öneriler çıkar · listeden seçin
               </p>
             </div>
 
@@ -277,10 +311,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
                 <TypeaheadField
                   value={modelText}
                   onChange={setModelText}
-                  options={filteredModelOptions.map((item) => ({
-                    id: item.id,
-                    label: item.name,
-                  }))}
+                  options={modelTypeaheadOptions}
                   placeholder="Yazmaya başlayın..."
                   inputClassName={fieldClass}
                 />
@@ -298,7 +329,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
                 placeholder="Ekran, batarya, cam..."
               />
               <p className="mt-1 text-caption text-slate-400">
-                Marka + model + stok adı birleşerek kayıt adı oluşur · tanımlar opsiyonel
+                Marka + model + stok adı birleşerek kayıt adı oluşur
               </p>
             </div>
 

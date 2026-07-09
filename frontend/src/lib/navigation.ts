@@ -271,3 +271,53 @@ export function getPageLabel(page: PageId): string {
   }
   return dashboardItem.label;
 }
+
+export const APP_DOCUMENT_TITLE = 'Akgün Teknik ERP';
+
+export type DocumentTitleOptions = {
+  invoiceFilter?: InvoiceFilter;
+  preOrderOnly?: boolean;
+  editInvoiceId?: number;
+  customerName?: string;
+};
+
+function getDocumentTitleLabel(
+  page: PageId,
+  options?: DocumentTitleOptions
+): string {
+  if (page === 'invoices') {
+    if (options?.preOrderOnly) return 'Ön Siparişler';
+    if (options?.invoiceFilter === 'SATIS') return 'Satış Faturaları';
+    if (options?.invoiceFilter === 'ALIS') return 'Alış Faturaları';
+    if (options?.invoiceFilter === 'IADE') return 'İade Faturaları';
+    return 'Fatura Listesi';
+  }
+
+  if (page === 'customer-detail') {
+    const name = options?.customerName?.trim();
+    return name || 'Müşteri Kartı';
+  }
+
+  if (options?.editInvoiceId) {
+    if (page === 'sales' || page === 'dashboard' || page === 'pre-orders') {
+      return 'Satış Faturası Düzenle';
+    }
+    if (page === 'invoice-purchase') return 'Alış Faturası Düzenle';
+    if (page === 'sales-return') return 'İade Faturası Düzenle';
+    return 'Fatura Düzenle';
+  }
+
+  return getPageLabel(page);
+}
+
+export function formatDocumentTitle(pageTitle: string): string {
+  const label = pageTitle.trim();
+  return label ? `${label} · ${APP_DOCUMENT_TITLE}` : APP_DOCUMENT_TITLE;
+}
+
+export function getDocumentTitle(
+  page: PageId,
+  options?: DocumentTitleOptions
+): string {
+  return formatDocumentTitle(getDocumentTitleLabel(page, options));
+}

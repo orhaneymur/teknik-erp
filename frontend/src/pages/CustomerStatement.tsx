@@ -4,12 +4,19 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Eye,
   FileText,
+  Pencil,
   Printer,
 } from 'lucide-react';
 import { printDocument } from '../lib/printMode';
 import CustomerNameLink from '../components/CustomerNameLink';
 import CustomerSearchPanel from '../components/CustomerSearchPanel';
+import InvoiceDetailModal from '../components/InvoiceDetailModal';
+import InvoiceInlineEditor, {
+  isEditableInvoiceType,
+  type EditableInvoiceRef,
+} from '../components/InvoiceInlineEditor';
 import {
   API_BASE,
   balanceStyles,
@@ -41,6 +48,7 @@ type StatementLine = {
   paymentMethod?: string | null;
   paymentType?: string | null;
   processedBy?: string | null;
+  orderNotes?: string | null;
   amount?: number;
   safeName?: string | null;
   items?: StatementItem[];
@@ -52,8 +60,10 @@ function lineKey(line: StatementLine) {
 
 export default function CustomerStatement({
   initialCustomerId,
+  onNotify,
 }: {
   initialCustomerId?: number;
+  onNotify?: (type: 'success' | 'error', message: string) => void;
 } = {}) {
   const [customerId, setCustomerId] = useState<number | ''>(
     initialCustomerId && initialCustomerId > 0 ? initialCustomerId : ''
@@ -64,6 +74,37 @@ export default function CustomerStatement({
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [printLines, setPrintLines] = useState<StatementLine[]>([]);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
+  const [editingInvoice, setEditingInvoice] = useState<EditableInvoiceRef | null>(null);
+
+  const notify = useCallback(
+    (type: 'success' | 'error', message: string) => onNotify?.(type, message),
+    [onNotify]
+  );
+
+  const loadStatement = useCallback(() => {
+    if (customerId === '') {
+      setCustomer(null);
+      setLines([]);
+      return;
+    }
+
+    setLoading(true);
+    axios
+      .get<{
+        success: boolean;
+        data: { customer: Customer; lines: StatementLine[] };
+      }>(`${API_BASE}/api/reports/customer-statement`, {
+        params: { customerId },
+      })
+      .then((res) => {
+        if (res.data.success) {
+          setCustomer(res.data.data.customer);
+          setLines(res.data.data.lines);
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [customerId]);
 
   const selectCustomer = useCallback((picked: Customer) => {
     setCustomerId(picked.id);
@@ -97,28 +138,42 @@ export default function CustomerStatement({
   }, [initialCustomerId, selectCustomer]);
 
   useEffect(() => {
-    if (customerId === '') {
-      setCustomer(null);
-      setLines([]);
-      return;
-    }
+    loadStatement();
+  }, [loadStatement]);
 
-    setLoading(true);
-    axios
-      .get<{
-        success: boolean;
-        data: { customer: Customer; lines: StatementLine[] };
-      }>(`${API_BASE}/api/reports/customer-statement`, {
-        params: { customerId },
-      })
-      .then((res) => {
-        if (res.data.success) {
-          setCustomer(res.data.data.customer);
-          setLines(res.data.data.lines);
-        }
-      })
-      .finally(() => setLoading(false));
-  }, [customerId]);
+  const openInvoiceView = useCallback((invoiceId: number) => {
+    setViewingInvoiceId(invoiceId);
+  }, []);
+
+  const openInvoiceEdit = useCallback(
+    (line: StatementLine) => {
+      const type = line.invoiceType ?? '';
+      if (!isEditableInvoiceType(type)) {
+        notify('error', 'Bu fiş türü düzenlenemez.');
+        return;
+      }
+      setViewingInvoiceId(null);
+      setEditingInvoice({ id: line.id, type });
+    },
+    [notify]
+  );
+
+  const closeInvoiceEdit = useCallback(() => {
+    setEditingInvoice(null);
+  }, []);
+
+  const handleInvoiceSaved = useCallback(() => {
+    closeInvoiceEdit();
+    loadStatement();
+  }, [closeInvoiceEdit, loadStatement]);
+
+  const handleInvoiceEditFromModal = useCallback(
+    (invoice: EditableInvoiceRef) => {
+      setViewingInvoiceId(null);
+      setEditingInvoice(invoice);
+    },
+    []
+  );
 
   const selectedLines = useMemo(
     () => lines.filter((line) => selectedKeys.has(lineKey(line))),
@@ -176,6 +231,17 @@ export default function CustomerStatement({
     [printLines]
   );
 
+  if (editingInvoice) {
+    return (
+      <InvoiceInlineEditor
+        invoice={editingInvoice}
+        onNotify={notify}
+        onCancelEdit={closeInvoiceEdit}
+        onSaved={handleInvoiceSaved}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4 print:space-y-0">
       {/* PDF / A4 */}
@@ -200,6 +266,11 @@ export default function CustomerStatement({
                   {formatDate(line.date)}
                   {line.paymentMethod ? ` · ${line.paymentMethod}` : ''}
                 </p>
+                {line.orderNotes?.trim() && (
+                  <div className="pdf-notes" style={{ textAlign: 'left' }}>
+                    <strong>Açıklama:</strong> {line.orderNotes.trim()}
+                  </div>
+                )}
                 <table>
                   <thead>
                     <tr>
@@ -279,6 +350,9 @@ export default function CustomerStatement({
                   {formatDate(line.date)}
                   {line.paymentMethod ? ` · ${line.paymentMethod}` : ''}
                 </p>
+                {line.orderNotes?.trim() && (
+                  <p className="receipt-slip-notes">{line.orderNotes.trim()}</p>
+                )}
                 <div className="receipt-item-row receipt-item-head">
                   <span className="receipt-item-name">Ürün</span>
                   <span className="receipt-item-qty">Ad</span>
@@ -348,7 +422,7 @@ export default function CustomerStatement({
           <div>
             <h1 className="page-title">Müşteri Ekstre</h1>
             <p className="text-sm text-slate-500">
-              Fatura içeriğini açın · fiş seçip tek veya toplu yazdırın
+              Fiş görüntüle ve düzenle · seçili fişleri yazdır
             </p>
           </div>
         </div>
@@ -429,7 +503,7 @@ export default function CustomerStatement({
                       Alacak
                     </th>
                     <th className="px-3 py-3 text-right text-xs font-semibold uppercase text-slate-500">
-                      Yazdır
+                      İşlem
                     </th>
                   </tr>
                 </thead>
@@ -478,13 +552,16 @@ export default function CustomerStatement({
                           </td>
                           <td className="px-3 py-3 text-sm">
                             {isInvoice ? (
-                              <button
-                                type="button"
-                                onClick={() => toggleExpand(key)}
-                                className="text-left font-medium text-indigo-700 hover:underline"
-                              >
-                                {line.invoiceNo}{' '}
+                              <div className="text-left">
+                                <button
+                                  type="button"
+                                  onClick={() => openInvoiceView(line.id)}
+                                  className="font-medium text-indigo-700 hover:underline"
+                                >
+                                  {line.invoiceNo}
+                                </button>
                                 <span className="font-normal text-slate-500">
+                                  {' '}
                                   ({invoiceTypeLabel(line.invoiceType ?? '')})
                                 </span>
                                 {itemCount > 0 && (
@@ -492,7 +569,7 @@ export default function CustomerStatement({
                                     · {itemCount} kalem
                                   </span>
                                 )}
-                              </button>
+                              </div>
                             ) : (
                               <div>
                                 <p className="font-medium text-slate-800">
@@ -512,7 +589,29 @@ export default function CustomerStatement({
                             {line.credit > 0 ? formatMoney(line.credit) : '—'}
                           </td>
                           <td className="px-3 py-3 text-right">
-                            <div className="inline-flex items-center gap-1">
+                            <div className="inline-flex flex-wrap items-center justify-end gap-1">
+                              {isInvoice && isEditableInvoiceType(line.invoiceType) && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => openInvoiceView(line.id)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                                    title="Fişi görüntüle"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Gör
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openInvoiceEdit(line)}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-800 hover:bg-indigo-100"
+                                    title="Fişi düzenle"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    Düzenle
+                                  </button>
+                                </>
+                              )}
                               <button
                                 type="button"
                                 onClick={() => printReceipts([line])}
@@ -520,7 +619,7 @@ export default function CustomerStatement({
                                 title="Fiş yazdır"
                               >
                                 <Printer className="h-3.5 w-3.5" />
-                                Fiş Yazdır
+                                Yazdır
                               </button>
                             </div>
                           </td>
@@ -531,6 +630,13 @@ export default function CustomerStatement({
                               {(line.items ?? []).length === 0 ? (
                                 <p className="text-sm text-slate-400">Kalem yok.</p>
                               ) : (
+                                <>
+                                  {line.orderNotes?.trim() && (
+                                    <p className="mb-2 text-sm text-slate-600">
+                                      <span className="font-semibold text-slate-700">Açıklama:</span>{' '}
+                                      {line.orderNotes.trim()}
+                                    </p>
+                                  )}
                                 <table className="min-w-full text-sm">
                                   <thead>
                                     <tr className="text-xs uppercase text-slate-500">
@@ -578,6 +684,7 @@ export default function CustomerStatement({
                                     ))}
                                   </tbody>
                                 </table>
+                                </>
                               )}
                             </td>
                           </tr>
@@ -598,6 +705,12 @@ export default function CustomerStatement({
           )}
         </section>
       </div>
+
+      <InvoiceDetailModal
+        invoiceId={viewingInvoiceId}
+        onClose={() => setViewingInvoiceId(null)}
+        onEdit={handleInvoiceEditFromModal}
+      />
     </div>
   );
 }

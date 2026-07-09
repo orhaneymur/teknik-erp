@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { FileInput, Printer, Save, Search, ShoppingCart, Trash2, X, ArrowLeft } from 'lucide-react';
+import { Printer, Save, Search, ShoppingCart, Trash2, X, ArrowLeft } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
+import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList, {
   resolvePurchaseUnitPriceUsd,
 } from '../components/F2ProductList';
@@ -15,40 +16,12 @@ import {
   formatUsd,
   roundPrice,
   type Customer,
-  type PaginatedListResponse,
 } from '../lib/api';
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
 import { printDocument } from '../lib/printMode';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
 const EXCHANGE_RATE = 1;
-
-function pickSupplierFromSearch(query: string, results: Customer[]): Customer | null {
-  const trimmed = query.trim();
-  if (!trimmed || results.length === 0) return null;
-
-  const codePart = trimmed.split(/[—\-]/)[0].trim().toLocaleLowerCase('tr-TR');
-  const exactByCode = results.find(
-    (customer) => customer.code.toLocaleLowerCase('tr-TR') === codePart
-  );
-  if (exactByCode) return exactByCode;
-
-  const lower = trimmed.toLocaleLowerCase('tr-TR');
-  const exactByName = results.find(
-    (customer) => customer.name.toLocaleLowerCase('tr-TR') === lower
-  );
-  if (exactByName) return exactByName;
-
-  if (results.length === 1) return results[0];
-
-  return (
-    results.find(
-      (customer) =>
-        customer.name.toLocaleLowerCase('tr-TR').includes(lower) ||
-        customer.code.toLocaleLowerCase('tr-TR').includes(lower)
-    ) ?? null
-  );
-}
 
 type Branch = { id: number; name: string; type: string };
 type Safe = {
@@ -112,9 +85,6 @@ export default function PurchaseCreate({
   });
   const [selectedSupplier, setSelectedSupplier] = useState<Customer | null>(null);
   const [supplierSearch, setSupplierSearch] = useState('');
-  const [supplierResults, setSupplierResults] = useState<Customer[]>([]);
-  const [supplierDropdownOpen, setSupplierDropdownOpen] = useState(false);
-  const [supplierSearchLoading, setSupplierSearchLoading] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<number | ''>('');
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFT/Havale');
@@ -148,7 +118,6 @@ export default function PurchaseCreate({
   );
 
   const supplierSearchRef = useRef<HTMLInputElement>(null);
-  const supplierDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const f2 = useF2ProductSearch({
     open: searchModal,
@@ -327,40 +296,6 @@ export default function PurchaseCreate({
     loadInitData();
   }, [loadInitData]);
 
-  useEffect(() => {
-    const query = supplierSearch.trim();
-    if (!supplierDropdownOpen) return;
-
-    if (supplierDebounceRef.current) clearTimeout(supplierDebounceRef.current);
-
-    if (!query) {
-      setSupplierResults([]);
-      setSupplierSearchLoading(false);
-      return;
-    }
-
-    setSupplierSearchLoading(true);
-    supplierDebounceRef.current = setTimeout(async () => {
-      try {
-        const response = await axios.get<PaginatedListResponse<Customer>>(
-          `${API_BASE}/api/customers`,
-          { params: { search: query, page: 1, limit: 20 } }
-        );
-        if (response.data.success) {
-          setSupplierResults(ensureArray(response.data.data));
-        }
-      } catch {
-        setSupplierResults([]);
-      } finally {
-        setSupplierSearchLoading(false);
-      }
-    }, 300);
-
-    return () => {
-      if (supplierDebounceRef.current) clearTimeout(supplierDebounceRef.current);
-    };
-  }, [supplierSearch, supplierDropdownOpen]);
-
   const openSearchModal = useCallback(() => {
     setSearchModal(true);
   }, []);
@@ -384,7 +319,6 @@ export default function PurchaseCreate({
   const selectSupplier = (customer: Customer) => {
     setSelectedSupplier(customer);
     setSupplierSearch(`${customer.code} — ${customer.name}`);
-    setSupplierDropdownOpen(false);
   };
 
   const addProductToCart = (product: F2Product | Product) => {
@@ -575,10 +509,8 @@ export default function PurchaseCreate({
     }
   };
 
-  const inputClass =
-    'w-full rounded-lg border border-slate-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 text-sm px-3 py-2 bg-white';
-  const labelClass =
-    'block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1';
+  const inputClass = 'field-input';
+  const labelClass = 'field-label';
 
   if (editLoading) {
     return (
@@ -693,7 +625,7 @@ export default function PurchaseCreate({
         </div>
       </div>
 
-      <div className="flex items-center gap-3 print:hidden">
+      <div className="mb-2 flex items-center gap-3 print:hidden">
         {isEditMode && onCancelEdit && (
           <button
             type="button"
@@ -704,24 +636,25 @@ export default function PurchaseCreate({
             <ArrowLeft className="h-5 w-5" />
           </button>
         )}
-        <div className="p-2.5 rounded-xl bg-rose-600 text-white">
-          <FileInput className="w-5 h-5" />
+        <div className={`p-2.5 rounded-xl text-white ${isEditMode ? 'bg-violet-600' : 'bg-emerald-600'}`}>
+          <ShoppingCart className="w-5 h-5" />
         </div>
         <div>
           <h1 className="page-title">
-            {isEditMode ? 'Alış Faturası Düzenle' : 'Alış Faturası'}
+            {isEditMode ? 'Alış Faturası Düzenle' : 'Hızlı Alış Yap'}
           </h1>
-          <p className="text-sm text-slate-500">
+          <p className="page-subtitle">
             {isEditMode
               ? `${displayInvoiceNo} · kalemler ve üst bilgi güncellenir`
-              : 'Tedarikçiden mal kabul · Fiyatlar $ (USD) · MERKEZ_DEPO stok artışı'}
+              : 'Esnaf fatura tezgâhı · F2 stok ara · Fiyatlar $ (USD) · MERKEZ_DEPO stok artışı'}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 print:hidden">
+      {/* ÜST 4 KUTU */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 print:hidden">
         <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-          <h2 className="text-sm font-bold text-rose-700 border-b border-rose-100 pb-2">
+          <h2 className="text-sm font-bold text-indigo-700 border-b border-indigo-100 pb-2">
             Evrak Bilgileri
           </h2>
           <div>
@@ -730,7 +663,7 @@ export default function PurchaseCreate({
               type="text"
               readOnly
               value={isEditMode ? displayInvoiceNo : initData.nextInvoiceNo || 'AF...'}
-              className={`${inputClass} bg-slate-50 font-mono font-bold text-rose-700`}
+              className={`${inputClass} bg-slate-50 font-mono font-bold text-indigo-700`}
             />
           </div>
           <div>
@@ -754,72 +687,53 @@ export default function PurchaseCreate({
         </section>
 
         <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3 relative">
-          <h2 className="text-sm font-bold text-rose-700 border-b border-rose-100 pb-2">
-            Tedarikçi
+          <h2 className="text-sm font-bold text-indigo-700 border-b border-indigo-100 pb-2">
+            Tedarikçi Bilgileri
           </h2>
           <div>
             <label className={labelClass}>Tedarikçi Seçimi</label>
-            <input
-              ref={supplierSearchRef}
-              type="text"
+            <InlineCustomerSearchInput
               value={supplierSearch}
-              onChange={(e) => {
-                setSupplierSearch(e.target.value);
-                setSupplierDropdownOpen(true);
-                if (!e.target.value.trim()) setSelectedSupplier(null);
+              onChange={(text) => {
+                setSupplierSearch(text);
+                if (!text.trim()) setSelectedSupplier(null);
               }}
-              onFocus={() => setSupplierDropdownOpen(true)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  const picked = pickSupplierFromSearch(supplierSearch, supplierResults);
-                  if (picked) {
-                    selectSupplier(picked);
-                    setSupplierDropdownOpen(false);
-                  }
-                }
-              }}
+              onSelect={selectSupplier}
+              selectedCustomer={selectedSupplier}
+              inputRef={supplierSearchRef}
+              inputClassName={inputClass}
+              accentClass="indigo"
               placeholder="Kod veya ünvan ile ara..."
-              className={inputClass}
-              autoComplete="off"
+              showSelectedHint
             />
-            {supplierDropdownOpen &&
-              (supplierSearch.trim() || supplierResults.length > 0) && (
-                <ul className="absolute z-20 left-4 right-4 mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg divide-y divide-slate-100">
-                  {supplierSearchLoading && (
-                    <li className="px-3 py-2 text-sm text-slate-400">Aranıyor...</li>
-                  )}
-                  {!supplierSearchLoading &&
-                    supplierResults.map((customer) => (
-                      <li
-                        key={customer.id}
-                        onMouseDown={() => selectSupplier(customer)}
-                        className="px-3 py-2 text-sm cursor-pointer hover:bg-rose-50"
-                      >
-                        <span className="font-medium">{customer.code}</span>
-                        <span className="text-slate-500"> — {customer.name}</span>
-                      </li>
-                    ))}
-                </ul>
-              )}
           </div>
-          <div>
-            <label className={labelClass}>Cari Bakiye</label>
-            <div
-              className={`rounded-lg border px-3 py-2 text-sm font-bold ${
-                selectedSupplier && selectedSupplier.balance < 0
-                  ? 'bg-amber-50 border-amber-200 text-amber-800'
-                  : 'bg-slate-50 border-slate-200 text-slate-700'
-              }`}
-            >
-              {selectedSupplier ? formatMoney(selectedSupplier.balance) : '—'}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className={labelClass}>Cari Limiti</label>
+              <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+                {selectedSupplier
+                  ? formatMoney(selectedSupplier.creditLimit)
+                  : '—'}
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Cari Bakiye</label>
+              <div
+                className={`rounded-lg border px-3 py-2 text-sm font-bold ${
+                  selectedSupplier && selectedSupplier.balance < 0
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                }`}
+              >
+                {selectedSupplier ? formatMoney(selectedSupplier.balance) : '—'}
+              </div>
             </div>
           </div>
         </section>
 
         <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-          <h2 className="text-sm font-bold text-rose-700 border-b border-rose-100 pb-2">
-            Ödeme
+          <h2 className="text-sm font-bold text-indigo-700 border-b border-indigo-100 pb-2">
+            Ödeme Bilgileri
           </h2>
           <div>
             <label className={labelClass}>Ödeme Yöntemi</label>
@@ -846,18 +760,19 @@ export default function PurchaseCreate({
             </select>
           </div>
           <div>
-            <label className={labelClass}>Kasa / Banka</label>
+            <label className={labelClass}>Banka / Kasa Seçimi</label>
             <select
               value={selectedSafe}
               onChange={(e) =>
                 setSelectedSafe(e.target.value ? Number(e.target.value) : '')
               }
               disabled={paymentMethod === 'Cari'}
-              className={`${inputClass} disabled:bg-slate-100`}
+              className={`${inputClass} disabled:bg-slate-100 disabled:text-slate-400`}
             >
+              <option value="">Seçin</option>
               {branchSafes.map((safe) => (
                 <option key={safe.id} value={safe.id}>
-                  {safe.name} ({safe.currency})
+                  {safe.name} ({formatMoney(safe.balance, safe.currency)})
                 </option>
               ))}
             </select>
@@ -865,8 +780,8 @@ export default function PurchaseCreate({
         </section>
 
         <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
-          <h2 className="text-sm font-bold text-rose-700 border-b border-rose-100 pb-2">
-            Diğer
+          <h2 className="text-sm font-bold text-indigo-700 border-b border-indigo-100 pb-2">
+            Teslimat & Açıklama
           </h2>
           <div>
             <label className={labelClass}>Şube</label>
@@ -887,6 +802,194 @@ export default function PurchaseCreate({
             </select>
           </div>
           <div>
+            <label className={labelClass}>Sipariş Açıklaması</label>
+            <textarea
+              value={orderNotes}
+              onChange={(e) => setOrderNotes(e.target.value)}
+              rows={3}
+              placeholder="İrsaliye no, açıklama..."
+              className={`${inputClass} resize-none`}
+            />
+          </div>
+        </section>
+      </div>
+
+      <button
+        type="button"
+        onClick={openSearchModal}
+        className="btn btn-secondary btn-block print:hidden"
+      >
+        <Search className="w-5 h-5" />
+        Hızlı Stok Kartı Bul (F2)
+      </button>
+
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 print:hidden">
+        <section className="xl:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-200 flex items-center gap-2 bg-slate-50">
+            <ShoppingCart className="w-5 h-5 text-indigo-600" />
+            <h2 className="font-semibold text-slate-800">Akıllı Sepet</h2>
+            <span className="text-sm text-slate-500">({cart.length} kalem)</span>
+          </div>
+          <div className="overflow-x-auto print:overflow-visible">
+            <table className="receipt-cart-table min-w-full divide-y divide-slate-200 text-xs sm:text-sm">
+              <thead className="bg-slate-100">
+                <tr>
+                  <th className="px-3 py-2.5 text-left text-xs font-bold text-slate-600 uppercase w-24">
+                    Stok Kodu
+                  </th>
+                  <th className="receipt-col-name px-3 py-2.5 text-left text-xs font-bold text-slate-600 uppercase min-w-[11rem] sm:min-w-[14rem]">
+                    Stok Adı
+                  </th>
+                  <th className="px-3 py-2.5 text-right text-xs font-bold text-slate-600 uppercase w-20">
+                    Adet
+                  </th>
+                  <th className="px-3 py-2.5 text-right text-xs font-bold text-slate-600 uppercase w-24">
+                    Maliyet ($)
+                  </th>
+                  <th className="px-3 py-2.5 text-right text-xs font-bold text-slate-600 uppercase w-28">
+                    Toplam
+                  </th>
+                  <th className="px-3 py-2.5 w-10" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {cart.map((item) => {
+                  const lineTotal = roundPrice(item.quantity * item.unitPriceUsd);
+                  return (
+                    <tr key={item.rowId} className="hover:bg-slate-50/80">
+                      <td className="px-3 py-2 font-mono text-[11px] text-slate-600 sm:text-xs align-top">
+                        {item.product.sku}
+                      </td>
+                      <td className="receipt-col-name px-3 py-2 align-top min-w-[11rem] max-w-[32rem]">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setHistoryProduct({
+                              id: item.product.id,
+                              sku: item.product.sku,
+                              name: item.product.name,
+                            })
+                          }
+                          title="Stok hareketlerini gör"
+                          className="receipt-product-name text-left text-[11px] font-medium leading-snug text-indigo-700 break-words underline-offset-2 hover:underline sm:text-xs"
+                        >
+                          {item.product.name}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const qty = Number(e.target.value);
+                            setCart((prev) =>
+                              prev.map((row) =>
+                                row.rowId === item.rowId
+                                  ? { ...row, quantity: qty > 0 ? qty : row.quantity }
+                                  : row
+                              )
+                            );
+                          }}
+                          className="w-16 text-right rounded border-slate-300 text-sm px-1.5 py-1 border focus:border-indigo-500 focus:ring-indigo-500"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.unitPriceUsd}
+                          onChange={(e) => {
+                            const price = Number(e.target.value);
+                            setCart((prev) =>
+                              prev.map((row) =>
+                                row.rowId === item.rowId
+                                  ? {
+                                      ...row,
+                                      unitPriceUsd:
+                                        price >= 0 ? roundPrice(price) : row.unitPriceUsd,
+                                    }
+                                  : row
+                              )
+                            );
+                          }}
+                          className="w-20 text-right rounded border-slate-300 text-sm px-1.5 py-1 border tabular-nums focus:border-indigo-500 focus:ring-indigo-500"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right font-bold text-slate-900 tabular-nums">
+                        {formatUsd(lineTotal)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => removeCartItem(item.rowId)}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {cart.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-16 text-center text-slate-400">
+                      Sepet boş.{' '}
+                      <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-xs">F2</kbd> ile
+                      ürün ekleyin.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside className="h-fit space-y-4 rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm sm:p-5 xl:col-span-1 xl:sticky xl:top-4">
+          <h2 className="border-b border-slate-200 pb-2 text-center font-bold text-slate-800">
+            Fatura Özeti
+          </h2>
+
+          <div className="text-center">
+            <p className="text-xs text-slate-500 uppercase tracking-wide">
+              Toplam Ürün Adedi
+            </p>
+            <p className="text-2xl font-extrabold text-blue-600">
+              {totalQuantity} Adet
+            </p>
+          </div>
+
+          <div className="text-center">
+            <p className="text-xs text-slate-500 uppercase tracking-wide">
+              Net Toplam ($)
+            </p>
+            <p className="text-3xl font-black text-red-600 tabular-nums">
+              {formatUsd(totalUsd)}
+            </p>
+          </div>
+
+          <p className="text-xs text-center text-slate-500 border-t border-slate-200 pt-2">
+            Kayıt sonrası <span className="font-semibold text-slate-700">MERKEZ_DEPO</span>{' '}
+            stokları artırılır ve ürün maliyeti güncellenir.
+          </p>
+
+          {!isEditMode && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={shouldPrint}
+                onChange={(e) => setShouldPrint(e.target.checked)}
+                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span className="text-sm font-medium text-slate-700 flex items-center gap-1">
+                <Printer className="w-4 h-4" /> Kayıttan sonra fiş yazdır
+              </span>
+            </label>
+          )}
+
+          <div className="print:hidden">
             <label className={labelClass}>İşlemi Yapan</label>
             <select
               value={processedBy}
@@ -901,208 +1004,50 @@ export default function PurchaseCreate({
               ))}
             </select>
           </div>
-          <div>
-            <label className={labelClass}>Not</label>
-            <textarea
-              value={orderNotes}
-              onChange={(e) => setOrderNotes(e.target.value)}
-              rows={2}
-              className={inputClass}
-              placeholder="İrsaliye no, açıklama..."
-            />
-          </div>
-        </section>
-      </div>
 
-      <section className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden print:hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <ShoppingCart className="w-4 h-4 text-rose-600" />
-            <h2 className="font-semibold text-slate-800">Mal Kabul Sepeti</h2>
-            <span className="text-xs text-slate-400">{cart.length} kalem</span>
-          </div>
           <button
             type="button"
-            onClick={openSearchModal}
-            className="inline-flex items-center gap-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium px-4 py-2 rounded-lg"
+            onClick={handlePrint}
+            disabled={cart.length === 0}
+            className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
           >
-            <Search className="w-4 h-4" />
-            Ürün Ekle
+            <Printer className="w-5 h-5" />
+            Fiş Yazdır
           </button>
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">
-                  SKU
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">
-                  Ürün
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
-                  Miktar
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
-                  Birim Maliyet ($)
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
-                  Satır Toplam
-                </th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {cart.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-slate-400 text-sm">
-                    Sepet boş — &quot;Ürün Ekle&quot; ile stok kartı arayın
-                  </td>
-                </tr>
-              )}
-              {cart.map((item) => (
-                <tr key={item.rowId} className="hover:bg-slate-50/60">
-                  <td className="px-4 py-3 text-sm font-mono font-semibold text-slate-900">
-                    {item.product.sku}
-                  </td>
-                  <td className="px-4 py-3 text-sm max-w-[240px]">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setHistoryProduct({
-                          id: item.product.id,
-                          sku: item.product.sku,
-                          name: item.product.name,
-                        })
-                      }
-                      title="Stok hareketlerini gör"
-                      className="max-w-full truncate text-left font-medium text-rose-700 underline-offset-2 hover:underline"
-                    >
-                      {item.product.name}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <input
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={item.quantity}
-                      onChange={(e) => {
-                        const qty = Number(e.target.value);
-                        setCart((prev) =>
-                          prev.map((row) =>
-                            row.rowId === item.rowId
-                              ? { ...row, quantity: qty > 0 ? qty : row.quantity }
-                              : row
-                          )
-                        );
-                      }}
-                      className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-sm text-right"
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.unitPriceUsd}
-                      onChange={(e) => {
-                        const price = Number(e.target.value);
-                        setCart((prev) =>
-                          prev.map((row) =>
-                            row.rowId === item.rowId
-                              ? {
-                                  ...row,
-                                  unitPriceUsd:
-                                    price >= 0 ? roundPrice(price) : row.unitPriceUsd,
-                                }
-                              : row
-                          )
-                        );
-                      }}
-                      className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm text-right"
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm font-semibold text-rose-700">
-                    {formatUsd(item.quantity * item.unitPriceUsd)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => removeCartItem(item.rowId)}
-                      className="p-1 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="flex flex-col gap-4 border-t border-slate-100 bg-slate-50/50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-slate-600">
-            Kayıt sonrası{' '}
-            <span className="font-semibold text-slate-800">MERKEZ_DEPO</span> stokları
-            artırılır ve ürün{' '}
-            <span className="font-semibold text-slate-800">costPrice</span> güncellenir.
-          </p>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-            <p className="text-lg font-bold text-rose-700">
-              Toplam: {formatUsd(totalUsd)}
-            </p>
-            {!isEditMode && (
-              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={shouldPrint}
-                  onChange={(e) => setShouldPrint(e.target.checked)}
-                  className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
-                />
-                <Printer className="w-4 h-4" />
-                Kayıttan sonra fiş yazdır
-              </label>
-            )}
+          {isEditMode && (
             <button
               type="button"
-              onClick={handlePrint}
-              disabled={cart.length === 0}
-              className="btn border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 sm:w-auto"
+              onClick={() => void handleTrashInvoice()}
+              disabled={trashing || submitting}
+              className="btn btn-block border-2 border-red-200 bg-red-50 font-bold text-red-700 hover:bg-red-100 print:hidden"
             >
-              <Printer className="w-5 h-5" />
-              Fiş Yazdır
+              <Trash2 className="w-5 h-5" />
+              {trashing ? 'Siliniyor...' : 'Fişi Sil'}
             </button>
-            {isEditMode && (
-              <button
-                type="button"
-                onClick={() => void handleTrashInvoice()}
-                disabled={trashing || submitting}
-                className="btn border-2 border-red-200 bg-red-50 font-bold text-red-700 hover:bg-red-100 sm:w-auto"
-              >
-                <Trash2 className="w-5 h-5" />
-                {trashing ? 'Siliniyor...' : 'Fişi Sil'}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={submitting || cart.length === 0}
-              className="btn btn-lg btn-danger uppercase tracking-wide sm:w-auto"
-            >
-              <Save className="w-5 h-5" />
-              {submitting ? 'Kaydediliyor...' : 'Alışı Kaydet'}
-            </button>
-          </div>
-        </div>
-      </section>
+          )}
+
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting || cart.length === 0}
+            className="btn btn-lg btn-primary btn-block uppercase tracking-wide print:hidden"
+          >
+            <Save className="h-5 w-5" />
+            {submitting
+              ? 'Kaydediliyor...'
+              : isEditMode
+                ? 'DEĞİŞİKLİKLERİ KAYDET'
+                : 'KAYDET'}
+          </button>
+        </aside>
+      </div>
 
       <ProductSearchPopover
         open={searchModal}
         onClose={closeSearchModal}
         title="Alış Ürün Ara"
-        headerClassName="bg-rose-600"
+        headerClassName="bg-indigo-600"
         searchQuery={f2.searchQuery}
         onSearchChange={f2.setSearchQuery}
         searchInputRef={f2.searchInputRef}
@@ -1126,7 +1071,7 @@ export default function PurchaseCreate({
             onFocusIndex={f2.setFocusedIndex}
             onSelect={addProductToCart}
             partySelected={Boolean(selectedSupplier)}
-            accentClass="rose"
+            accentClass="indigo"
           />
         )}
       </ProductSearchPopover>
