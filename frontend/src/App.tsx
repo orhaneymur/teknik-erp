@@ -58,7 +58,7 @@ const initialOpenMenus = menuCategories.reduce(
   {} as Record<MenuCategoryId, boolean>
 );
 
-const FRONTEND_VERSION = 'v1.8.39';
+const FRONTEND_VERSION = 'v1.8.40';
 
 function App() {
   const initialUrl = parsePageFromUrl();
@@ -525,6 +525,7 @@ function App() {
         activePage={activePage}
         openMenus={openMenus}
         mobileOpen={mobileNavOpen}
+        appVersion={FRONTEND_VERSION}
         onToggleMenu={toggleMenu}
         onLogout={handleLogout}
         onMobileClose={() => setMobileNavOpen(false)}

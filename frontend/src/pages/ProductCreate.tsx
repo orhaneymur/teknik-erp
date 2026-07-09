@@ -24,8 +24,11 @@ type ProductCreateProps = {
 
 function matchesCategory(item: BrandModelOption, categoryId: number | ''): boolean {
   if (categoryId === '') return true;
-  // Secili kategori veya kategori baglantisi olmayan tanimlar
   return item.categoryId === categoryId || item.categoryId == null;
+}
+
+function normalizeTr(value: string): string {
+  return value.trim().toLocaleLowerCase('tr-TR');
 }
 
 export default function ProductCreate({ onNotify }: ProductCreateProps) {
@@ -66,36 +69,46 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
       });
   }, []);
 
+  const resolvedCategoryId = useMemo((): number | '' => {
+    if (categoryId !== '') return categoryId;
+    const text = categoryText.trim();
+    if (!text) return '';
+    const match = categories.find((cat) => normalizeTr(cat.name) === normalizeTr(text));
+    return match?.id ?? '';
+  }, [categoryId, categoryText, categories]);
+
   const brandOptions = useMemo(() => {
     const items = brandModels.filter((item) => item.kind === 'MARKA');
-    const filtered = items.filter((item) => matchesCategory(item, categoryId));
+    const filtered = items.filter((item) => matchesCategory(item, resolvedCategoryId));
+    const source = filtered.length > 0 ? filtered : items;
     // Ayni isimli kayitlari tekilleştir
     const seen = new Set<string>();
-    return filtered.filter((item) => {
+    return source.filter((item) => {
       const key = item.name.toLocaleLowerCase('tr-TR');
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [brandModels, categoryId]);
+  }, [brandModels, resolvedCategoryId]);
 
   const modelOptions = useMemo(() => {
     const items = brandModels.filter((item) => item.kind === 'MODEL');
-    const filtered = items.filter((item) => matchesCategory(item, categoryId));
+    const filtered = items.filter((item) => matchesCategory(item, resolvedCategoryId));
+    const source = filtered.length > 0 ? filtered : items;
     const seen = new Set<string>();
-    return filtered.filter((item) => {
+    return source.filter((item) => {
       const key = item.name.toLocaleLowerCase('tr-TR');
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [brandModels, categoryId]);
+  }, [brandModels, resolvedCategoryId]);
 
   const [productModelHints, setProductModelHints] = useState<string[]>([]);
 
   useEffect(() => {
     const params = new URLSearchParams();
-    if (categoryId !== '') params.set('categoryId', String(categoryId));
+    if (resolvedCategoryId !== '') params.set('categoryId', String(resolvedCategoryId));
     if (brandText.trim()) params.set('brand', brandText.trim());
 
     void axios
@@ -106,20 +119,26 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         if (res.data.success) setProductModelHints(ensureArray(res.data.data));
       })
       .catch(() => setProductModelHints([]));
-  }, [categoryId, brandText]);
+  }, [resolvedCategoryId, brandText]);
 
   const modelTypeaheadOptions = useMemo(() => {
-    const options: { id: string | number; label: string }[] = modelOptions.map((item) => ({
-      id: item.id,
-      label: item.name,
-    }));
-    const seen = new Set(options.map((o) => o.label.toLocaleLowerCase('tr-TR')));
+    const options: { id: string | number; label: string }[] = [];
+    const seen = new Set<string>();
+
     for (const name of productModelHints) {
-      const key = name.toLocaleLowerCase('tr-TR');
-      if (seen.has(key)) continue;
+      const key = normalizeTr(name);
+      if (!key || seen.has(key)) continue;
       seen.add(key);
       options.push({ id: `product-${key}`, label: name });
     }
+
+    for (const item of modelOptions) {
+      const key = normalizeTr(item.name);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      options.push({ id: item.id, label: item.name });
+    }
+
     return options.sort((a, b) => a.label.localeCompare(b.label, 'tr'));
   }, [modelOptions, productModelHints]);
 
@@ -207,7 +226,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         priceTl: roundPrice(parsedSale),
         barcode: barcode.trim() || undefined,
         initialQuantity: Number(initialQuantity) || 0,
-        categoryId: categoryId !== '' ? Number(categoryId) : undefined,
+        categoryId: resolvedCategoryId !== '' ? Number(resolvedCategoryId) : undefined,
         brandModelId: resolvedBrandModelId,
         appearance: appearance || undefined,
         quality: quality || undefined,

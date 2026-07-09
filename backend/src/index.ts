@@ -4432,33 +4432,59 @@ app.get<{ Querystring: { categoryId?: string; brand?: string } }>(
   async (request) => {
     const categoryIdRaw = request.query.categoryId;
     const brandQuery = request.query.brand?.trim().toLocaleLowerCase('tr-TR') ?? '';
+    const categoryId =
+      categoryIdRaw && !Number.isNaN(Number(categoryIdRaw)) ? Number(categoryIdRaw) : undefined;
 
-    const where: Prisma.ProductWhereInput = {
+    await syncBrandModelsFromProducts(prisma);
+
+    const names = new Set<string>();
+    const brandMatched = new Set<string>();
+
+    const definitionWhere: Prisma.BrandModelWhereInput = { kind: 'MODEL' };
+    if (categoryId != null) {
+      definitionWhere.OR = [{ categoryId }, { categoryId: null }];
+    }
+    const definitions = await prisma.brandModel.findMany({
+      where: definitionWhere,
+      select: { name: true },
+    });
+    for (const entry of definitions) {
+      const model = entry.name.trim();
+      if (model) names.add(model);
+    }
+
+    const productWhere: Prisma.ProductWhereInput = {
       model: { not: null },
       NOT: { model: '' },
     };
-    if (categoryIdRaw) {
-      const categoryId = Number(categoryIdRaw);
-      if (!Number.isNaN(categoryId)) where.categoryId = categoryId;
+    if (categoryId != null) {
+      productWhere.categoryId = categoryId;
     }
-
     const products = await prisma.product.findMany({
-      where,
+      where: productWhere,
       select: { model: true, brand: true },
     });
-
-    const names = new Set<string>();
     for (const product of products) {
       const model = product.model?.trim();
       if (!model) continue;
+      names.add(model);
       if (brandQuery) {
         const productBrand = product.brand?.trim().toLocaleLowerCase('tr-TR') ?? '';
-        if (productBrand !== brandQuery) continue;
+        if (productBrand === brandQuery) {
+          brandMatched.add(model);
+        }
       }
-      names.add(model);
     }
 
-    const data = [...names].sort((a, b) => a.localeCompare(b, 'tr'));
+    const sorted = [...names].sort((a, b) => a.localeCompare(b, 'tr'));
+    const data =
+      brandQuery && brandMatched.size > 0
+        ? [
+            ...sorted.filter((name) => brandMatched.has(name)),
+            ...sorted.filter((name) => !brandMatched.has(name)),
+          ]
+        : sorted;
+
     return {
       success: true,
       data,

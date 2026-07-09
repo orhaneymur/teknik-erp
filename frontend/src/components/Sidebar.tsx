@@ -11,6 +11,7 @@ type SidebarProps = {
   activePage: PageId;
   openMenus: Record<MenuCategoryId, boolean>;
   mobileOpen?: boolean;
+  appVersion?: string;
   onToggleMenu: (id: MenuCategoryId) => void;
   onLogout: () => void;
   onMobileClose?: () => void;
@@ -20,6 +21,7 @@ export default function Sidebar({
   activePage,
   openMenus,
   mobileOpen = false,
+  appVersion,
   onToggleMenu,
   onLogout,
   onMobileClose,
@@ -208,6 +210,9 @@ export default function Sidebar({
       </nav>
 
       <div className="space-y-3 border-t border-slate-800/80 px-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {appVersion && (
+          <p className="px-2 text-center text-[10px] font-mono text-slate-600">{appVersion}</p>
+        )}
         <div className="flex items-center gap-2 px-2 text-xs text-slate-500">
           <Keyboard className="h-3.5 w-3.5" />
           <span>F2 — Stok ara · Menü yeni sekmede</span>
