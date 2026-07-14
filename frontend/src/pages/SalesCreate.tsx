@@ -86,6 +86,11 @@ type PaymentMethod = 'Nakit' | 'EFT/Havale' | 'Kart' | 'Cari';
 type PaymentType = 'Peşin' | 'Vadeli';
 type DeliveryType = 'Mağazadan Teslim' | 'Kargo';
 
+/** Genel perakende müşteri (kod 120) → Kapalı fatura (Nakit); diğerleri → Açık (Cari) */
+function defaultPaymentMethodForCustomer(customer: Pick<Customer, 'code'>): PaymentMethod {
+  return String(customer.code).trim() === '120' ? 'Nakit' : 'Cari';
+}
+
 type SalesCreateProps = {
   f2Trigger?: number;
   editInvoiceId?: number | null;
@@ -567,7 +572,7 @@ export default function SalesCreate({
     setSelectedCustomer(customer);
     setCustomerSearch(`${customer.code} — ${customer.name}`);
     setPrintBalance(null);
-    setPaymentMethod('Cari');
+    setPaymentMethod(defaultPaymentMethodForCustomer(customer));
   };
 
   const handleSubmit = async () => {
@@ -577,7 +582,7 @@ export default function SalesCreate({
       customer = pickCustomerFromSearch(customerSearch, customerResults);
       if (customer) {
         selectCustomer(customer);
-        method = 'Cari';
+        method = defaultPaymentMethodForCustomer(customer);
       }
     }
 
