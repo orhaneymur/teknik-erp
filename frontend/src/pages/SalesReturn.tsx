@@ -339,6 +339,8 @@ export default function SalesReturn({
   const selectCustomer = useCallback((customer: Customer) => {
     setSelectedCustomer(customer);
     setCustomerSearch(`${customer.code} — ${customer.name}`);
+    // Genel müşteri (120) → Kapalı; diğerleri → Açık
+    setSettlementType(String(customer.code).trim() === '120' ? 'KAPALI' : 'ACIK');
   }, []);
 
   const closeSearchModal = useCallback(() => {
