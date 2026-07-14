@@ -133,3 +133,14 @@ export function getLastF2FocusedIndex(
   if (!state || state.query !== trimmed) return null;
   return typeof state.index === 'number' && state.index >= 0 ? state.index : null;
 }
+
+/** Fiş kesilince F2 arama metni / odak sıfırlanır */
+export function clearF2SearchSession(context: F2ProductContext) {
+  const searchStore = readSearchStore();
+  delete searchStore[context];
+  writeSearchStore(searchStore);
+
+  const focusStore = readFocusStore();
+  delete focusStore[context];
+  writeFocusStore(focusStore);
+}

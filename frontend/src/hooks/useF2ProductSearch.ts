@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { API_BASE, ensureArray } from '../lib/api';
 import {
+  clearF2SearchSession,
   getLastF2FocusedIndex,
   getLastF2SearchQuery,
   recordF2FocusedIndex,
@@ -35,6 +36,26 @@ type ProductsResponse = {
 
 const PAGE_SIZE = 100;
 
+function normalizeTr(value: string): string {
+  return value.toLocaleLowerCase('tr-TR');
+}
+
+/** Yerel filtre — sunucu aramasıyla aynı alanlar (sku / barkod / ad) */
+function matchesProductQuery(product: F2Product, query: string): boolean {
+  const q = normalizeTr(query.trim());
+  if (!q) return true;
+  if (normalizeTr(product.sku).includes(q)) return true;
+  if (product.barcode && normalizeTr(product.barcode).includes(q)) return true;
+  if (normalizeTr(product.name).includes(q)) return true;
+  return false;
+}
+
+function filterProducts(products: F2Product[], query: string): F2Product[] {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  return products.filter((product) => matchesProductQuery(product, trimmed));
+}
+
 export function useF2ProductSearch(options: {
   open: boolean;
   f2Trigger?: number;
@@ -65,6 +86,13 @@ export function useF2ProductSearch(options: {
   const focusedIndexRef = useRef(focusedIndex);
   focusedIndexRef.current = focusedIndex;
 
+  /** Son sunucu yanıtı — yazarak daraltırken buradan yerel filtre uygulanır */
+  const anchorQueryRef = useRef('');
+  const anchorResultsRef = useRef<F2Product[]>([]);
+  const anchorCompleteRef = useRef(false);
+  const anchorTotalCountRef = useRef(0);
+  const fetchGenRef = useRef(0);
+
   const persistFocusedIndex = useCallback(
     (index: number, query = searchQueryRef.current) => {
       if (index >= 0) {
@@ -87,6 +115,31 @@ export function useF2ProductSearch(options: {
     [persistFocusedIndex]
   );
 
+  const applyLocalFilter = useCallback(
+    (query: string) => {
+      const filtered = filterProducts(anchorResultsRef.current, query);
+      setResults(filtered);
+      setTotalCount(filtered.length);
+      setHasMore(false);
+      setLoading(false);
+      setLoadingMore(false);
+      setPage(1);
+
+      const savedIndex = getLastF2FocusedIndex(context, query.trim());
+      const nextIndex =
+        savedIndex != null && savedIndex < filtered.length
+          ? savedIndex
+          : filtered.length > 0
+            ? 0
+            : -1;
+      setFocusedIndex(nextIndex);
+      if (nextIndex >= 0) {
+        persistFocusedIndex(nextIndex, query.trim());
+      }
+    },
+    [context, persistFocusedIndex]
+  );
+
   const clearResults = useCallback(() => {
     setResults([]);
     setFocusedIndex(-1);
@@ -95,23 +148,40 @@ export function useF2ProductSearch(options: {
     setHasMore(false);
     setLoading(false);
     setLoadingMore(false);
+    anchorQueryRef.current = '';
+    anchorResultsRef.current = [];
+    anchorCompleteRef.current = false;
+    anchorTotalCountRef.current = 0;
   }, []);
 
-  /** Panel kapanırken sorguyu kaydet; açılırken son hali geri yükle */
+  /** Fiş kesilince — arama oturumunu baştan başlat */
+  const resetSession = useCallback(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    fetchGenRef.current += 1;
+    setSearchQuery('');
+    clearResults();
+    clearF2SearchSession(context);
+  }, [clearResults, context]);
+
+  /**
+   * Panel kapanırken sonuçları SİLME — ekrandan kaybolsun ama state kalsın.
+   * Açılırken sorguyu geri yükle; aynı arama zaten doluysa yeniden istek atma.
+   */
   useEffect(() => {
     if (open && !wasOpenRef.current) {
       const lastQuery = getLastF2SearchQuery(context, partyId);
-      setSearchQuery(lastQuery);
-      if (!lastQuery.trim()) {
-        clearResults();
+      if (lastQuery !== searchQueryRef.current) {
+        setSearchQuery(lastQuery);
       }
+      requestAnimationFrame(() => {
+        searchInputRef.current?.focus();
+      });
     } else if (!open && wasOpenRef.current) {
       recordF2SearchQuery(context, partyId, searchQueryRef.current);
       persistFocusedIndex(focusedIndexRef.current);
-      clearResults();
     }
     wasOpenRef.current = open;
-  }, [open, context, partyId, clearResults, persistFocusedIndex]);
+  }, [open, context, partyId, persistFocusedIndex]);
 
   /** F2 tetikleyicisi (panel zaten açıkken tekrar F2) — sorguyu koru, inputa odak */
   useEffect(() => {
@@ -122,6 +192,9 @@ export function useF2ProductSearch(options: {
         if (lastQuery !== searchQueryRef.current) {
           setSearchQuery(lastQuery);
         }
+        requestAnimationFrame(() => {
+          searchInputRef.current?.focus();
+        });
       }
     }
   }, [f2Trigger, open, context, partyId]);
@@ -140,6 +213,7 @@ export function useF2ProductSearch(options: {
         return;
       }
 
+      const gen = ++fetchGenRef.current;
       if (append) setLoadingMore(true);
       else setLoading(true);
 
@@ -157,18 +231,38 @@ export function useF2ProductSearch(options: {
           params,
         });
 
+        if (gen !== fetchGenRef.current) return;
+
         if (response.data.success) {
           const batch = ensureArray(response.data.data);
-          setResults((prev) => (append ? [...prev, ...batch] : batch));
+          const nextResults = append
+            ? [...anchorResultsRef.current, ...batch]
+            : batch;
+          const complete =
+            response.data.page * response.data.limit >= response.data.totalCount;
+
+          anchorQueryRef.current = trimmed;
+          anchorResultsRef.current = nextResults;
+          anchorCompleteRef.current = complete;
+          anchorTotalCountRef.current = response.data.totalCount;
+
+          // Kullanıcı yazmaya devam ettiyse bu yanıtı yeni sorguya göre daralt
+          const liveQuery = searchQueryRef.current.trim();
+          if (liveQuery !== trimmed && liveQuery.startsWith(trimmed)) {
+            applyLocalFilter(liveQuery);
+            return;
+          }
+
+          setResults(nextResults);
           setTotalCount(response.data.totalCount);
           setPage(response.data.page);
-          setHasMore(response.data.page * response.data.limit < response.data.totalCount);
+          setHasMore(!complete);
           if (!append) {
             const savedIndex = getLastF2FocusedIndex(context, trimmed);
             const nextIndex =
-              savedIndex != null && savedIndex < batch.length
+              savedIndex != null && savedIndex < nextResults.length
                 ? savedIndex
-                : batch.length > 0
+                : nextResults.length > 0
                   ? 0
                   : -1;
             setFocusedIndex(nextIndex);
@@ -178,15 +272,17 @@ export function useF2ProductSearch(options: {
           }
         }
       } catch {
-        if (!append) {
+        if (gen === fetchGenRef.current && !append) {
           clearResults();
         }
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (gen === fetchGenRef.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
-    [clearResults, context, exchangeRate, partyId, persistFocusedIndex]
+    [applyLocalFilter, clearResults, context, exchangeRate, partyId, persistFocusedIndex]
   );
 
   useEffect(() => {
@@ -200,19 +296,43 @@ export function useF2ProductSearch(options: {
       return;
     }
 
+    const anchor = anchorQueryRef.current;
+    const hasAnchor = anchor.length > 0 && anchorResultsRef.current.length > 0;
+
+    // Aynı sunucu sorgusu — bellekten anında göster (F2 yeniden açılış / geri silme)
+    if (trimmed === anchor && hasAnchor) {
+      setResults(anchorResultsRef.current);
+      setTotalCount(anchorTotalCountRef.current);
+      setHasMore(!anchorCompleteRef.current);
+      setLoading(false);
+      return;
+    }
+
+    // Daraltma: "1" → "11" — mevcut listede yerel filtre, yeni API yok
+    if (hasAnchor && trimmed.startsWith(anchor) && trimmed !== anchor) {
+      applyLocalFilter(trimmed);
+      return;
+    }
+
+    // Genişletme / yeni arama / karakter silme → sunucu
     debounceRef.current = setTimeout(() => {
       void fetchPage(1, trimmed, false);
-    }, 250);
+    }, 120);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [open, searchQuery, partyId, fetchPage, clearResults]);
+    // results.length kasıtlı — açılışta doluysa skip; bağımlılık döngüsüne sokma
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, searchQuery, partyId, fetchPage, clearResults, applyLocalFilter]);
 
   const loadMore = useCallback(() => {
     if (!open || loading || loadingMore || !hasMore) return;
-    if (!searchQuery.trim()) return;
-    void fetchPage(page + 1, searchQuery.trim(), true);
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+    // Yerel daraltılmış görünümde sunucu sayfası yükleme
+    if (trimmed !== anchorQueryRef.current) return;
+    void fetchPage(page + 1, trimmed, true);
   }, [open, loading, loadingMore, hasMore, fetchPage, page, searchQuery]);
 
   const handleListScroll = useCallback(() => {
@@ -229,13 +349,29 @@ export function useF2ProductSearch(options: {
         if (results.length === 0) return -1;
         const current = prev < 0 ? 0 : prev;
         const next = Math.max(0, Math.min(current + delta, results.length - 1));
-        if (next >= results.length - 10 && hasMore && !loadingMore && !loading) {
-          void fetchPage(page + 1, searchQuery.trim(), true);
+        const trimmed = searchQuery.trim();
+        if (
+          next >= results.length - 10 &&
+          hasMore &&
+          !loadingMore &&
+          !loading &&
+          trimmed === anchorQueryRef.current
+        ) {
+          void fetchPage(page + 1, trimmed, true);
         }
         return next;
       });
     },
-    [results.length, hasMore, loadingMore, loading, page, searchQuery, fetchPage, setFocusedIndexTracked]
+    [
+      results.length,
+      hasMore,
+      loadingMore,
+      loading,
+      page,
+      searchQuery,
+      fetchPage,
+      setFocusedIndexTracked,
+    ]
   );
 
   return {
@@ -252,5 +388,6 @@ export function useF2ProductSearch(options: {
     listRef,
     handleListScroll,
     navigateFocus,
+    resetSession,
   };
 }

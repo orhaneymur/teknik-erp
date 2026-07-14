@@ -338,6 +338,32 @@
       font-size: 14pt;
       font-weight: 800;
     }
+
+    .print-pdf-doc .pdf-party {
+      margin: 8px 0 4px;
+      text-align: center;
+    }
+
+    .print-pdf-doc .pdf-party-line {
+      margin: 0 0 2px;
+      font-size: 10pt;
+      color: #0f172a;
+    }
+
+    .print-pdf-doc .pdf-party-line:first-child {
+      font-weight: 700;
+      font-size: 11pt;
+    }
+
+    .print-pdf-doc .pdf-disclaimer {
+      margin-top: 18px;
+      padding-top: 10px;
+      border-top: 1px dashed #94a3b8;
+      text-align: center;
+      font-size: 9pt;
+      font-weight: 600;
+      color: #475569;
+    }
   }
 
   /* —— Termal fiş (dar sayfa, yazıcı ölçüsüne göre) —— */
@@ -371,9 +397,29 @@
       text-align: center;
       font-size: 9px;
       font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
+      overflow: visible;
+      word-break: break-word;
+    }
+
+    .receipt-slip-party {
+      margin: 2px 0 0;
+      text-align: center;
+    }
+
+    .receipt-slip-party-line {
+      margin: 0;
+      text-align: center;
+      font-size: 8px;
+      font-weight: 600;
+      white-space: normal;
+      word-break: break-word;
+      line-height: 1.25;
+    }
+
+    .receipt-slip-party-line:first-child {
+      font-size: 9px;
+      font-weight: 700;
     }
 
     .receipt-slip-meta {
@@ -402,6 +448,16 @@
     .receipt-slip-divider {
       margin: 3px 0;
       border-top: 1px dashed #000;
+    }
+
+    .receipt-slip-disclaimer {
+      margin: 6px 0 0;
+      text-align: center;
+      font-size: 7px;
+      font-weight: 600;
+      line-height: 1.3;
+      white-space: normal;
+      word-break: break-word;
     }
 
     .receipt-item-row {

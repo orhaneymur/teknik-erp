@@ -116,6 +116,13 @@ export function roundPrice(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** Ürün adedi — yalnızca tam sayı (0, 1, 2, …) */
+export function toIntegerQty(value: unknown, fallback = 0): number {
+  const n = Math.trunc(Number(value));
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return n;
+}
+
 export const APP_CURRENCY = 'USD';
 
 /** Tüm tutarlar USD endeksli — fatura gösterimi */
@@ -161,6 +168,14 @@ export type Customer = {
   name: string;
   creditLimit: number;
   balance: number;
+  contactPerson?: string | null;
+  address?: string | null;
+  district?: string | null;
+  city?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  taxOffice?: string | null;
+  taxNumber?: string | null;
   createdAt: string;
   updatedAt: string;
 };

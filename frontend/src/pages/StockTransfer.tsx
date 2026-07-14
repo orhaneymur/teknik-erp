@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { ArrowLeftRight, Save, Search } from 'lucide-react';
-import { API_BASE, ensureArray, type PaginatedListResponse } from '../lib/api';
+import { API_BASE, ensureArray, toIntegerQty, type PaginatedListResponse } from '../lib/api';
 import { depotLabel, isWarehouseDepot } from '../lib/depots';
 
 type Branch = { id: number; name: string; type: string };
@@ -220,10 +220,10 @@ export default function StockTransfer({
               </label>
               <input
                 type="number"
-                min="0.01"
-                step="0.01"
+                min="1"
+                step="1"
                 value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value))}
+                onChange={(e) => setQuantity(Math.max(1, toIntegerQty(e.target.value, 1)))}
                 className="w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
             </div>

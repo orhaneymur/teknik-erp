@@ -16,7 +16,7 @@ import {
   importProductsExcel,
   syncBrandModelsFromProducts,
 } from './utils/excelExchange.js';
-import { buildInvoiceCreatedAt, roundMoney } from './utils/datetime.js';
+import { buildInvoiceCreatedAt, formatTimestampInvoiceNo, roundMoney } from './utils/datetime.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const APP_VERSION = process.env.APP_VERSION ?? 'dev';
@@ -34,92 +34,40 @@ const ACTIVE_INVOICE_FILTER = { deletedAt: null } as const;
 
 const app = Fastify({ logger: true });
 
+/** Ortak fiş no: YYMMDDHHmmss — çakışırsa sonraki saniyeye kayar */
+async function generateTimestampInvoiceNo(
+  tx: Prisma.TransactionClient | typeof prisma
+): Promise<string> {
+  const now = new Date();
+  for (let offset = 0; offset < 120; offset += 1) {
+    const candidate = formatTimestampInvoiceNo(now, offset);
+    const existing = await tx.invoice.findUnique({
+      where: { invoiceNo: candidate },
+      select: { id: true },
+    });
+    if (!existing) return candidate;
+  }
+  return `${formatTimestampInvoiceNo(now)}${String(Date.now() % 100).padStart(2, '0')}`;
+}
+
 async function generateInvoiceNo(
   tx: Prisma.TransactionClient
 ): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `SF${year}`;
-
-  const lastInvoice = await tx.invoice.findFirst({
-    where: { invoiceNo: { startsWith: prefix } },
-    orderBy: { invoiceNo: 'desc' },
-    select: { invoiceNo: true },
-  });
-
-  let sequence = 1;
-  if (lastInvoice) {
-    const parsed = Number.parseInt(lastInvoice.invoiceNo.slice(prefix.length), 10);
-    if (!Number.isNaN(parsed)) {
-      sequence = parsed + 1;
-    }
-  }
-
-  return `${prefix}${String(sequence).padStart(4, '0')}`;
+  return generateTimestampInvoiceNo(tx);
 }
 
 async function previewNextInvoiceNo(): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `SF${year}`;
-
-  const lastInvoice = await prisma.invoice.findFirst({
-    where: { invoiceNo: { startsWith: prefix } },
-    orderBy: { invoiceNo: 'desc' },
-    select: { invoiceNo: true },
-  });
-
-  let sequence = 1;
-  if (lastInvoice) {
-    const parsed = Number.parseInt(lastInvoice.invoiceNo.slice(prefix.length), 10);
-    if (!Number.isNaN(parsed)) {
-      sequence = parsed + 1;
-    }
-  }
-
-  return `${prefix}${String(sequence).padStart(4, '0')}`;
+  return formatTimestampInvoiceNo();
 }
 
 async function generatePurchaseInvoiceNo(
   tx: Prisma.TransactionClient
 ): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `AF${year}`;
-
-  const lastInvoice = await tx.invoice.findFirst({
-    where: { invoiceNo: { startsWith: prefix } },
-    orderBy: { invoiceNo: 'desc' },
-    select: { invoiceNo: true },
-  });
-
-  let sequence = 1;
-  if (lastInvoice) {
-    const parsed = Number.parseInt(lastInvoice.invoiceNo.slice(prefix.length), 10);
-    if (!Number.isNaN(parsed)) {
-      sequence = parsed + 1;
-    }
-  }
-
-  return `${prefix}${String(sequence).padStart(4, '0')}`;
+  return generateTimestampInvoiceNo(tx);
 }
 
 async function previewNextPurchaseInvoiceNo(): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `AF${year}`;
-
-  const lastInvoice = await prisma.invoice.findFirst({
-    where: { invoiceNo: { startsWith: prefix } },
-    orderBy: { invoiceNo: 'desc' },
-    select: { invoiceNo: true },
-  });
-
-  let sequence = 1;
-  if (lastInvoice) {
-    const parsed = Number.parseInt(lastInvoice.invoiceNo.slice(prefix.length), 10);
-    if (!Number.isNaN(parsed)) {
-      sequence = parsed + 1;
-    }
-  }
-
-  return `${prefix}${String(sequence).padStart(4, '0')}`;
+  return formatTimestampInvoiceNo();
 }
 
 function calcLineTotalUsd(item: StoreItem): number {
@@ -137,7 +85,7 @@ function calcLineTotalTl(item: StoreItem): number {
 function normalizeStoreItem(item: StoreItem): StoreItem {
   return {
     productId: Number(item.productId),
-    quantity: Number(item.quantity) || 0,
+    quantity: Math.max(0, Math.trunc(Number(item.quantity) || 0)),
     unitPrice: Number(item.unitPrice) || 0,
     discountPercent: Number(item.discountPercent) || 0,
   };
@@ -150,24 +98,7 @@ function isCashLikePayment(method: string): boolean {
 async function generateReturnInvoiceNo(
   tx: Prisma.TransactionClient
 ): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `IF${year}`;
-
-  const lastInvoice = await tx.invoice.findFirst({
-    where: { invoiceNo: { startsWith: prefix } },
-    orderBy: { invoiceNo: 'desc' },
-    select: { invoiceNo: true },
-  });
-
-  let sequence = 1;
-  if (lastInvoice) {
-    const parsed = Number.parseInt(lastInvoice.invoiceNo.slice(prefix.length), 10);
-    if (!Number.isNaN(parsed)) {
-      sequence = parsed + 1;
-    }
-  }
-
-  return `${prefix}${String(sequence).padStart(4, '0')}`;
+  return generateTimestampInvoiceNo(tx);
 }
 
 const DEPOT_NAMES = {
@@ -329,10 +260,19 @@ async function applyInvoiceFinancialDelta(
       });
     }
   } else if (invoiceType === 'IADE') {
-    await tx.customer.update({
-      where: { id: customerId },
-      data: { balance: { decrement: amountDelta } },
-    });
+    // Açık (Cari): müşteri bakiyesinden düş
+    // Kapalı (nakit vb.): kasadan para çıkışı
+    if (paymentMethod === 'Cari') {
+      await tx.customer.update({
+        where: { id: customerId },
+        data: { balance: { decrement: amountDelta } },
+      });
+    } else if (isCashLikePayment(paymentMethod)) {
+      await tx.safe.update({
+        where: { id: safeId },
+        data: { balance: { decrement: amountDelta } },
+      });
+    }
   }
 }
 
@@ -454,6 +394,16 @@ async function reverseInvoiceEffects(
         type: 'GIRIS',
         amount: invoice.totalAmountTl,
         description: `${invoice.invoiceNo} alış iptali`,
+      },
+    });
+  } else if (invoice.type === 'IADE' && isCashLikePayment(invoice.paymentMethod)) {
+    await tx.transaction.create({
+      data: {
+        safeId: invoice.safeId,
+        customerId: invoice.customerId,
+        type: 'GIRIS',
+        amount: invoice.totalAmountTl,
+        description: `${invoice.invoiceNo} iade iptali (kasa iadesi)`,
       },
     });
   }
@@ -3302,6 +3252,8 @@ app.post<{
     customerId: number;
     branchId: number;
     safeId: number;
+    /** Açık = Cari, Kapalı = Nakit (kasadan çıkış) */
+    paymentMethod?: string;
     exchangeRate?: number;
     originalInvoiceId: number;
     orderNotes?: string;
@@ -3314,12 +3266,20 @@ app.post<{
     customerId,
     branchId,
     safeId,
+    paymentMethod: bodyPaymentMethod,
     exchangeRate,
     originalInvoiceId,
     orderNotes: bodyOrderNotes,
     isDefective,
     items,
   } = request.body;
+
+  const paymentMethod =
+    bodyPaymentMethod === 'Nakit' ||
+    bodyPaymentMethod === 'EFT/Havale' ||
+    bodyPaymentMethod === 'Kart'
+      ? bodyPaymentMethod
+      : 'Cari';
 
   if (
     !customerId ||
@@ -3403,7 +3363,7 @@ app.post<{
           customerId,
           safeId,
           branchId,
-          paymentMethod: 'Cari',
+          paymentMethod,
           exchangeRate: rate,
           deliveryType: 'Mağazadan Teslim',
           totalAmountTl,
@@ -3437,10 +3397,31 @@ app.post<{
         );
       }
 
-      await tx.customer.update({
-        where: { id: customerId },
-        data: { balance: { decrement: totalAmountTl } },
-      });
+      if (paymentMethod === 'Cari') {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { balance: { decrement: totalAmountTl } },
+        });
+      } else if (isCashLikePayment(paymentMethod)) {
+        const safe = await tx.safe.findUnique({ where: { id: safeId } });
+        if (!safe) throw new Error('Kasa bulunamadı.');
+        if (safe.balance < totalAmountTl) {
+          throw new Error('Kasada yeterli bakiye yok (kapalı iade).');
+        }
+        await tx.safe.update({
+          where: { id: safeId },
+          data: { balance: { decrement: totalAmountTl } },
+        });
+        await tx.transaction.create({
+          data: {
+            safeId,
+            customerId,
+            type: 'CIKIS',
+            amount: totalAmountTl,
+            description: `${invoiceNo} iade ödemesi (${paymentMethod})`,
+          },
+        });
+      }
 
       return createdInvoice;
     });
@@ -3466,6 +3447,7 @@ app.post<{
     customerId: number;
     branchId: number;
     safeId: number;
+    paymentMethod?: string;
     exchangeRate?: number;
     items: Array<{
       productId: number;
@@ -3476,7 +3458,22 @@ app.post<{
     note?: string;
   };
 }>('/api/sales/return-discretionary', async (request, reply) => {
-  const { customerId, branchId, safeId, exchangeRate, items, note } = request.body;
+  const {
+    customerId,
+    branchId,
+    safeId,
+    paymentMethod: bodyPaymentMethod,
+    exchangeRate,
+    items,
+    note,
+  } = request.body;
+
+  const paymentMethod =
+    bodyPaymentMethod === 'Nakit' ||
+    bodyPaymentMethod === 'EFT/Havale' ||
+    bodyPaymentMethod === 'Kart'
+      ? bodyPaymentMethod
+      : 'Cari';
 
   if (!customerId || !branchId || !safeId || !items?.length) {
     return reply.status(400).send({
@@ -3526,7 +3523,7 @@ app.post<{
           customerId,
           safeId,
           branchId,
-          paymentMethod: 'Cari',
+          paymentMethod,
           exchangeRate: rate,
           deliveryType: 'Mağazadan Teslim',
           totalAmountTl,
@@ -3552,10 +3549,31 @@ app.post<{
         await incrementStock(tx, item.productId, stockBranchId, item.quantity);
       }
 
-      await tx.customer.update({
-        where: { id: customerId },
-        data: { balance: { decrement: totalAmountTl } },
-      });
+      if (paymentMethod === 'Cari') {
+        await tx.customer.update({
+          where: { id: customerId },
+          data: { balance: { decrement: totalAmountTl } },
+        });
+      } else if (isCashLikePayment(paymentMethod)) {
+        const safe = await tx.safe.findUnique({ where: { id: safeId } });
+        if (!safe) throw new Error('Kasa bulunamadı.');
+        if (safe.balance < totalAmountTl) {
+          throw new Error('Kasada yeterli bakiye yok (kapalı iade).');
+        }
+        await tx.safe.update({
+          where: { id: safeId },
+          data: { balance: { decrement: totalAmountTl } },
+        });
+        await tx.transaction.create({
+          data: {
+            safeId,
+            customerId,
+            type: 'CIKIS',
+            amount: totalAmountTl,
+            description: `${invoiceNo} iade ödemesi (${paymentMethod})`,
+          },
+        });
+      }
 
       return createdInvoice;
     });

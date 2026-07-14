@@ -29,6 +29,7 @@ import {
 } from '../lib/api';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import { printDocument } from '../lib/printMode';
+import { RECEIPT_DISCLAIMER } from '../lib/receiptParty';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
 
 type PaymentCurrency = 'USD' | 'TRY';
@@ -533,6 +534,7 @@ export default function CustomerPayment({
                 <p>Sonraki bakiye: {formatMoney(printReceipt.balanceAfter)}</p>
               )}
             </div>
+            <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
           </div>
           <div className="receipt-slip hidden">
             <p className="receipt-slip-title">
@@ -559,6 +561,8 @@ export default function CustomerPayment({
                 </span>
               </div>
             )}
+            <div className="receipt-slip-divider" />
+            <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
           </div>
         </>
       )}

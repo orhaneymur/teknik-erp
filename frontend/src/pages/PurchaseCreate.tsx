@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { Printer, Save, Search, ShoppingCart, Trash2, X, ArrowLeft } from 'lucide-react';
+import { Printer, Save, Search, ShoppingCart, Trash2, X, ArrowLeft, FileText } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
@@ -15,10 +15,17 @@ import {
   formatMoney,
   formatUsd,
   roundPrice,
+  toIntegerQty,
   type Customer,
 } from '../lib/api';
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
+import {
+  RECEIPT_DISCLAIMER,
+  buildReceiptPartyLines,
+  type ReceiptParty,
+} from '../lib/receiptParty';
 import { printDocument } from '../lib/printMode';
+import { buildPageUrl } from '../lib/navigation';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
 const EXCHANGE_RATE = 1;
@@ -107,6 +114,7 @@ export default function PurchaseCreate({
   const [displayInvoiceNo, setDisplayInvoiceNo] = useState('');
   const [removedItemIds, setRemovedItemIds] = useState<number[]>([]);
   const [shouldPrint, setShouldPrint] = useState(false);
+  const [printParty, setPrintParty] = useState<ReceiptParty | null>(null);
 
   const handlePrint = useCallback(() => {
     printDocument();
@@ -147,6 +155,12 @@ export default function PurchaseCreate({
   const totalUsd = useMemo(
     () => roundPrice(cart.reduce((sum, item) => sum + item.quantity * item.unitPriceUsd, 0)),
     [cart]
+  );
+
+  const receiptParty = printParty ?? selectedSupplier;
+  const receiptPartyLines = useMemo(
+    () => buildReceiptPartyLines(receiptParty),
+    [receiptParty]
   );
 
   const notify = useCallback(
@@ -197,15 +211,11 @@ export default function PurchaseCreate({
             if (branchSafe) setSelectedSafe(branchSafe.id);
           }
         }
-
-        if (personnels.length > 0 && !processedBy && !isEditMode) {
-          setProcessedBy(personnels[0].name);
-        }
       }
     } catch {
       notify('error', 'Başlangıç verileri yüklenemedi.');
     }
-  }, [notify, processedBy, isEditMode]);
+  }, [notify, isEditMode]);
 
   useEffect(() => {
     if (!isEditMode || !editInvoiceId) return;
@@ -272,7 +282,7 @@ export default function PurchaseCreate({
             rowId: `inv-${line.id}`,
             sourceInvoiceItemId: line.id,
             product: line.product,
-            quantity: line.quantity,
+            quantity: toIntegerQty(line.quantity, 1),
             unitPriceUsd: roundPrice(line.unitPrice / rate),
           }))
         );
@@ -421,7 +431,7 @@ export default function PurchaseCreate({
           ...(removedItemIds.length > 0 ? { removeItemIds: removedItemIds } : {}),
           items: cart.map((item) => {
             const payload = {
-              quantity: item.quantity,
+              quantity: toIntegerQty(item.quantity, 1),
               unitPrice: roundPrice(item.unitPriceUsd),
               discountPercent: 0,
             };
@@ -451,7 +461,7 @@ export default function PurchaseCreate({
         orderNotes: orderNotes || undefined,
         items: cart.map((item) => ({
           productId: item.product.id,
-          quantity: item.quantity,
+          quantity: toIntegerQty(item.quantity, 1),
           unitPrice: roundPrice(item.unitPriceUsd),
         })),
       });
@@ -462,21 +472,19 @@ export default function PurchaseCreate({
             ? response.data.data.invoiceNo
             : '';
         if (savedInvoiceNo) setDisplayInvoiceNo(savedInvoiceNo);
+        setPrintParty(selectedSupplier);
 
         notify(
           'success',
           `Alış faturası kaydedildi! ${savedInvoiceNo} · MERKEZ_DEPO stok güncellendi`
         );
 
-        let formResetDone = false;
-        const resetAfterPurchase = () => {
-          if (formResetDone) return;
-          formResetDone = true;
-          setCart([]);
-          setOrderNotes('');
-          setDueDate('');
+        let afterPurchaseDone = false;
+        const afterPurchase = () => {
+          if (afterPurchaseDone) return;
+          afterPurchaseDone = true;
           setShouldPrint(false);
-          setDisplayInvoiceNo('');
+          setPrintParty(null);
           onDataChange?.();
           void loadInitData();
         };
@@ -485,17 +493,17 @@ export default function PurchaseCreate({
           window.setTimeout(() => {
             printDocument();
             const onAfterPrint = () => {
-              resetAfterPurchase();
+              afterPurchase();
               window.removeEventListener('afterprint', onAfterPrint);
             };
             window.addEventListener('afterprint', onAfterPrint);
             window.setTimeout(() => {
               window.removeEventListener('afterprint', onAfterPrint);
-              resetAfterPurchase();
+              afterPurchase();
             }, 30_000);
           }, 150);
         } else {
-          resetAfterPurchase();
+          afterPurchase();
         }
       }
     } catch (error) {
@@ -524,10 +532,14 @@ export default function PurchaseCreate({
     <div className="space-y-4 print:space-y-0">
       <div className="print-pdf-doc hidden">
         <h1>{displayInvoiceNo || initData.nextInvoiceNo || 'Alış Fişi'}</h1>
-        {selectedSupplier && (
-          <p className="pdf-meta">
-            {selectedSupplier.code} — {selectedSupplier.name}
-          </p>
+        {receiptPartyLines.length > 0 && (
+          <div className="pdf-party">
+            {receiptPartyLines.map((line) => (
+              <p key={line} className="pdf-party-line">
+                {line}
+              </p>
+            ))}
+          </div>
         )}
         <p className="pdf-meta">
           {invoiceDate}
@@ -568,16 +580,21 @@ export default function PurchaseCreate({
           <p>Toplam adet: {totalQuantity}</p>
           <p className="pdf-grand">Net toplam: {formatUsd(totalUsd)}</p>
         </div>
+        <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
 
       <div className="receipt-slip hidden">
         <p className="receipt-slip-title">
           {displayInvoiceNo || initData.nextInvoiceNo || 'Alış Fişi'}
         </p>
-        {selectedSupplier && (
-          <p className="receipt-slip-customer">
-            {selectedSupplier.code} — {selectedSupplier.name}
-          </p>
+        {receiptPartyLines.length > 0 && (
+          <div className="receipt-slip-party">
+            {receiptPartyLines.map((line) => (
+              <p key={line} className="receipt-slip-party-line">
+                {line}
+              </p>
+            ))}
+          </div>
         )}
         <p className="receipt-slip-meta">
           {invoiceDate}
@@ -623,6 +640,9 @@ export default function PurchaseCreate({
           <span className="receipt-item-name">NET TOPLAM</span>
           <span className="receipt-item-total">{formatUsd(totalUsd)}</span>
         </div>
+
+        <div className="receipt-slip-divider" />
+        <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
 
       <div className="mb-2 flex items-center gap-3 print:hidden">
@@ -662,7 +682,11 @@ export default function PurchaseCreate({
             <input
               type="text"
               readOnly
-              value={isEditMode ? displayInvoiceNo : initData.nextInvoiceNo || 'AF...'}
+              value={
+                isEditMode
+                  ? displayInvoiceNo
+                  : displayInvoiceNo || initData.nextInvoiceNo || '260715...'
+              }
               className={`${inputClass} bg-slate-50 font-mono font-bold text-indigo-700`}
             />
           </div>
@@ -692,20 +716,42 @@ export default function PurchaseCreate({
           </h2>
           <div>
             <label className={labelClass}>Tedarikçi Seçimi</label>
-            <InlineCustomerSearchInput
-              value={supplierSearch}
-              onChange={(text) => {
-                setSupplierSearch(text);
-                if (!text.trim()) setSelectedSupplier(null);
-              }}
-              onSelect={selectSupplier}
-              selectedCustomer={selectedSupplier}
-              inputRef={supplierSearchRef}
-              inputClassName={inputClass}
-              accentClass="indigo"
-              placeholder="Kod veya ünvan ile ara..."
-              showSelectedHint
-            />
+            <div className="flex items-stretch gap-2">
+              <div className="min-w-0 flex-1">
+                <InlineCustomerSearchInput
+                  value={supplierSearch}
+                  onChange={(text) => {
+                    setSupplierSearch(text);
+                    if (!text.trim()) setSelectedSupplier(null);
+                  }}
+                  onSelect={selectSupplier}
+                  selectedCustomer={selectedSupplier}
+                  inputRef={supplierSearchRef}
+                  inputClassName={inputClass}
+                  accentClass="indigo"
+                  placeholder="Kod veya ünvan ile ara..."
+                  showSelectedHint
+                />
+              </div>
+              {selectedSupplier && (
+                <button
+                  type="button"
+                  title="Tedarikçi ekstresini yeni sekmede aç"
+                  onClick={() =>
+                    window.open(
+                      buildPageUrl('report-customer-statement', {
+                        customerId: selectedSupplier.id,
+                      }),
+                      '_blank',
+                      'noopener,noreferrer'
+                    )
+                  }
+                  className="inline-flex shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 text-indigo-700 hover:bg-indigo-100"
+                >
+                  <FileText className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -879,11 +925,11 @@ export default function PurchaseCreate({
                       <td className="px-3 py-2 text-right">
                         <input
                           type="number"
-                          min="0.01"
-                          step="0.01"
+                          min="1"
+                          step="1"
                           value={item.quantity}
                           onChange={(e) => {
-                            const qty = Number(e.target.value);
+                            const qty = toIntegerQty(e.target.value, item.quantity);
                             setCart((prev) =>
                               prev.map((row) =>
                                 row.rowId === item.rowId
@@ -996,7 +1042,7 @@ export default function PurchaseCreate({
               onChange={(e) => setProcessedBy(e.target.value)}
               className={inputClass}
             >
-              <option value="">Seçin</option>
+              <option value="">Seçiniz</option>
               {initData.personnels.map((person) => (
                 <option key={person.id} value={person.name}>
                   {person.name}

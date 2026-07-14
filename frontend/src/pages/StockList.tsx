@@ -19,6 +19,7 @@ import {
   formatUsd,
   getTotalPages,
   LIST_PAGE_SIZE,
+  toIntegerQty,
   type PaginatedListResponse,
   type Product,
 } from '../lib/api';
@@ -208,7 +209,7 @@ export default function StockList({
         await axios.put(`${API_BASE}/api/products/${editing.id}/stock`, {
           stocks: stockForm.map((row) => ({
             branchId: row.branchId,
-            quantity: Number(row.quantity),
+            quantity: toIntegerQty(row.quantity, 0),
           })),
         });
       }
@@ -659,12 +660,18 @@ export default function StockList({
                       </span>
                       <input
                         type="number"
-                        step="any"
+                        min="0"
+                        step="1"
                         value={row.quantity}
                         onChange={(e) =>
                           setStockForm((prev) =>
                             prev.map((item, i) =>
-                              i === index ? { ...item, quantity: e.target.value } : item
+                              i === index
+                                ? {
+                                    ...item,
+                                    quantity: String(toIntegerQty(e.target.value, 0)),
+                                  }
+                                : item
                             )
                           )
                         }

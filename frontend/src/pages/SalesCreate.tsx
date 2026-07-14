@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { ArrowLeft, CheckCircle, Printer, Save, Search, ShoppingCart, Trash2, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle, FileText, Printer, Save, Search, ShoppingCart, Trash2, X } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
@@ -17,11 +17,18 @@ import {
   formatMoney,
   formatUsd,
   roundPrice,
+  toIntegerQty,
   type Customer,
 } from '../lib/api';
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
+import {
+  RECEIPT_DISCLAIMER,
+  buildReceiptPartyLines,
+  type ReceiptParty,
+} from '../lib/receiptParty';
 import { printDocument } from '../lib/printMode';
+import { buildPageUrl } from '../lib/navigation';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
 type Branch = {
@@ -161,6 +168,7 @@ export default function SalesCreate({
   const [orderNotes, setOrderNotes] = useState('');
   const [isPreOrder, setIsPreOrder] = useState(false);
   const [shouldPrint, setShouldPrint] = useState(false);
+  const [printParty, setPrintParty] = useState<ReceiptParty | null>(null);
   const [processedBy, setProcessedBy] = useState('');
   const [f2Modal, setF2Modal] = useState(false);
   const [historyProduct, setHistoryProduct] = useState<{
@@ -246,6 +254,12 @@ export default function SalesCreate({
     return { before, after };
   }, [selectedCustomer, paymentMethod, printBalance, isEditMode, totalUsd]);
 
+  const receiptParty = printParty ?? selectedCustomer;
+  const receiptPartyLines = useMemo(
+    () => buildReceiptPartyLines(receiptParty),
+    [receiptParty]
+  );
+
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => {
       onNotify?.(type, message);
@@ -293,16 +307,12 @@ export default function SalesCreate({
             const branchSafe = safes.find((s) => s.branchId === branch.id);
             if (branchSafe) setSelectedSafe(branchSafe.id);
           }
-
-          if (personnels.length > 0 && !processedBy) {
-            setProcessedBy(personnels[0].name);
-          }
         }
       }
     } catch {
       notify('error', 'Başlangıç verileri yüklenemedi. Backend çalışıyor mu?');
     }
-  }, [notify, processedBy, isEditMode]);
+  }, [notify, isEditMode]);
 
   useEffect(() => {
     loadInitData();
@@ -410,7 +420,7 @@ export default function SalesCreate({
             sourceInvoiceItemId: line.id,
             returnedQty: line.returnedQty ?? 0,
             product: line.product,
-            quantity: line.quantity,
+            quantity: toIntegerQty(line.quantity, 1),
             unitPriceUsd: roundPrice(line.unitPrice / rate),
             discountPercent: line.discountPercent ?? 0,
             costUsd: productCostUsd(line.product),
@@ -431,65 +441,6 @@ export default function SalesCreate({
       cancelled = true;
     };
   }, [editInvoiceId, isEditMode]);
-
-  useEffect(() => {
-    if (isEditMode) return;
-    if (!selectedCustomer || cart.length === 0) return;
-
-    const refreshCartPrices = async () => {
-      try {
-        const updated = await Promise.all(
-          cart.map(async (item) => {
-            const response = await axios.get<{ success: boolean; data: Product[] }>(
-              `${API_BASE}/api/sales/products`,
-              {
-                params: {
-                  search: item.product.sku,
-                  customerId: String(selectedCustomer.id),
-                  exchangeRate: String(EXCHANGE_RATE),
-                },
-              }
-            );
-            const match = response.data.data.find((p) => p.id === item.product.id);
-            const unitPriceUsd = match
-              ? resolveSalesUnitPriceUsd(
-                  match as F2Product,
-                  Boolean(selectedCustomer)
-                )
-              : item.unitPriceUsd;
-            const costUsd = match
-              ? productCostUsd(match)
-              : item.costUsd;
-            return {
-              rowId: item.rowId,
-              unitPriceUsd,
-              costUsd,
-              product: match ? { ...item.product, ...match } : item.product,
-            };
-          })
-        );
-
-        setCart((prev) =>
-          prev.map((item) => {
-            const row = updated.find((u) => u.rowId === item.rowId);
-            return row
-              ? {
-                  ...item,
-                  unitPriceUsd: row.unitPriceUsd,
-                  costUsd: row.costUsd,
-                  product: row.product,
-                }
-              : item;
-          })
-        );
-      } catch {
-        /* fiyat güncellemesi opsiyonel */
-      }
-    };
-
-    refreshCartPrices();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCustomer?.id]);
 
   useEffect(() => {
     if (lastAddedRowId.current) {
@@ -563,7 +514,9 @@ export default function SalesCreate({
     value: number
   ) => {
     const normalized =
-      field === 'quantity' ? value : roundPrice(value);
+      field === 'quantity'
+        ? Math.max(1, toIntegerQty(value, 1))
+        : roundPrice(value);
     setCart((prev) =>
       prev.map((item) =>
         item.rowId === rowId ? { ...item, [field]: normalized } : item
@@ -682,7 +635,7 @@ export default function SalesCreate({
           ...(removedItemIds.length > 0 ? { removeItemIds: removedItemIds } : {}),
           items: cart.map((item) => {
             const payload = {
-              quantity: item.quantity,
+              quantity: toIntegerQty(item.quantity, 1),
               unitPrice: roundPrice(item.unitPriceUsd),
               discountPercent: item.discountPercent,
             };
@@ -714,7 +667,7 @@ export default function SalesCreate({
         orderNotes: orderNotes || undefined,
         items: cart.map((item) => ({
           productId: item.product.id,
-          quantity: item.quantity,
+          quantity: toIntegerQty(item.quantity, 1),
           unitPrice: roundPrice(item.unitPriceUsd),
           discountPercent: item.discountPercent,
         })),
@@ -760,19 +713,16 @@ export default function SalesCreate({
           setDisplayInvoiceNo(savedInvoiceNo);
         }
 
-        let formResetDone = false;
-        const resetAfterSale = () => {
-          if (formResetDone) return;
-          formResetDone = true;
-          setCart([]);
-          setOrderNotes('');
-          setDueDate('');
-          setIsPreOrder(false);
+        setPrintParty(customer);
+
+        let afterSaleDone = false;
+        const afterSale = () => {
+          if (afterSaleDone) return;
+          afterSaleDone = true;
+          // Müşteri ve sepet kalır — kontrol için; yalnızca yazdırma bayrakları temizlenir
           setShouldPrint(false);
           setPrintBalance(null);
-          setSelectedCustomer(null);
-          setCustomerSearch('');
-          setDisplayInvoiceNo('');
+          setPrintParty(null);
           onDataChange?.();
           void loadInitData();
         };
@@ -781,17 +731,17 @@ export default function SalesCreate({
           window.setTimeout(() => {
             printDocument();
             const onAfterPrint = () => {
-              resetAfterSale();
+              afterSale();
               window.removeEventListener('afterprint', onAfterPrint);
             };
             window.addEventListener('afterprint', onAfterPrint);
             window.setTimeout(() => {
               window.removeEventListener('afterprint', onAfterPrint);
-              resetAfterSale();
+              afterSale();
             }, 30_000);
           }, 150);
         } else {
-          resetAfterSale();
+          afterSale();
         }
       }
     } catch (error) {
@@ -821,23 +771,24 @@ export default function SalesCreate({
       {/* PDF / A4 — geniş düzen */}
       <div className="print-pdf-doc hidden">
         <h1>{displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}</h1>
-        {selectedCustomer && (
-          <p className="pdf-meta">
-            {selectedCustomer.code} — {selectedCustomer.name}
-          </p>
+        {receiptPartyLines.length > 0 && (
+          <div className="pdf-party">
+            {receiptPartyLines.map((line) => (
+              <p key={line} className="pdf-party-line">
+                {line}
+              </p>
+            ))}
+          </div>
         )}
         <p className="pdf-meta">
           {invoiceDate}
           {processedBy ? ` · ${processedBy}` : ''}
         </p>
         <p className="pdf-meta">
-          {[paymentMethod, paymentType, deliveryType].filter(Boolean).join(' · ')}
+          {[paymentMethod, paymentType, deliveryType, isPreOrder ? 'Ön Sipariş' : '']
+            .filter(Boolean)
+            .join(' · ')}
         </p>
-        {isPreOrder && (
-          <p className="pdf-meta">
-            <strong>Ön Sipariş — Stok düşülmedi</strong>
-          </p>
-        )}
         {orderNotes.trim() && (
           <div className="pdf-notes">
             <strong>Açıklama:</strong> {orderNotes.trim()}
@@ -879,6 +830,7 @@ export default function SalesCreate({
             </>
           )}
         </div>
+        <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
 
       {/* Termal fiş (72.1mm) — yalnızca fiş yazıcısı */}
@@ -886,19 +838,24 @@ export default function SalesCreate({
         <p className="receipt-slip-title">
           {displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}
         </p>
-        {selectedCustomer && (
-          <p className="receipt-slip-customer">
-            {selectedCustomer.code} — {selectedCustomer.name}
-          </p>
+        {receiptPartyLines.length > 0 && (
+          <div className="receipt-slip-party">
+            {receiptPartyLines.map((line) => (
+              <p key={line} className="receipt-slip-party-line">
+                {line}
+              </p>
+            ))}
+          </div>
         )}
         <p className="receipt-slip-meta">
           {invoiceDate}
           {processedBy ? ` · ${processedBy}` : ''}
         </p>
         <p className="receipt-slip-meta">
-          {[paymentMethod, paymentType, deliveryType].filter(Boolean).join(' · ')}
+          {[paymentMethod, paymentType, deliveryType, isPreOrder ? 'Ön Sipariş' : '']
+            .filter(Boolean)
+            .join(' · ')}
         </p>
-        {isPreOrder && <p className="receipt-slip-preorder">ÖN SİPARİŞ — Stok düşülmedi</p>}
         {orderNotes.trim() && (
           <p className="receipt-slip-notes">{orderNotes.trim()}</p>
         )}
@@ -955,6 +912,9 @@ export default function SalesCreate({
             </div>
           </>
         )}
+
+        <div className="receipt-slip-divider" />
+        <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
 
       <div className="mb-2 flex items-center gap-3 print:hidden">
@@ -999,7 +959,11 @@ export default function SalesCreate({
             <input
               type="text"
               readOnly
-              value={isEditMode ? displayInvoiceNo : initData.nextInvoiceNo || 'SF...'}
+              value={
+                isEditMode
+                  ? displayInvoiceNo
+                  : displayInvoiceNo || initData.nextInvoiceNo || '260715...'
+              }
               className={`${inputClass} bg-slate-50 font-mono font-bold text-indigo-700`}
             />
           </div>
@@ -1030,20 +994,42 @@ export default function SalesCreate({
           </h2>
           <div>
             <label className={labelClass}>Müşteri Seçimi</label>
-            <InlineCustomerSearchInput
-              value={customerSearch}
-              onChange={(text) => {
-                setCustomerSearch(text);
-                if (!text.trim()) setSelectedCustomer(null);
-              }}
-              onSelect={selectCustomer}
-              onResultsChange={setCustomerResults}
-              selectedCustomer={selectedCustomer}
-              inputRef={customerSearchRef}
-              inputClassName={inputClass}
-              accentClass="indigo"
-              showSelectedHint
-            />
+            <div className="flex items-stretch gap-2">
+              <div className="min-w-0 flex-1">
+                <InlineCustomerSearchInput
+                  value={customerSearch}
+                  onChange={(text) => {
+                    setCustomerSearch(text);
+                    if (!text.trim()) setSelectedCustomer(null);
+                  }}
+                  onSelect={selectCustomer}
+                  onResultsChange={setCustomerResults}
+                  selectedCustomer={selectedCustomer}
+                  inputRef={customerSearchRef}
+                  inputClassName={inputClass}
+                  accentClass="indigo"
+                  showSelectedHint
+                />
+              </div>
+              {selectedCustomer && (
+                <button
+                  type="button"
+                  title="Müşteri ekstresini yeni sekmede aç"
+                  onClick={() =>
+                    window.open(
+                      buildPageUrl('report-customer-statement', {
+                        customerId: selectedCustomer.id,
+                      }),
+                      '_blank',
+                      'noopener,noreferrer'
+                    )
+                  }
+                  className="inline-flex shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 text-indigo-700 hover:bg-indigo-100"
+                >
+                  <FileText className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -1268,8 +1254,8 @@ export default function SalesCreate({
                         <input
                           ref={setCartInputRef(item.rowId, 'quantity')}
                           type="number"
-                          min="0.01"
-                          step="0.01"
+                          min="1"
+                          step="1"
                           value={item.quantity}
                           onChange={(e) =>
                             updateCartItem(
@@ -1405,7 +1391,7 @@ export default function SalesCreate({
               onChange={(e) => setProcessedBy(e.target.value)}
               className={inputClass}
             >
-              <option value="">Seçin</option>
+              <option value="">Seçiniz</option>
               {initData.personnels.map((person) => (
                 <option key={person.id} value={person.name}>
                   {person.name}

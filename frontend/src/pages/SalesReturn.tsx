@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Copy,
+  FileText,
   Printer,
   RotateCcw,
   Save,
@@ -26,11 +27,18 @@ import {
   formatMoney,
   formatUsd,
   roundPrice,
+  toIntegerQty,
   type Customer,
 } from '../lib/api';
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
+import {
+  RECEIPT_DISCLAIMER,
+  buildReceiptPartyLines,
+  type ReceiptParty,
+} from '../lib/receiptParty';
 import { printDocument } from '../lib/printMode';
+import { buildPageUrl } from '../lib/navigation';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 import SalesCreate from './SalesCreate';
 
@@ -136,6 +144,8 @@ export default function SalesReturn({
   const customerSearchRef = useRef<HTMLInputElement>(null);
   const [selectedBranch, setSelectedBranch] = useState<number | ''>('');
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');
+  /** Açık = cari, Kapalı = kasadan para çıkışı */
+  const [settlementType, setSettlementType] = useState<'ACIK' | 'KAPALI'>('ACIK');
 
   const [submitting, setSubmitting] = useState(false);
   const [searchModal, setSearchModal] = useState(false);
@@ -152,6 +162,7 @@ export default function SalesReturn({
   const [editCustomerLabel, setEditCustomerLabel] = useState('');
   const [editCustomerId, setEditCustomerId] = useState<number | ''>('');
   const [shouldPrint, setShouldPrint] = useState(false);
+  const [printParty, setPrintParty] = useState<ReceiptParty | null>(null);
   const [orderNotes, setOrderNotes] = useState('');
 
   const showCosts = useHoldKeyReveal('F8');
@@ -189,6 +200,12 @@ export default function SalesReturn({
   const totalQuantity = useMemo(
     () => activeLines.reduce((sum, row) => sum + row.returnQty, 0),
     [activeLines]
+  );
+
+  const receiptParty = printParty ?? selectedCustomer;
+  const receiptPartyLines = useMemo(
+    () => buildReceiptPartyLines(receiptParty),
+    [receiptParty]
   );
 
   const chinaReturnCount = activeLines.filter((r) => r.isChinaReturn).length;
@@ -290,7 +307,7 @@ export default function SalesReturn({
               productId: line.product.id,
               productName: line.product.name,
               productSku: line.product.sku,
-              quantity: line.quantity,
+              quantity: toIntegerQty(line.quantity, 1),
               unitPriceTl: roundPrice(line.unitPrice / rate),
             };
           })
@@ -529,7 +546,7 @@ export default function SalesReturn({
         ...(removedItemIds.length > 0 ? { removeItemIds: removedItemIds } : {}),
         items: editLines.map((line) => ({
           id: line.invoiceItemId,
-          quantity: line.quantity,
+          quantity: toIntegerQty(line.quantity, 1),
           unitPrice: line.unitPriceTl,
           discountPercent: 0,
         })),
@@ -548,6 +565,10 @@ export default function SalesReturn({
     }
   };
 
+  const paymentMethod = settlementType === 'KAPALI' ? 'Nakit' : 'Cari';
+  const settlementLabel =
+    settlementType === 'KAPALI' ? 'Kapalı Fatura (Kasadan)' : 'Açık Fatura (Cari)';
+
   const handleSubmit = async () => {
     let customer = selectedCustomer;
     if (!customer) {
@@ -555,8 +576,23 @@ export default function SalesReturn({
       if (customer) selectCustomer(customer);
     }
 
-    if (!customer || selectedBranch === '' || selectedSafe === '') {
-      notify('error', 'Müşteri, şube ve kasa seçimlerini tamamlayın.');
+    if (!customer || selectedBranch === '') {
+      notify('error', 'Müşteri ve şube seçimlerini tamamlayın.');
+      return;
+    }
+
+    if (settlementType === 'KAPALI' && selectedSafe === '') {
+      notify('error', 'Kapalı fatura için kasa seçin.');
+      return;
+    }
+
+    const resolvedSafeId =
+      selectedSafe !== ''
+        ? Number(selectedSafe)
+        : branchSafes[0]?.id ?? safes[0]?.id;
+
+    if (!resolvedSafeId) {
+      notify('error', 'Geçerli bir kasa bulunamadı.');
       return;
     }
 
@@ -585,14 +621,15 @@ export default function SalesReturn({
         const response = await axios.post(`${API_BASE}/api/sales/return`, {
           customerId: customer.id,
           branchId: Number(selectedBranch),
-          safeId: Number(selectedSafe),
+          safeId: resolvedSafeId,
+          paymentMethod,
           originalInvoiceId: invoiceId,
           exchangeRate,
           orderNotes: orderNotes.trim() || undefined,
           items: lines.map((row) => ({
             sourceInvoiceItemId: row.sourceInvoiceItemId,
             productId: row.productId,
-            quantity: row.returnQty,
+            quantity: toIntegerQty(row.returnQty, 1),
             unitPrice: row.unitPriceTl,
             isChinaReturn: row.isChinaReturn,
           })),
@@ -612,12 +649,13 @@ export default function SalesReturn({
         const response = await axios.post(`${API_BASE}/api/sales/return-discretionary`, {
           customerId: customer.id,
           branchId: Number(selectedBranch),
-          safeId: Number(selectedSafe),
+          safeId: resolvedSafeId,
+          paymentMethod,
           exchangeRate: EXCHANGE_RATE,
           note: orderNotes.trim() || 'Kayıt dışı iade',
           items: manualLines.map((row) => ({
             productId: row.productId,
-            quantity: row.returnQty,
+            quantity: toIntegerQty(row.returnQty, 1),
             unitPrice: row.unitPriceTl,
             isChinaReturn: row.isChinaReturn,
           })),
@@ -651,14 +689,14 @@ export default function SalesReturn({
         `İade kaydedildi · ${parts.join(' · ')} · ${invoiceLabel}`
       );
 
-      let formResetDone = false;
-      const resetAfterReturn = () => {
-        if (formResetDone) return;
-        formResetDone = true;
-        setCart([]);
+      setPrintParty(customer);
+
+      let afterReturnDone = false;
+      const afterReturn = () => {
+        if (afterReturnDone) return;
+        afterReturnDone = true;
         setShouldPrint(false);
-        setDisplayInvoiceNo('');
-        setOrderNotes('');
+        setPrintParty(null);
         onDataChange?.();
       };
 
@@ -666,17 +704,17 @@ export default function SalesReturn({
         window.setTimeout(() => {
           printDocument();
           const onAfterPrint = () => {
-            resetAfterReturn();
+            afterReturn();
             window.removeEventListener('afterprint', onAfterPrint);
           };
           window.addEventListener('afterprint', onAfterPrint);
           window.setTimeout(() => {
             window.removeEventListener('afterprint', onAfterPrint);
-            resetAfterReturn();
+            afterReturn();
           }, 30_000);
         }, 150);
       } else {
-        resetAfterReturn();
+        afterReturn();
       }
     } catch (error) {
       const message =
@@ -745,6 +783,7 @@ export default function SalesReturn({
             <p>Toplam adet: {editTotalQty}</p>
             <p className="pdf-grand">Net toplam: {formatUsd(editTotalTl)}</p>
           </div>
+          <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
         </div>
 
         <div className="receipt-slip hidden">
@@ -788,6 +827,8 @@ export default function SalesReturn({
             <span className="receipt-item-name">NET TOPLAM</span>
             <span className="receipt-item-total">{formatUsd(editTotalTl)}</span>
           </div>
+          <div className="receipt-slip-divider" />
+          <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
         </div>
 
         <div className="mb-2 flex items-center gap-3 print:hidden">
@@ -871,11 +912,11 @@ export default function SalesReturn({
                     <td className="px-4 py-3 text-right">
                       <input
                         type="number"
-                        min="0.01"
-                        step="0.01"
+                        min="1"
+                        step="1"
                         value={line.quantity}
                         onChange={(e) => {
-                          const qty = Number(e.target.value);
+                          const qty = toIntegerQty(e.target.value, line.quantity);
                           setEditLines((prev) =>
                             prev.map((row) =>
                               row.rowId === line.rowId
@@ -994,12 +1035,16 @@ export default function SalesReturn({
     <div className="space-y-4 print:space-y-0">
       <div className="print-pdf-doc hidden">
         <h1>{displayInvoiceNo || 'İade Fişi'}</h1>
-        {selectedCustomer && (
-          <p className="pdf-meta">
-            {selectedCustomer.code} — {selectedCustomer.name}
-          </p>
+        {receiptPartyLines.length > 0 && (
+          <div className="pdf-party">
+            {receiptPartyLines.map((line) => (
+              <p key={line} className="pdf-party-line">
+                {line}
+              </p>
+            ))}
+          </div>
         )}
-        <p className="pdf-meta">Satış iade</p>
+        <p className="pdf-meta">Satış iade · {settlementLabel}</p>
         {orderNotes.trim() && (
           <div className="pdf-notes">
             <strong>Açıklama:</strong> {orderNotes.trim()}
@@ -1032,16 +1077,21 @@ export default function SalesReturn({
           <p>Toplam adet: {totalQuantity}</p>
           <p className="pdf-grand">Net toplam: {formatUsd(totalUsd)}</p>
         </div>
+        <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
 
       <div className="receipt-slip hidden">
         <p className="receipt-slip-title">{displayInvoiceNo || 'İade Fişi'}</p>
-        {selectedCustomer && (
-          <p className="receipt-slip-customer">
-            {selectedCustomer.code} — {selectedCustomer.name}
-          </p>
+        {receiptPartyLines.length > 0 && (
+          <div className="receipt-slip-party">
+            {receiptPartyLines.map((line) => (
+              <p key={line} className="receipt-slip-party-line">
+                {line}
+              </p>
+            ))}
+          </div>
         )}
-        <p className="receipt-slip-meta">Satış iade</p>
+        <p className="receipt-slip-meta">Satış iade · {settlementLabel}</p>
         {orderNotes.trim() && (
           <p className="receipt-slip-notes">{orderNotes.trim()}</p>
         )}
@@ -1074,6 +1124,8 @@ export default function SalesReturn({
           <span className="receipt-item-name">NET TOPLAM</span>
           <span className="receipt-item-total">{formatUsd(totalUsd)}</span>
         </div>
+        <div className="receipt-slip-divider" />
+        <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
 
       <div className="mb-2 flex items-center gap-3 print:hidden">
@@ -1119,20 +1171,42 @@ export default function SalesReturn({
           </h2>
           <div>
             <label className={labelClass}>Müşteri Seçimi</label>
-            <InlineCustomerSearchInput
-              value={customerSearch}
-              onChange={(text) => {
-                setCustomerSearch(text);
-                if (!text.trim()) setSelectedCustomer(null);
-              }}
-              onSelect={selectCustomer}
-              onResultsChange={setCustomerResults}
-              selectedCustomer={selectedCustomer}
-              inputRef={customerSearchRef}
-              inputClassName={inputClass}
-              accentClass="indigo"
-              showSelectedHint
-            />
+            <div className="flex items-stretch gap-2">
+              <div className="min-w-0 flex-1">
+                <InlineCustomerSearchInput
+                  value={customerSearch}
+                  onChange={(text) => {
+                    setCustomerSearch(text);
+                    if (!text.trim()) setSelectedCustomer(null);
+                  }}
+                  onSelect={selectCustomer}
+                  onResultsChange={setCustomerResults}
+                  selectedCustomer={selectedCustomer}
+                  inputRef={customerSearchRef}
+                  inputClassName={inputClass}
+                  accentClass="indigo"
+                  showSelectedHint
+                />
+              </div>
+              {selectedCustomer && (
+                <button
+                  type="button"
+                  title="Müşteri ekstresini yeni sekmede aç"
+                  onClick={() =>
+                    window.open(
+                      buildPageUrl('report-customer-statement', {
+                        customerId: selectedCustomer.id,
+                      }),
+                      '_blank',
+                      'noopener,noreferrer'
+                    )
+                  }
+                  className="inline-flex shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 text-indigo-700 hover:bg-indigo-100"
+                >
+                  <FileText className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -1162,8 +1236,26 @@ export default function SalesReturn({
 
         <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
           <h2 className="text-sm font-bold text-indigo-700 border-b border-indigo-100 pb-2">
-            Şube & Kasa
+            Fatura Tipi
           </h2>
+          <div>
+            <label className={labelClass}>İade Türü</label>
+            <select
+              value={settlementType}
+              onChange={(e) =>
+                setSettlementType(e.target.value === 'KAPALI' ? 'KAPALI' : 'ACIK')
+              }
+              className={inputClass}
+            >
+              <option value="ACIK">Açık Fatura — müşteri carisine işler</option>
+              <option value="KAPALI">Kapalı Fatura — kasadan para çıkar</option>
+            </select>
+            <p className="mt-1 text-caption text-slate-400">
+              {settlementType === 'ACIK'
+                ? 'İade tutarı müşteri bakiyesinden düşülür; kasa hareketi olmaz.'
+                : 'İade tutarı seçilen kasadan çıkış olarak kaydedilir; cariye yazılmaz.'}
+            </p>
+          </div>
           <div>
             <label className={labelClass}>Şube</label>
             <select
@@ -1180,22 +1272,25 @@ export default function SalesReturn({
               ))}
             </select>
           </div>
-          <div>
-            <label className={labelClass}>Kasa Seçimi</label>
-            <select
-              value={selectedSafe}
-              onChange={(e) =>
-                setSelectedSafe(e.target.value ? Number(e.target.value) : '')
-              }
-              className={inputClass}
-            >
-              {branchSafes.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({formatMoney(s.balance, s.currency)})
-                </option>
-              ))}
-            </select>
-          </div>
+          {settlementType === 'KAPALI' && (
+            <div>
+              <label className={labelClass}>Kasa (çıkış)</label>
+              <select
+                value={selectedSafe}
+                onChange={(e) =>
+                  setSelectedSafe(e.target.value ? Number(e.target.value) : '')
+                }
+                className={inputClass}
+              >
+                <option value="">Seçiniz</option>
+                {branchSafes.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({formatMoney(s.balance, s.currency)})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </section>
 
         <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
@@ -1318,10 +1413,10 @@ export default function SalesReturn({
                             <input
                               type="number"
                               min="0"
-                              step="0.01"
+                              step="1"
                               value={line.returnQty || ''}
                               onChange={(e) => {
-                                const val = Number(e.target.value);
+                                const val = toIntegerQty(e.target.value, 0);
                                 setCart((prev) =>
                                   prev.map((row) =>
                                     row.rowId === line.rowId
@@ -1449,6 +1544,12 @@ export default function SalesReturn({
           </div>
 
           <div className="space-y-2 border-t border-slate-200 pt-2 text-sm">
+            <div className="flex justify-between text-slate-600">
+              <span>Fatura tipi</span>
+              <span className="font-medium text-indigo-700">
+                {settlementType === 'ACIK' ? 'Açık (Cari)' : 'Kapalı (Kasa)'}
+              </span>
+            </div>
             <div className="flex justify-between text-slate-600">
               <span>{depotLabel('MERKEZ_DEPO')}</span>
               <span className="font-medium text-emerald-700">{stockReturnCount} kalem</span>

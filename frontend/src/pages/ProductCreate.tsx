@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Package, PlusCircle, Save } from 'lucide-react';
 import TypeaheadField from '../components/TypeaheadField';
-import { API_BASE, ensureArray, formatUsd, roundPrice } from '../lib/api';
+import { API_BASE, ensureArray, formatUsd, roundPrice, toIntegerQty } from '../lib/api';
 import { APPEARANCE_OPTIONS, QUALITY_OPTIONS } from '../lib/productOptions';
 
 type Category = {
@@ -225,7 +225,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         priceUsd: parsedSale,
         priceTl: roundPrice(parsedSale),
         barcode: barcode.trim() || undefined,
-        initialQuantity: Number(initialQuantity) || 0,
+        initialQuantity: toIntegerQty(initialQuantity, 0),
         categoryId: resolvedCategoryId !== '' ? Number(resolvedCategoryId) : undefined,
         brandModelId: resolvedBrandModelId,
         appearance: appearance || undefined,
@@ -401,9 +401,11 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
               <input
                 type="number"
                 min="0"
-                step="0.01"
+                step="1"
                 value={initialQuantity}
-                onChange={(e) => setInitialQuantity(e.target.value)}
+                onChange={(e) =>
+                  setInitialQuantity(String(toIntegerQty(e.target.value, 0)))
+                }
                 className={`${fieldClass} sm:max-w-[10rem]`}
               />
             </div>
