@@ -67,6 +67,7 @@ model Product {
   name         String
   brand        String?
   model        String?
+  color        String?
   appearance   String?
   quality      String?
   rbmPrice     Float          @default(0.0)

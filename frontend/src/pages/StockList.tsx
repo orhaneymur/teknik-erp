@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import {
   ChevronDown,
@@ -24,6 +24,7 @@ import {
   type Product,
 } from '../lib/api';
 import { depotLabel } from '../lib/depots';
+import { APPEARANCE_OPTIONS, COLOR_OPTIONS, appearanceLabel } from '../lib/productOptions';
 
 type CategoryOption = { id: number; name: string };
 type BrandModelOption = {
@@ -47,6 +48,7 @@ export default function StockList({
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [brandModels, setBrandModels] = useState<BrandModelOption[]>([]);
+  const [dbColors, setDbColors] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -61,6 +63,8 @@ export default function StockList({
     categoryId: '' as number | '',
     brand: '',
     model: '',
+    color: '',
+    appearance: '',
     description: '',
     costPrice: '',
     priceUsd: '',
@@ -114,15 +118,31 @@ export default function StockList({
       axios.get<{ success: boolean; data: BrandModelOption[] }>(
         `${API_BASE}/api/settings/brand-models`
       ),
+      axios.get<{ success: boolean; data: string[] }>(
+        `${API_BASE}/api/settings/color-suggestions`
+      ),
     ])
-      .then(([catRes, brandRes]) => {
+      .then(([catRes, brandRes, colorRes]) => {
         if (catRes.data.success) setCategories(ensureArray(catRes.data.data));
         if (brandRes.data.success) setBrandModels(ensureArray(brandRes.data.data));
+        if (colorRes.data.success) setDbColors(ensureArray(colorRes.data.data));
       })
       .catch(() => {
         /* tanimlar opsiyonel */
       });
   }, []);
+
+  const colorOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const name of [...COLOR_OPTIONS, ...dbColors]) {
+      const key = name.toLocaleLowerCase('tr-TR');
+      if (!name.trim() || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(name.trim());
+    }
+    return merged.map((name, index) => ({ id: index + 1, label: name }));
+  }, [dbColors]);
 
   useEffect(() => {
     setPage(1);
@@ -170,6 +190,8 @@ export default function StockList({
       categoryId: product.categoryId ?? product.category?.id ?? '',
       brand: product.brand ?? '',
       model: product.model ?? '',
+      color: product.color ?? '',
+      appearance: product.appearance ?? '',
       description: product.description ?? '',
       costPrice: String(product.costPrice),
       priceUsd: String(product.priceUsd),
@@ -199,6 +221,8 @@ export default function StockList({
         categoryId: form.categoryId === '' ? null : Number(form.categoryId),
         brand: form.brand.trim() || null,
         model: form.model.trim() || null,
+        color: form.color.trim() || null,
+        appearance: form.appearance.trim() || null,
         description: form.description.trim() || null,
         costPrice: Number(form.costPrice),
         priceUsd: Number(form.priceUsd),
@@ -382,6 +406,8 @@ export default function StockList({
                               product.category?.name,
                               product.brand,
                               product.model,
+                              product.color,
+                              appearanceLabel(product.appearance),
                             ]
                               .filter(Boolean)
                               .join(' · ') || 'Kategori / marka / model yok'}
@@ -607,6 +633,35 @@ export default function StockList({
                     placeholder="Yazmaya başlayın..."
                     inputClassName="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Renk</label>
+                  <TypeaheadField
+                    value={form.color}
+                    onChange={(value) => setForm((f) => ({ ...f, color: value }))}
+                    options={colorOptions}
+                    placeholder="Yazmaya başlayın..."
+                    inputClassName="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Görünüm</label>
+                  <select
+                    value={form.appearance}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, appearance: e.target.value }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  >
+                    <option value="">Seçin...</option>
+                    {APPEARANCE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">

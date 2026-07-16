@@ -441,7 +441,7 @@ export async function exportProductsExcel(prisma: PrismaClient): Promise<Buffer>
       Model: p.model ?? '',
       Gorunum: appearanceLabel(p.appearance),
       Kalite: qualityLabel(p.quality),
-      Renk: '',
+      Renk: p.color ?? '',
       Aciklama: p.description ?? '',
       Rmb: p.rbmPrice,
       AlisFiyati: p.costPrice,
@@ -502,6 +502,8 @@ export async function importProductsExcel(
     hasQuality: boolean;
     appearance: string | null;
     hasAppearance: boolean;
+    color: string | null;
+    hasColor: boolean;
     description: string | null;
     hasDescriptionUpdate: boolean;
     rbmPrice: number | null;
@@ -536,15 +538,10 @@ export async function importProductsExcel(
     const hasRenk = hasCell(record, 'Renk');
     const gorunum = optionalString(cell(record, 'Gorunum', 'Gorunun'));
     const renk = optionalString(cell(record, 'Renk'));
-    const hasDescriptionUpdate =
-      hasCell(record, 'Aciklama', 'Aciklam') || (Boolean(gorunum) && Boolean(renk));
-    let description: string | null = optionalString(
+    const hasDescriptionUpdate = hasCell(record, 'Aciklama', 'Aciklam');
+    const description: string | null = optionalString(
       cell(record, 'Aciklama', 'Aciklam')
     );
-    // Renk ayri alan; gorunum varken aciklamaya ekle
-    if (renk && gorunum) {
-      description = description ? `${description} | Renk: ${renk}` : `Renk: ${renk}`;
-    }
 
     const hasBrand = hasCell(record, 'Marka');
     const hasModel = hasCell(record, 'Model');
@@ -564,8 +561,10 @@ export async function importProductsExcel(
         optionalString(cell(record, 'Kalite'))
       ),
       hasQuality: hasCell(record, 'Kalite'),
-      appearance: appearanceCodeFromLabel(gorunum ?? renk),
-      hasAppearance: hasGorunum || hasRenk,
+      appearance: appearanceCodeFromLabel(gorunum),
+      hasAppearance: hasGorunum,
+      color: renk,
+      hasColor: hasRenk,
       description,
       hasDescriptionUpdate,
       rbmPrice: hasCell(record, 'Rmb', 'Rm', 'RMB')
@@ -643,6 +642,7 @@ export async function importProductsExcel(
       ...(item.hasModel ? { model: item.model, brandModelId } : {}),
       ...(item.hasQuality ? { quality: item.quality } : {}),
       ...(item.hasAppearance ? { appearance: item.appearance } : {}),
+      ...(item.hasColor ? { color: item.color } : {}),
       ...(item.hasDescriptionUpdate
         ? { description: item.description || null }
         : {}),

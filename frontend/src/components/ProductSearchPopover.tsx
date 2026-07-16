@@ -19,6 +19,7 @@ type ProductSearchPopoverProps = {
   children: ReactNode;
   emptyHint?: string;
   showEmpty?: boolean;
+  searchPlaceholder?: string;
 };
 
 /** F2 / hızlı ürün arama — sayfayı kapatmaz, sağ üstte kompakt panel */
@@ -40,6 +41,7 @@ export default function ProductSearchPopover({
   children,
   emptyHint = 'Ürünler yükleniyor...',
   showEmpty = true,
+  searchPlaceholder = 'SKU, barkod veya ürün adı...',
 }: ProductSearchPopoverProps) {
   useEffect(() => {
     if (!open) return;
@@ -97,7 +99,7 @@ export default function ProductSearchPopover({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="SKU, barkod veya ürün adı..."
+          placeholder={searchPlaceholder}
           autoComplete="off"
           autoFocus
           className="w-full rounded-lg border border-slate-300 bg-white text-sm px-3 py-2 focus:border-indigo-500 focus:ring-indigo-500"

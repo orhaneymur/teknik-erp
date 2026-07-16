@@ -8,15 +8,19 @@ import {
   FileText,
   Pencil,
   Printer,
+  Search,
 } from 'lucide-react';
 import { printDocument } from '../lib/printMode';
 import CustomerNameLink from '../components/CustomerNameLink';
-import CustomerSearchPanel from '../components/CustomerSearchPanel';
+import F2CustomerList from '../components/F2CustomerList';
 import InvoiceDetailModal from '../components/InvoiceDetailModal';
 import InvoiceInlineEditor, {
   isEditableInvoiceType,
   type EditableInvoiceRef,
 } from '../components/InvoiceInlineEditor';
+import ProductSearchPopover from '../components/ProductSearchPopover';
+import { useF2CustomerSearch } from '../hooks/useF2CustomerSearch';
+import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
 import {
   API_BASE,
   balanceStyles,
@@ -58,11 +62,20 @@ function lineKey(line: StatementLine) {
   return `${line.kind}-${line.id}`;
 }
 
+/** İlk oluşturma tarihine göre (yeniden eskiye) — düzenleme sırayı değiştirmez */
+function sortLinesByCreatedDesc(items: StatementLine[]) {
+  return [...items].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+}
+
 export default function CustomerStatement({
   initialCustomerId,
+  f2Trigger = 0,
   onNotify,
 }: {
   initialCustomerId?: number;
+  f2Trigger?: number;
   onNotify?: (type: 'success' | 'error', message: string) => void;
 } = {}) {
   const [customerId, setCustomerId] = useState<number | ''>(
@@ -76,11 +89,32 @@ export default function CustomerStatement({
   const [printLines, setPrintLines] = useState<StatementLine[]>([]);
   const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<EditableInvoiceRef | null>(null);
+  const [f2Modal, setF2Modal] = useState(false);
 
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => onNotify?.(type, message),
     [onNotify]
   );
+
+  const f2 = useF2CustomerSearch({
+    open: f2Modal,
+    f2Trigger,
+    requireQuery: true,
+  });
+
+  const openSearchModal = useCallback(() => {
+    setF2Modal(true);
+  }, []);
+
+  const closeSearchModal = useCallback(() => {
+    setF2Modal(false);
+  }, []);
+
+  useEffect(() => {
+    if (f2Trigger > 0 && !editingInvoice) {
+      setF2Modal(true);
+    }
+  }, [f2Trigger, editingInvoice]);
 
   const loadStatement = useCallback(() => {
     if (customerId === '') {
@@ -100,7 +134,7 @@ export default function CustomerStatement({
       .then((res) => {
         if (res.data.success) {
           setCustomer(res.data.data.customer);
-          setLines(res.data.data.lines);
+          setLines(sortLinesByCreatedDesc(res.data.data.lines));
         }
       })
       .finally(() => setLoading(false));
@@ -112,7 +146,17 @@ export default function CustomerStatement({
     setExpandedKeys(new Set());
     setSelectedKeys(new Set());
     setPrintLines([]);
+    setF2Modal(false);
   }, []);
+
+  const handleF2KeyDown = useF2KeyboardNav({
+    open: f2Modal,
+    results: f2.results,
+    focusedIndex: f2.focusedIndex,
+    navigateFocus: f2.navigateFocus,
+    onSelect: selectCustomer,
+    onClose: closeSearchModal,
+  });
 
   useEffect(() => {
     if (!initialCustomerId || initialCustomerId <= 0) return;
@@ -244,7 +288,6 @@ export default function CustomerStatement({
 
   return (
     <div className="space-y-4 print:space-y-0">
-      {/* PDF / A4 */}
       <div className="print-pdf-doc hidden">
         <h1>{printLines.length > 1 ? 'Toplu Ekstre Fişi' : 'Ekstre Fişi'}</h1>
         {customer && (
@@ -324,7 +367,6 @@ export default function CustomerStatement({
         )}
       </div>
 
-      {/* Termal fiş — yalnızca fiş yazıcısı */}
       <div className="receipt-slip hidden">
         <p className="receipt-slip-title">
           {printLines.length > 1 ? 'Toplu Fiş' : 'Fiş'}
@@ -422,65 +464,95 @@ export default function CustomerStatement({
           <div>
             <h1 className="page-title">Müşteri Ekstre</h1>
             <p className="text-sm text-slate-500">
-              Fiş görüntüle ve düzenle · seçili fişleri yazdır
+              F2 veya arama kutusu ile müşteri seçin · fiş görüntüle / düzenle
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => printReceipts(selectedLines)}
-            disabled={selectedLines.length === 0}
-            className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
-          >
-            <Printer className="h-4 w-4" />
-            Fiş Yazdır
-            {selectedLines.length > 0 ? ` (${selectedLines.length})` : ''}
-          </button>
-          <button
-            type="button"
-            onClick={downloadCsv}
-            disabled={customerId === ''}
-            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
-          >
-            <Download className="h-4 w-4" />
-            CSV İndir
-          </button>
-        </div>
+        {customerId !== '' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => printReceipts(selectedLines)}
+              disabled={selectedLines.length === 0}
+              className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
+            >
+              <Printer className="h-4 w-4" />
+              Fiş Yazdır
+              {selectedLines.length > 0 ? ` (${selectedLines.length})` : ''}
+            </button>
+            <button
+              type="button"
+              onClick={downloadCsv}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            >
+              <Download className="h-4 w-4" />
+              CSV İndir
+            </button>
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 print:hidden">
-        <div className="space-y-3 lg:col-span-4">
-          <CustomerSearchPanel
-            selectedCustomerId={customerId}
-            onSelect={selectCustomer}
-            accentClass="blue"
-          />
-          {customer && (
-            <div className="rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-slate-700">
-              <p className="font-medium text-slate-900">
+      <button
+        type="button"
+        onClick={openSearchModal}
+        className="print:hidden flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-left shadow-sm hover:border-blue-300 hover:bg-blue-50/40"
+      >
+        <Search className="h-5 w-5 shrink-0 text-blue-600" />
+        <div className="min-w-0 flex-1">
+          {customer ? (
+            <>
+              <p className="truncate text-sm font-semibold text-slate-900">
                 {customer.code} — {customer.name}
               </p>
-              <p className="mt-1">
-                Güncel bakiye:{' '}
-                <strong className={balanceStyles(customer.balance).text}>
+              <p className="text-caption text-slate-500">
+                Bakiye:{' '}
+                <span className={balanceStyles(customer.balance).text}>
                   {formatMoney(customer.balance)}
-                </strong>
+                </span>
+                {' · '}
+                F2 veya tıklayarak müşteri değiştir
               </p>
-              <CustomerNameLink customerId={customer.id} className="mt-2 inline-block text-sm">
-                Müşteri kartını aç
-              </CustomerNameLink>
-            </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-slate-800">Müşteri arayınız</p>
+              <p className="text-caption text-slate-500">
+                Kutuya tıklayın veya F2 · yazdıkça liste gelir
+              </p>
+            </>
           )}
         </div>
+        {customer && (
+          <CustomerNameLink
+            customerId={customer.id}
+            className="shrink-0 text-sm"
+            stopPropagation
+          >
+            Kart
+          </CustomerNameLink>
+        )}
+      </button>
 
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:col-span-8">
+      {customerId === '' ? (
+        <div className="print:hidden rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-16 text-center">
+          <Search className="mx-auto h-10 w-10 text-slate-300" />
+          <p className="mt-3 text-sm font-medium text-slate-600">
+            Ekstre görmek için müşteri seçin
+          </p>
+          <p className="mt-1 text-caption text-slate-400">F2 veya yukarıdaki arama kutusu</p>
+          <button
+            type="button"
+            onClick={openSearchModal}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            <Search className="h-4 w-4" />
+            Müşteri Ara
+          </button>
+        </div>
+      ) : (
+        <section className="print:hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           {loading ? (
             <p className="py-12 text-center text-slate-400">Yükleniyor...</p>
-          ) : customerId === '' ? (
-            <p className="py-12 text-center text-sm text-slate-400">
-              Ekstre görmek için soldan bir müşteri seçin.
-            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-slate-200">
@@ -633,57 +705,52 @@ export default function CustomerStatement({
                                 <>
                                   {line.orderNotes?.trim() && (
                                     <p className="mb-2 text-sm text-slate-600">
-                                      <span className="font-semibold text-slate-700">Açıklama:</span>{' '}
+                                      <span className="font-semibold text-slate-700">
+                                        Açıklama:
+                                      </span>{' '}
                                       {line.orderNotes.trim()}
                                     </p>
                                   )}
-                                <table className="min-w-full text-sm">
-                                  <thead>
-                                    <tr className="text-xs uppercase text-slate-500">
-                                      <th className="py-1 pr-3 text-left font-semibold">
-                                        Stok No
-                                      </th>
-                                      <th className="py-1 pr-3 text-left font-semibold">
-                                        Ürün
-                                      </th>
-                                      <th className="py-1 pr-3 text-right font-semibold">
-                                        Adet
-                                      </th>
-                                      <th className="py-1 pr-3 text-right font-semibold">
-                                        Birim
-                                      </th>
-                                      <th className="py-1 text-right font-semibold">
-                                        Toplam
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-200">
-                                    {(line.items ?? []).map((item) => (
-                                      <tr key={item.id}>
-                                        <td className="py-1.5 pr-3 font-mono text-xs text-slate-600">
-                                          {item.productSku}
-                                        </td>
-                                        <td className="py-1.5 pr-3 text-slate-800">
-                                          {item.productName}
-                                        </td>
-                                        <td className="py-1.5 pr-3 text-right tabular-nums">
-                                          {item.quantity}
-                                        </td>
-                                        <td className="py-1.5 pr-3 text-right tabular-nums">
-                                          {formatMoney(item.unitPrice)}
-                                          {item.discountPercent > 0 && (
-                                            <span className="ml-1 text-caption text-amber-600">
-                                              %{item.discountPercent}
-                                            </span>
-                                          )}
-                                        </td>
-                                        <td className="py-1.5 text-right font-medium tabular-nums">
-                                          {formatMoney(item.lineTotal)}
-                                        </td>
+                                  <table className="min-w-full text-sm">
+                                    <thead>
+                                      <tr className="text-xs uppercase text-slate-500">
+                                        <th className="py-1 pr-3 text-left font-semibold">
+                                          Stok No
+                                        </th>
+                                        <th className="py-1 pr-3 text-left font-semibold">
+                                          Ürün
+                                        </th>
+                                        <th className="py-1 pr-3 text-right font-semibold">
+                                          Adet
+                                        </th>
+                                        <th className="py-1 pr-3 text-right font-semibold">
+                                          Birim
+                                        </th>
+                                        <th className="py-1 text-right font-semibold">
+                                          Toplam
+                                        </th>
                                       </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
+                                    </thead>
+                                    <tbody>
+                                      {(line.items ?? []).map((item) => (
+                                        <tr key={item.id} className="border-t border-slate-100">
+                                          <td className="py-1.5 pr-3 font-mono text-xs text-slate-500">
+                                            {item.productSku}
+                                          </td>
+                                          <td className="py-1.5 pr-3">{item.productName}</td>
+                                          <td className="py-1.5 pr-3 text-right tabular-nums">
+                                            {item.quantity}
+                                          </td>
+                                          <td className="py-1.5 pr-3 text-right tabular-nums">
+                                            {formatMoney(item.unitPrice)}
+                                          </td>
+                                          <td className="py-1.5 text-right font-medium tabular-nums">
+                                            {formatMoney(item.lineTotal)}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
                                 </>
                               )}
                             </td>
@@ -694,7 +761,10 @@ export default function CustomerStatement({
                   })}
                   {lines.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
+                      <td
+                        colSpan={7}
+                        className="px-4 py-10 text-center text-sm text-slate-400"
+                      >
                         Hareket yok.
                       </td>
                     </tr>
@@ -704,7 +774,44 @@ export default function CustomerStatement({
             </div>
           )}
         </section>
-      </div>
+      )}
+
+      <ProductSearchPopover
+        open={f2Modal}
+        onClose={closeSearchModal}
+        title="Müşteri Ara"
+        hint="↑↓ · PgUp/Dn · Enter · Esc"
+        headerClassName="bg-blue-600"
+        searchQuery={f2.searchQuery}
+        onSearchChange={f2.setSearchQuery}
+        searchInputRef={f2.searchInputRef}
+        listRef={f2.listRef}
+        onListScroll={f2.handleListScroll}
+        onKeyDown={handleF2KeyDown}
+        searchLoading={f2.loading}
+        loadingMore={f2.loadingMore}
+        searchPlaceholder="Müşteri arayınız"
+        emptyHint={
+          f2.searchQuery.trim()
+            ? 'Sonuç bulunamadı.'
+            : 'Müşteri arayınız — yazdıkça liste gelir'
+        }
+        showEmpty={!f2.loading && f2.results.length === 0}
+        footer={
+          f2.totalCount > 0
+            ? `${f2.results.length} / ${f2.totalCount} müşteri`
+            : undefined
+        }
+      >
+        <F2CustomerList
+          customers={f2.results}
+          focusedIndex={f2.focusedIndex}
+          onFocusIndex={f2.setFocusedIndex}
+          onSelect={selectCustomer}
+          selectedId={customerId === '' ? undefined : customerId}
+          accentClass="blue"
+        />
+      </ProductSearchPopover>
 
       <InvoiceDetailModal
         invoiceId={viewingInvoiceId}

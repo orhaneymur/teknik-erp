@@ -4,8 +4,13 @@ import { API_BASE, ensureArray, type Customer, type PaginatedListResponse } from
 
 const PAGE_SIZE = 100;
 
-export function useF2CustomerSearch(options: { open: boolean; f2Trigger?: number }) {
-  const { open, f2Trigger = 0 } = options;
+export function useF2CustomerSearch(options: {
+  open: boolean;
+  f2Trigger?: number;
+  /** true ise boş sorguda liste çekilmez — yazıldıkça arar */
+  requireQuery?: boolean;
+}) {
+  const { open, f2Trigger = 0, requireQuery = false } = options;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Customer[]>([]);
@@ -87,6 +92,15 @@ export function useF2CustomerSearch(options: { open: boolean; f2Trigger?: number
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const trimmed = searchQuery.trim();
 
+    if (requireQuery && !trimmed) {
+      setResults([]);
+      setTotalCount(0);
+      setHasMore(false);
+      setFocusedIndex(-1);
+      setLoading(false);
+      return;
+    }
+
     debounceRef.current = setTimeout(() => {
       void fetchPage(1, trimmed, false);
     }, trimmed ? 250 : 0);
@@ -94,7 +108,7 @@ export function useF2CustomerSearch(options: { open: boolean; f2Trigger?: number
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [open, searchQuery, fetchPage]);
+  }, [open, searchQuery, fetchPage, requireQuery]);
 
   const loadMore = useCallback(() => {
     if (!open || loading || loadingMore || !hasMore) return;

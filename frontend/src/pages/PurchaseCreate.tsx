@@ -65,6 +65,12 @@ type InitData = {
 
 type PaymentMethod = 'Nakit' | 'EFT/Havale' | 'Kart' | 'Cari';
 type PaymentType = 'Peşin' | 'Vadeli';
+type SettlementType = 'ACIK' | 'KAPALI';
+
+/** Genel cari (kod 120) → Kapalı; diğerleri → Açık */
+function defaultSettlementForParty(party: Pick<Customer, 'code'>): SettlementType {
+  return String(party.code).trim() === '120' ? 'KAPALI' : 'ACIK';
+}
 
 type PurchaseCreateProps = {
   f2Trigger?: number;
@@ -94,8 +100,13 @@ export default function PurchaseCreate({
   const [supplierSearch, setSupplierSearch] = useState('');
   const [selectedBranch, setSelectedBranch] = useState<number | ''>('');
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('EFT/Havale');
+  /** Açık = cari, Kapalı = kasadan ödeme */
+  const [settlementType, setSettlementType] = useState<SettlementType>('ACIK');
   const [paymentType, setPaymentType] = useState<PaymentType>('Peşin');
+  const paymentMethod: PaymentMethod =
+    settlementType === 'KAPALI' ? 'Nakit' : 'Cari';
+  const settlementLabel =
+    settlementType === 'KAPALI' ? 'Kapalı Fatura (Kasadan)' : 'Açık Fatura (Cari)';
   const [invoiceDate, setInvoiceDate] = useState(() =>
     new Date().toISOString().split('T')[0]
   );
@@ -265,10 +276,9 @@ export default function PurchaseCreate({
         setSelectedBranch(data.branch.id);
         if (data.safe?.id) setSelectedSafe(data.safe.id);
 
-        const pm = data.paymentMethod as PaymentMethod;
-        if (['Nakit', 'EFT/Havale', 'Kart', 'Cari'].includes(pm)) {
-          setPaymentMethod(pm);
-        }
+        setSettlementType(
+          data.paymentMethod === 'Cari' ? 'ACIK' : 'KAPALI'
+        );
         if (data.paymentType === 'Peşin' || data.paymentType === 'Vadeli') {
           setPaymentType(data.paymentType);
         }
@@ -329,6 +339,7 @@ export default function PurchaseCreate({
   const selectSupplier = (customer: Customer) => {
     setSelectedSupplier(customer);
     setSupplierSearch(`${customer.code} — ${customer.name}`);
+    setSettlementType(defaultSettlementForParty(customer));
   };
 
   const addProductToCart = (product: F2Product | Product) => {
@@ -396,8 +407,8 @@ export default function PurchaseCreate({
     const branchId =
       selectedBranch !== '' ? Number(selectedBranch) : storeBranch!.id;
 
-    if (paymentMethod !== 'Cari' && selectedSafe === '') {
-      notify('error', 'Ödeme için kasa/banka seçin.');
+    if (settlementType === 'KAPALI' && selectedSafe === '') {
+      notify('error', 'Kapalı fatura için kasa/banka seçin.');
       return;
     }
 
@@ -546,7 +557,7 @@ export default function PurchaseCreate({
           {processedBy ? ` · ${processedBy}` : ''}
         </p>
         <p className="pdf-meta">
-          {[paymentMethod, paymentType].filter(Boolean).join(' · ')}
+          {[settlementLabel, paymentType].filter(Boolean).join(' · ')}
         </p>
         {orderNotes.trim() && (
           <div className="pdf-notes">
@@ -601,7 +612,7 @@ export default function PurchaseCreate({
           {processedBy ? ` · ${processedBy}` : ''}
         </p>
         <p className="receipt-slip-meta">
-          {[paymentMethod, paymentType].filter(Boolean).join(' · ')}
+          {[settlementLabel, paymentType].filter(Boolean).join(' · ')}
         </p>
         {orderNotes.trim() && (
           <p className="receipt-slip-notes">{orderNotes.trim()}</p>
@@ -779,20 +790,25 @@ export default function PurchaseCreate({
 
         <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">
           <h2 className="text-sm font-bold text-indigo-700 border-b border-indigo-100 pb-2">
-            Ödeme Bilgileri
+            Fatura Tipi
           </h2>
           <div>
-            <label className={labelClass}>Ödeme Yöntemi</label>
+            <label className={labelClass}>Fatura Türü</label>
             <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+              value={settlementType}
+              onChange={(e) =>
+                setSettlementType(e.target.value === 'KAPALI' ? 'KAPALI' : 'ACIK')
+              }
               className={inputClass}
             >
-              <option value="EFT/Havale">EFT / Havale</option>
-              <option value="Nakit">Nakit</option>
-              <option value="Kart">Kredi Kartı</option>
-              <option value="Cari">Cari (Veresiye)</option>
+              <option value="ACIK">Açık Fatura — tedarikçi carisine işler</option>
+              <option value="KAPALI">Kapalı Fatura — kasadan ödeme</option>
             </select>
+            <p className="mt-1 text-caption text-slate-400">
+              {settlementType === 'ACIK'
+                ? 'Alış tutarı tedarikçi bakiyesine yazılır; kasa hareketi olmaz.'
+                : 'Alış tutarı seçilen kasadan çıkış olarak kaydedilir; cariye yazılmaz.'}
+            </p>
           </div>
           <div>
             <label className={labelClass}>Ödeme Şekli</label>
@@ -805,24 +821,25 @@ export default function PurchaseCreate({
               <option value="Vadeli">Vadeli</option>
             </select>
           </div>
-          <div>
-            <label className={labelClass}>Banka / Kasa Seçimi</label>
-            <select
-              value={selectedSafe}
-              onChange={(e) =>
-                setSelectedSafe(e.target.value ? Number(e.target.value) : '')
-              }
-              disabled={paymentMethod === 'Cari'}
-              className={`${inputClass} disabled:bg-slate-100 disabled:text-slate-400`}
-            >
-              <option value="">Seçin</option>
-              {branchSafes.map((safe) => (
-                <option key={safe.id} value={safe.id}>
-                  {safe.name} ({formatMoney(safe.balance, safe.currency)})
-                </option>
-              ))}
-            </select>
-          </div>
+          {settlementType === 'KAPALI' && (
+            <div>
+              <label className={labelClass}>Banka / Kasa Seçimi</label>
+              <select
+                value={selectedSafe}
+                onChange={(e) =>
+                  setSelectedSafe(e.target.value ? Number(e.target.value) : '')
+                }
+                className={inputClass}
+              >
+                <option value="">Seçin</option>
+                {branchSafes.map((safe) => (
+                  <option key={safe.id} value={safe.id}>
+                    {safe.name} ({formatMoney(safe.balance, safe.currency)})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </section>
 
         <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3">

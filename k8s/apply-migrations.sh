@@ -92,6 +92,12 @@ if ! column_exists "Product" "appearance"; then
 else
   echo "    = Product.appearance zaten var"
 fi
+if ! column_exists "Product" "color"; then
+  mysql_exec "ALTER TABLE \`Product\` ADD COLUMN \`color\` VARCHAR(191) NULL;"
+  echo "    + Product.color eklendi"
+else
+  echo "    = Product.color zaten var"
+fi
 if ! column_exists "Product" "quality"; then
   mysql_exec "ALTER TABLE \`Product\` ADD COLUMN \`quality\` VARCHAR(191) NULL;"
   echo "    + Product.quality eklendi"

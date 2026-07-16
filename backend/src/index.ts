@@ -826,6 +826,12 @@ function buildProductSearchWhere(search: string): Prisma.ProductWhereInput {
       { name: termFilter(term) },
       { sku: termFilter(term) },
       { barcode: termFilter(term) },
+      { brand: termFilter(term) },
+      { model: termFilter(term) },
+      { color: termFilter(term) },
+      { appearance: termFilter(term) },
+      { quality: termFilter(term) },
+      { description: termFilter(term) },
     ]),
   };
 }
@@ -3607,6 +3613,7 @@ app.post<{
     brand?: string;
     model?: string;
     brandModelId?: number;
+    color?: string;
     appearance?: string;
     quality?: string;
     rbmPrice?: number;
@@ -3625,6 +3632,7 @@ app.post<{
     brand,
     model,
     brandModelId,
+    color,
     appearance,
     quality,
     rbmPrice,
@@ -3695,6 +3703,7 @@ app.post<{
           brand: resolvedBrand,
           model: resolvedModel,
           brandModelId: resolvedBrandModelId,
+          color: color?.trim() || null,
           appearance: appearance?.trim() || null,
           quality: quality?.trim() || null,
           rbmPrice: rbmPrice ?? 0,
@@ -3875,6 +3884,7 @@ app.put<{
     categoryId?: number | null;
     brand?: string | null;
     model?: string | null;
+    color?: string | null;
     appearance?: string | null;
     quality?: string | null;
     rbmPrice?: number;
@@ -3899,7 +3909,22 @@ app.put<{
     });
   }
 
-  const { sku, name, barcode, costPrice, priceTl, priceUsd, categoryId, brand, model, appearance, quality, rbmPrice, description } = request.body ?? {};
+  const {
+    sku,
+    name,
+    barcode,
+    costPrice,
+    priceTl,
+    priceUsd,
+    categoryId,
+    brand,
+    model,
+    color,
+    appearance,
+    quality,
+    rbmPrice,
+    description,
+  } = request.body ?? {};
 
   if (name !== undefined && !name.trim()) {
     return reply.status(400).send({
@@ -3936,6 +3961,7 @@ app.put<{
         ...(categoryId !== undefined ? { categoryId: categoryId ?? null } : {}),
         ...(brand !== undefined ? { brand: brand?.trim() || null } : {}),
         ...(model !== undefined ? { model: model?.trim() || null } : {}),
+        ...(color !== undefined ? { color: color?.trim() || null } : {}),
         ...(appearance !== undefined ? { appearance: appearance?.trim() || null } : {}),
         ...(quality !== undefined ? { quality: quality?.trim() || null } : {}),
         ...(rbmPrice !== undefined ? { rbmPrice } : {}),
@@ -4442,6 +4468,26 @@ app.get('/api/settings/brand-models', async () => {
     success: true,
     data: brandModels,
     message: 'Brand models retrieved successfully.',
+  };
+});
+
+app.get('/api/settings/color-suggestions', async () => {
+  const rows = await prisma.product.findMany({
+    where: { color: { not: null } },
+    select: { color: true },
+    distinct: ['color'],
+    take: 300,
+  });
+
+  const colors = rows
+    .map((row) => row.color?.trim() ?? '')
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'tr'));
+
+  return {
+    success: true,
+    data: colors,
+    message: 'Color suggestions retrieved successfully.',
   };
 });
 

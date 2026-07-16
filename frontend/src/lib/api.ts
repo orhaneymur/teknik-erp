@@ -209,6 +209,7 @@ export type Product = {
   name: string;
   brand?: string | null;
   model?: string | null;
+  color?: string | null;
   appearance?: string | null;
   quality?: string | null;
   description?: string | null;

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Package, PlusCircle, Save } from 'lucide-react';
 import TypeaheadField from '../components/TypeaheadField';
 import { API_BASE, ensureArray, formatUsd, roundPrice, toIntegerQty } from '../lib/api';
-import { APPEARANCE_OPTIONS, QUALITY_OPTIONS } from '../lib/productOptions';
+import { APPEARANCE_OPTIONS, COLOR_OPTIONS, QUALITY_OPTIONS } from '../lib/productOptions';
 
 type Category = {
   id: number;
@@ -40,6 +40,8 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
   const [brandText, setBrandText] = useState('');
   const [modelText, setModelText] = useState('');
   const [appearance, setAppearance] = useState('');
+  const [colorText, setColorText] = useState('');
+  const [dbColors, setDbColors] = useState<string[]>([]);
   const [quality, setQuality] = useState('');
   const [rbmPrice, setRbmPrice] = useState('');
   const [costPriceUsd, setCostPriceUsd] = useState('');
@@ -59,15 +61,31 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
       axios.get<{ success: boolean; data: BrandModelOption[] }>(
         `${API_BASE}/api/settings/brand-models`
       ),
+      axios.get<{ success: boolean; data: string[] }>(
+        `${API_BASE}/api/settings/color-suggestions`
+      ),
     ])
-      .then(([catRes, brandRes]) => {
+      .then(([catRes, brandRes, colorRes]) => {
         if (catRes.data.success) setCategories(ensureArray(catRes.data.data));
         if (brandRes.data.success) setBrandModels(ensureArray(brandRes.data.data));
+        if (colorRes.data.success) setDbColors(ensureArray(colorRes.data.data));
       })
       .catch(() => {
         /* tanımlar opsiyonel */
       });
   }, []);
+
+  const colorOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const name of [...COLOR_OPTIONS, ...dbColors]) {
+      const key = name.toLocaleLowerCase('tr-TR');
+      if (!name.trim() || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(name.trim());
+    }
+    return merged.map((name, index) => ({ id: index + 1, label: name }));
+  }, [dbColors]);
 
   const resolvedCategoryId = useMemo((): number | '' => {
     if (categoryId !== '') return categoryId;
@@ -183,6 +201,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
     setBrandText('');
     setModelText('');
     setAppearance('');
+    setColorText('');
     setQuality('');
     setRbmPrice('');
     setCostPriceUsd('');
@@ -228,6 +247,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         initialQuantity: toIntegerQty(initialQuantity, 0),
         categoryId: resolvedCategoryId !== '' ? Number(resolvedCategoryId) : undefined,
         brandModelId: resolvedBrandModelId,
+        color: colorText.trim() || undefined,
         appearance: appearance || undefined,
         quality: quality || undefined,
         rbmPrice: parsedRbm,
@@ -354,7 +374,20 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className={labelClass}>Renk / Görünüm</label>
+                <label className={labelClass}>Renk</label>
+                <TypeaheadField
+                  value={colorText}
+                  onChange={setColorText}
+                  options={colorOptions}
+                  placeholder="Yazmaya başlayın..."
+                  inputClassName={fieldClass}
+                />
+                <p className="mt-1 text-caption text-slate-400">
+                  Yazınca renk önerileri çıkar · serbest metin de olur
+                </p>
+              </div>
+              <div>
+                <label className={labelClass}>Görünüm</label>
                 <select
                   value={appearance}
                   onChange={(e) => setAppearance(e.target.value)}
@@ -368,21 +401,22 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className={labelClass}>Kalite</label>
-                <select
-                  value={quality}
-                  onChange={(e) => setQuality(e.target.value)}
-                  className={fieldClass}
-                >
-                  <option value="">Seçin...</option>
-                  {QUALITY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            </div>
+
+            <div>
+              <label className={labelClass}>Kalite</label>
+              <select
+                value={quality}
+                onChange={(e) => setQuality(e.target.value)}
+                className={fieldClass}
+              >
+                <option value="">Seçin...</option>
+                {QUALITY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>

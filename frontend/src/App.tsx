@@ -48,6 +48,7 @@ const F2_ENABLED_PAGES: PageId[] = [
   'invoice-purchase',
   'sales-return',
   'customer-payments',
+  'report-customer-statement',
 ];
 
 const initialOpenMenus = menuCategories.reduce(
@@ -58,7 +59,7 @@ const initialOpenMenus = menuCategories.reduce(
   {} as Record<MenuCategoryId, boolean>
 );
 
-const FRONTEND_VERSION = 'v1.8.43';
+const FRONTEND_VERSION = 'v1.8.44';
 
 function App() {
   const initialUrl = parsePageFromUrl();
@@ -295,7 +296,7 @@ function App() {
         if (!F2_ENABLED_PAGES.includes(activePage) && !embeddedSalesEditorOpen) {
           showNotification(
             'error',
-            'F2 yalnızca Satış, Alış Faturası, Satış İade ve Tahsilat/Ödeme ekranlarında çalışır.'
+            'F2 yalnızca Satış, Alış, Satış İade, Tahsilat/Ödeme ve Müşteri Ekstre ekranlarında çalışır.'
           );
           return;
         }
@@ -462,6 +463,7 @@ function App() {
         return (
           <CustomerStatement
             initialCustomerId={activeCustomerId}
+            f2Trigger={f2Trigger}
             onNotify={showNotification}
           />
         );
