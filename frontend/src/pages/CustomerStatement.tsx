@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import {
   ChevronDown,
@@ -9,18 +9,17 @@ import {
   Pencil,
   Printer,
   Search,
+  User,
+  Wallet,
 } from 'lucide-react';
 import { printDocument } from '../lib/printMode';
-import CustomerNameLink from '../components/CustomerNameLink';
-import F2CustomerList from '../components/F2CustomerList';
+import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import InvoiceDetailModal from '../components/InvoiceDetailModal';
 import InvoiceInlineEditor, {
   isEditableInvoiceType,
   type EditableInvoiceRef,
 } from '../components/InvoiceInlineEditor';
-import ProductSearchPopover from '../components/ProductSearchPopover';
-import { useF2CustomerSearch } from '../hooks/useF2CustomerSearch';
-import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
+import { useAppNavigationOptional } from '../context/AppNavigationContext';
 import {
   API_BASE,
   balanceStyles,
@@ -89,30 +88,19 @@ export default function CustomerStatement({
   const [printLines, setPrintLines] = useState<StatementLine[]>([]);
   const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<EditableInvoiceRef | null>(null);
-  const [f2Modal, setF2Modal] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const navigation = useAppNavigationOptional();
 
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => onNotify?.(type, message),
     [onNotify]
   );
 
-  const f2 = useF2CustomerSearch({
-    open: f2Modal,
-    f2Trigger,
-    requireQuery: true,
-  });
-
-  const openSearchModal = useCallback(() => {
-    setF2Modal(true);
-  }, []);
-
-  const closeSearchModal = useCallback(() => {
-    setF2Modal(false);
-  }, []);
-
   useEffect(() => {
     if (f2Trigger > 0 && !editingInvoice) {
-      setF2Modal(true);
+      searchInputRef.current?.focus();
     }
   }, [f2Trigger, editingInvoice]);
 
@@ -143,20 +131,21 @@ export default function CustomerStatement({
   const selectCustomer = useCallback((picked: Customer) => {
     setCustomerId(picked.id);
     setCustomer(picked);
+    setCustomerSearch(`${picked.code} — ${picked.name}`);
     setExpandedKeys(new Set());
     setSelectedKeys(new Set());
     setPrintLines([]);
-    setF2Modal(false);
   }, []);
 
-  const handleF2KeyDown = useF2KeyboardNav({
-    open: f2Modal,
-    results: f2.results,
-    focusedIndex: f2.focusedIndex,
-    navigateFocus: f2.navigateFocus,
-    onSelect: selectCustomer,
-    onClose: closeSearchModal,
-  });
+  const clearCustomer = useCallback(() => {
+    setCustomerId('');
+    setCustomer(null);
+    setCustomerSearch('');
+    setLines([]);
+    setExpandedKeys(new Set());
+    setSelectedKeys(new Set());
+    setPrintLines([]);
+  }, []);
 
   useEffect(() => {
     if (!initialCustomerId || initialCustomerId <= 0) return;
@@ -464,12 +453,36 @@ export default function CustomerStatement({
           <div>
             <h1 className="page-title">Müşteri Ekstre</h1>
             <p className="text-sm text-slate-500">
-              F2 veya arama kutusu ile müşteri seçin · fiş görüntüle / düzenle
+              Müşteri arayın · hareketleri görüntüleyin ve düzenleyin
             </p>
           </div>
         </div>
         {customerId !== '' && (
           <div className="flex flex-wrap items-center gap-2">
+            {navigation && (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigation.navigateTo('customer-payments', {
+                      customerId: Number(customerId),
+                    })
+                  }
+                  className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100"
+                >
+                  <Wallet className="h-4 w-4" />
+                  Tahsilat
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigation.navigateToCustomer(Number(customerId))}
+                  className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800 hover:bg-sky-100"
+                >
+                  <User className="h-4 w-4" />
+                  Kart
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={() => printReceipts(selectedLines)}
@@ -486,68 +499,65 @@ export default function CustomerStatement({
               className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50"
             >
               <Download className="h-4 w-4" />
-              CSV İndir
+              CSV
             </button>
           </div>
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={openSearchModal}
-        className="print:hidden flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-left shadow-sm hover:border-blue-300 hover:bg-blue-50/40"
-      >
-        <Search className="h-5 w-5 shrink-0 text-blue-600" />
-        <div className="min-w-0 flex-1">
-          {customer ? (
-            <>
-              <p className="truncate text-sm font-semibold text-slate-900">
-                {customer.code} — {customer.name}
-              </p>
-              <p className="text-caption text-slate-500">
-                Bakiye:{' '}
-                <span className={balanceStyles(customer.balance).text}>
-                  {formatMoney(customer.balance)}
-                </span>
-                {' · '}
-                F2 veya tıklayarak müşteri değiştir
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm font-semibold text-slate-800">Müşteri arayınız</p>
-              <p className="text-caption text-slate-500">
-                Kutuya tıklayın veya F2 · yazdıkça liste gelir
-              </p>
-            </>
-          )}
-        </div>
-        {customer && (
-          <CustomerNameLink
-            customerId={customer.id}
-            className="shrink-0 text-sm"
-            stopPropagation
-          >
-            Kart
-          </CustomerNameLink>
-        )}
-      </button>
-
-      {customerId === '' ? (
-        <div className="print:hidden rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-16 text-center">
-          <Search className="mx-auto h-10 w-10 text-slate-300" />
-          <p className="mt-3 text-sm font-medium text-slate-600">
-            Ekstre görmek için müşteri seçin
+      <div className="print:hidden space-y-2">
+        <label className="text-sm font-medium text-slate-700">Müşteri arayınız</label>
+        <InlineCustomerSearchInput
+          value={customerSearch}
+          onChange={(text) => {
+            setCustomerSearch(text);
+            if (!text.trim()) clearCustomer();
+          }}
+          onSelect={selectCustomer}
+          selectedCustomer={customer}
+          inputRef={searchInputRef}
+          accentClass="blue"
+          placeholder="Kod veya ünvan yazın · yazdıkça liste gelir"
+          inputClassName="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          showSelectedHint={false}
+        />
+        {!customer && (
+          <p className="text-caption text-slate-400">
+            F2 ile arama kutusuna odaklanın · müşteri seçilince ekstre aşağıda açılır
           </p>
-          <p className="mt-1 text-caption text-slate-400">F2 veya yukarıdaki arama kutusu</p>
+        )}
+      </div>
+
+      {customer && (
+        <div className="print:hidden flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-blue-100 bg-blue-50/50 px-4 py-3 text-sm">
+          <span className="font-semibold text-slate-900">
+            {customer.code} — {customer.name}
+          </span>
+          <span className="text-slate-500">
+            Bakiye:{' '}
+            <strong className={balanceStyles(customer.balance).text}>
+              {formatMoney(customer.balance)}
+            </strong>
+          </span>
+          <span className="text-slate-500">
+            Limit: {formatMoney(customer.creditLimit)}
+          </span>
           <button
             type="button"
-            onClick={openSearchModal}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            onClick={clearCustomer}
+            className="ml-auto text-xs font-medium text-slate-500 hover:text-slate-800"
           >
-            <Search className="h-4 w-4" />
-            Müşteri Ara
+            Müşteri değiştir
           </button>
+        </div>
+      )}
+
+      {customerId === '' ? (
+        <div className="print:hidden rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-6 py-14 text-center">
+          <Search className="mx-auto h-9 w-9 text-slate-300" />
+          <p className="mt-3 text-sm text-slate-500">
+            Yukarıdaki kutuya yazarak müşteri seçin
+          </p>
         </div>
       ) : (
         <section className="print:hidden overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -775,43 +785,6 @@ export default function CustomerStatement({
           )}
         </section>
       )}
-
-      <ProductSearchPopover
-        open={f2Modal}
-        onClose={closeSearchModal}
-        title="Müşteri Ara"
-        hint="↑↓ · PgUp/Dn · Enter · Esc"
-        headerClassName="bg-blue-600"
-        searchQuery={f2.searchQuery}
-        onSearchChange={f2.setSearchQuery}
-        searchInputRef={f2.searchInputRef}
-        listRef={f2.listRef}
-        onListScroll={f2.handleListScroll}
-        onKeyDown={handleF2KeyDown}
-        searchLoading={f2.loading}
-        loadingMore={f2.loadingMore}
-        searchPlaceholder="Müşteri arayınız"
-        emptyHint={
-          f2.searchQuery.trim()
-            ? 'Sonuç bulunamadı.'
-            : 'Müşteri arayınız — yazdıkça liste gelir'
-        }
-        showEmpty={!f2.loading && f2.results.length === 0}
-        footer={
-          f2.totalCount > 0
-            ? `${f2.results.length} / ${f2.totalCount} müşteri`
-            : undefined
-        }
-      >
-        <F2CustomerList
-          customers={f2.results}
-          focusedIndex={f2.focusedIndex}
-          onFocusIndex={f2.setFocusedIndex}
-          onSelect={selectCustomer}
-          selectedId={customerId === '' ? undefined : customerId}
-          accentClass="blue"
-        />
-      </ProductSearchPopover>
 
       <InvoiceDetailModal
         invoiceId={viewingInvoiceId}

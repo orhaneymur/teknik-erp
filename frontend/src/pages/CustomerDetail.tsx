@@ -361,15 +361,6 @@ export default function CustomerDetail({
           </button>
           <button
             type="button"
-            onClick={() =>
-              onNavigate('report-customer-statement', { customerId: customer.id })
-            }
-            className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100"
-          >
-            Tam Ekstre
-          </button>
-          <button
-            type="button"
             onClick={openEdit}
             className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500"
           >
@@ -417,44 +408,43 @@ export default function CustomerDetail({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-4 font-semibold text-slate-800">İletişim Bilgileri</h2>
-          <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-slate-500">Yetkili</dt>
-              <dd className="font-medium text-slate-900">{customer.contactPerson || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Telefon</dt>
-              <dd className="font-medium text-slate-900">{customer.phone || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">E-posta</dt>
-              <dd className="font-medium text-slate-900">{customer.email || '—'}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Vergi Dairesi / No</dt>
-              <dd className="font-medium text-slate-900">
-                {[customer.taxOffice, customer.taxNumber].filter(Boolean).join(' · ') || '—'}
-              </dd>
-            </div>
-            <div className="sm:col-span-2">
-              <dt className="text-slate-500">Adres</dt>
-              <dd className="font-medium text-slate-900">
-                {[customer.address, customer.district, customer.city]
-                  .filter(Boolean)
-                  .join(', ') || '—'}
-              </dd>
-            </div>
-          </dl>
-        </section>
-
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
-            <Wallet className="h-4 w-4 text-emerald-600" />
-            <h2 className="font-semibold text-slate-800">Son Tahsilat / Ödemeler</h2>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="mb-3 text-sm font-semibold text-slate-800">İletişim Bilgileri</h2>
+        <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <div className="min-w-[8rem]">
+            <dt className="text-xs text-slate-500">Yetkili</dt>
+            <dd className="font-medium text-slate-900">{customer.contactPerson || '—'}</dd>
           </div>
+          <div className="min-w-[8rem]">
+            <dt className="text-xs text-slate-500">Telefon</dt>
+            <dd className="font-medium text-slate-900">{customer.phone || '—'}</dd>
+          </div>
+          <div className="min-w-[10rem]">
+            <dt className="text-xs text-slate-500">E-posta</dt>
+            <dd className="font-medium text-slate-900">{customer.email || '—'}</dd>
+          </div>
+          <div className="min-w-[10rem]">
+            <dt className="text-xs text-slate-500">Vergi Dairesi / No</dt>
+            <dd className="font-medium text-slate-900">
+              {[customer.taxOffice, customer.taxNumber].filter(Boolean).join(' · ') || '—'}
+            </dd>
+          </div>
+          <div className="min-w-[12rem] flex-1">
+            <dt className="text-xs text-slate-500">Adres</dt>
+            <dd className="font-medium text-slate-900">
+              {[customer.address, customer.district, customer.city]
+                .filter(Boolean)
+                .join(', ') || '—'}
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+          <Wallet className="h-4 w-4 text-emerald-600" />
+          <h2 className="font-semibold text-slate-800">Son Tahsilat / Ödemeler</h2>
+        </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100 text-sm">
               <thead className="bg-slate-50/80">
@@ -501,7 +491,6 @@ export default function CustomerDetail({
             </table>
           </div>
         </section>
-      </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
@@ -597,17 +586,9 @@ export default function CustomerDetail({
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+        <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+          <FileText className="h-4 w-4 text-violet-600" />
           <h2 className="font-semibold text-slate-800">Son Cari Hareketler</h2>
-          <button
-            type="button"
-            onClick={() =>
-              onNavigate('report-customer-statement', { customerId: customer.id })
-            }
-            className="text-xs font-semibold text-sky-700 hover:underline"
-          >
-            Tüm ekstre
-          </button>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100 text-sm">
@@ -657,7 +638,7 @@ export default function CustomerDetail({
           <div className="fixed inset-0 bg-slate-900/60" onClick={closeEdit} />
           <form
             onSubmit={handleSave}
-            className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl"
           >
             <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
               <h3 className="font-semibold text-slate-900">Müşteri Kartını Düzenle</h3>
@@ -665,13 +646,22 @@ export default function CustomerDetail({
                 <X className="h-5 w-5 text-slate-400" />
               </button>
             </div>
-            <div className="space-y-3 p-5">
-              <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-4 p-5">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div>
                   <label className="text-xs font-medium text-slate-600">Kod</label>
                   <input
                     value={editForm.code}
                     onChange={(e) => setEditForm((f) => f && { ...f, code: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-slate-600">Ünvan *</label>
+                  <input
+                    required
+                    value={editForm.name}
+                    onChange={(e) => setEditForm((f) => f && { ...f, name: e.target.value })}
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                 </div>
@@ -688,22 +678,73 @@ export default function CustomerDetail({
                   />
                 </div>
               </div>
-              <div>
-                <label className="text-xs font-medium text-slate-600">Ünvan *</label>
-                <input
-                  required
-                  value={editForm.name}
-                  onChange={(e) => setEditForm((f) => f && { ...f, name: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Yetkili</label>
+                  <input
+                    value={editForm.contactPerson}
+                    onChange={(e) =>
+                      setEditForm((f) => f && { ...f, contactPerson: e.target.value })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Telefon</label>
+                  <input
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm((f) => f && { ...f, phone: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">E-posta</label>
+                  <input
+                    value={editForm.email}
+                    onChange={(e) => setEditForm((f) => f && { ...f, email: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Vergi No</label>
+                  <input
+                    value={editForm.taxNumber}
+                    onChange={(e) =>
+                      setEditForm((f) => f && { ...f, taxNumber: e.target.value })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-xs font-medium text-slate-600">Telefon</label>
-                <input
-                  value={editForm.phone}
-                  onChange={(e) => setEditForm((f) => f && { ...f, phone: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div>
+                  <label className="text-xs font-medium text-slate-600">İl</label>
+                  <input
+                    value={editForm.city}
+                    onChange={(e) => setEditForm((f) => f && { ...f, city: e.target.value })}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">İlçe</label>
+                  <input
+                    value={editForm.district}
+                    onChange={(e) =>
+                      setEditForm((f) => f && { ...f, district: e.target.value })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-medium text-slate-600">Vergi Dairesi</label>
+                  <input
+                    value={editForm.taxOffice}
+                    onChange={(e) =>
+                      setEditForm((f) => f && { ...f, taxOffice: e.target.value })
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-600">Adres</label>
