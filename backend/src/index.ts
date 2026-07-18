@@ -2711,10 +2711,11 @@ app.post<{
     safeId: number;
     amount: number;
     type: 'GIRIS' | 'CIKIS';
+    method?: string;
     description?: string;
   };
 }>('/api/customers/payment', async (request, reply) => {
-  const { customerId, safeId, amount, type, description } = request.body;
+  const { customerId, safeId, amount, type, method, description } = request.body;
 
   if (!customerId || !safeId || !amount || amount <= 0 || !type) {
     return reply.status(400).send({
@@ -2779,6 +2780,7 @@ app.post<{
           customerId,
           type,
           amount,
+          method: method?.trim() || null,
           description:
             description?.trim() ||
             (type === 'GIRIS'
@@ -2850,6 +2852,7 @@ app.put<{
     safeId?: number;
     amount?: number;
     type?: 'GIRIS' | 'CIKIS';
+    method?: string;
     description?: string;
   };
 }>('/api/customers/payment/:id', async (request, reply) => {
@@ -2955,6 +2958,9 @@ app.put<{
           safeId: nextSafeId,
           amount: nextAmount,
           type: nextType,
+          ...(body.method !== undefined
+            ? { method: body.method.trim() || null }
+            : {}),
           description: nextDescription,
         },
         include: {
@@ -5079,6 +5085,7 @@ app.get<{ Querystring: { customerId?: string } }>(
           id: true,
           invoiceNo: true,
           type: true,
+          isPreOrder: true,
           totalAmountTl: true,
           totalAmountUsd: true,
           exchangeRate: true,
@@ -5127,6 +5134,7 @@ app.get<{ Querystring: { customerId?: string } }>(
       credit: number;
       invoiceNo?: string;
       invoiceType?: string;
+      isPreOrder?: boolean;
       paymentMethod?: string | null;
       paymentType?: string | null;
       processedBy?: string | null;
@@ -5149,6 +5157,7 @@ app.get<{ Querystring: { customerId?: string } }>(
         credit: !isDebit ? inv.totalAmountTl : 0,
         invoiceNo: inv.invoiceNo,
         invoiceType: inv.type,
+        isPreOrder: inv.isPreOrder,
         paymentMethod: inv.paymentMethod,
         paymentType: inv.paymentType,
         processedBy: inv.processedBy,

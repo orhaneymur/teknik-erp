@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
-import { API_BASE, type Customer, type PaginatedListResponse } from '../lib/api';
+import {
+  API_BASE,
+  SEARCH_MIN_CHARS,
+  type Customer,
+  type PaginatedListResponse,
+} from '../lib/api';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
 
 export type InlineCustomerSearchAccent = 'indigo' | 'rose' | 'emerald' | 'blue' | 'amber';
@@ -52,7 +57,7 @@ export default function InlineCustomerSearchInput({
   placeholder = 'Kod veya isim ile ara...',
   inputClassName = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm',
   accentClass = 'indigo',
-  minQueryLength = 1,
+  minQueryLength = SEARCH_MIN_CHARS,
   showSelectedHint = true,
   onResultsChange,
   inputRef: externalInputRef,
@@ -213,9 +218,18 @@ export default function InlineCustomerSearchInput({
                 <span className="text-slate-500"> — {customer.name}</span>
               </li>
             ))}
-          {!loading && value.trim() && results.length === 0 && (
-            <li className="px-3 py-2 text-sm text-slate-400">Sonuç yok</li>
-          )}
+          {!loading &&
+            value.trim().length > 0 &&
+            value.trim().length < minQueryLength && (
+              <li className="px-3 py-2 text-sm text-slate-400">
+                En az {minQueryLength} harf yazın
+              </li>
+            )}
+          {!loading &&
+            value.trim().length >= minQueryLength &&
+            results.length === 0 && (
+              <li className="px-3 py-2 text-sm text-slate-400">Sonuç yok</li>
+            )}
         </ul>
       )}
     </div>

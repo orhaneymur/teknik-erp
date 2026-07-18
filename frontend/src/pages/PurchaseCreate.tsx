@@ -1068,15 +1068,17 @@ export default function PurchaseCreate({
             </select>
           </div>
 
-          <button
-            type="button"
-            onClick={handlePrint}
-            disabled={cart.length === 0}
-            className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
-          >
-            <Printer className="w-5 h-5" />
-            Fiş Yazdır
-          </button>
+          {isEditMode && (
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={cart.length === 0}
+              className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
+            >
+              <Printer className="w-5 h-5" />
+              Fiş Yazdır
+            </button>
+          )}
 
           {isEditMode && (
             <button

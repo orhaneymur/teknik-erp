@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Package, PlusCircle, Save } from 'lucide-react';
-import TypeaheadField from '../components/TypeaheadField';
 import { API_BASE, ensureArray, formatUsd, roundPrice, toIntegerQty } from '../lib/api';
 import { APPEARANCE_OPTIONS, COLOR_OPTIONS, QUALITY_OPTIONS } from '../lib/productOptions';
 
@@ -211,9 +210,9 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
     setInitialQuantity('0');
   };
 
-  const applyCategory = (value: number | '', label = '') => {
+  const applyCategory = (value: number | '') => {
     setCategoryId(value);
-    setCategoryText(label);
+    setCategoryText('');
     setBrandText('');
     setModelText('');
   };
@@ -284,7 +283,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         <div>
           <h1 className="page-title">Stok Kartı Oluştur</h1>
           <p className="page-subtitle">
-            Yazınca altta tanımlar listelenir · yeni kategori/marka için Tanımlar → Kategori / Marka
+            Kategori, marka, model ve renk için listeden seçin · yenilerini Tanımlar altından ekleyin
           </p>
         </div>
       </div>
@@ -298,62 +297,59 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
 
             <div>
               <label className={labelClass}>Kategori</label>
-              <TypeaheadField
-                value={categoryText}
-                onChange={(value) => {
-                  setCategoryText(value);
-                  const match = categories.find(
-                    (cat) =>
-                      cat.name.toLocaleLowerCase('tr-TR') ===
-                      value.trim().toLocaleLowerCase('tr-TR')
-                  );
-                  const nextId = match?.id ?? '';
-                  if (nextId !== categoryId) {
-                    setCategoryId(nextId);
-                    if (nextId !== '') {
-                      setBrandText('');
-                      setModelText('');
-                    }
-                  }
+              <select
+                value={categoryId}
+                onChange={(e) => {
+                  const value = e.target.value ? Number(e.target.value) : '';
+                  applyCategory(value);
                 }}
-                onSelectOption={(option) => {
-                  applyCategory(Number(option.id), option.label);
-                }}
-                options={categories.map((cat) => ({
-                  id: cat.id,
-                  label: cat.name,
-                }))}
-                placeholder="Yazmaya başlayın..."
-                inputClassName={fieldClass}
-              />
+                className={fieldClass}
+              >
+                <option value="">Seçiniz</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
               <p className="mt-1 text-caption text-slate-400">
-                Yazınca altta öneriler çıkar · listeden seçin
+                Yeni kategori için Tanımlar → Kategoriler
               </p>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Marka</label>
-                <TypeaheadField
+                <select
                   value={brandText}
-                  onChange={setBrandText}
-                  options={brandOptions.map((item) => ({
-                    id: item.id,
-                    label: item.name,
-                  }))}
-                  placeholder="Yazmaya başlayın..."
-                  inputClassName={fieldClass}
-                />
+                  onChange={(e) => {
+                    setBrandText(e.target.value);
+                    setModelText('');
+                  }}
+                  className={fieldClass}
+                >
+                  <option value="">Seçiniz</option>
+                  {brandOptions.map((item) => (
+                    <option key={item.id} value={item.name}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className={labelClass}>Model</label>
-                <TypeaheadField
+                <select
                   value={modelText}
-                  onChange={setModelText}
-                  options={modelTypeaheadOptions}
-                  placeholder="Yazmaya başlayın..."
-                  inputClassName={fieldClass}
-                />
+                  onChange={(e) => setModelText(e.target.value)}
+                  className={fieldClass}
+                >
+                  <option value="">Seçiniz</option>
+                  {modelTypeaheadOptions.map((item) => (
+                    <option key={item.id} value={item.label}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -375,16 +371,18 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={labelClass}>Renk</label>
-                <TypeaheadField
+                <select
                   value={colorText}
-                  onChange={setColorText}
-                  options={colorOptions}
-                  placeholder="Yazmaya başlayın..."
-                  inputClassName={fieldClass}
-                />
-                <p className="mt-1 text-caption text-slate-400">
-                  Yazınca renk önerileri çıkar · serbest metin de olur
-                </p>
+                  onChange={(e) => setColorText(e.target.value)}
+                  className={fieldClass}
+                >
+                  <option value="">Seçiniz</option>
+                  {colorOptions.map((opt) => (
+                    <option key={opt.id} value={opt.label}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className={labelClass}>Görünüm</label>
@@ -393,7 +391,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
                   onChange={(e) => setAppearance(e.target.value)}
                   className={fieldClass}
                 >
-                  <option value="">Seçin...</option>
+                  <option value="">Seçiniz</option>
                   {APPEARANCE_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
@@ -410,7 +408,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
                 onChange={(e) => setQuality(e.target.value)}
                 className={fieldClass}
               >
-                <option value="">Seçin...</option>
+                <option value="">Seçiniz</option>
                 {QUALITY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
                     {opt.label}

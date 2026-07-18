@@ -333,7 +333,10 @@ export default function Invoices({
               )}
               {!loading &&
                 invoices.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-slate-50/60">
+                  <tr
+                    key={inv.id}
+                    className={inv.isPreOrder ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50/60'}
+                  >
                     <td className="px-4 py-3 text-sm font-semibold text-slate-900">
                       <button
                         type="button"
@@ -356,8 +359,8 @@ export default function Invoices({
                         {invoiceTypeLabel(inv.type)}
                       </span>
                       {inv.isPreOrder && (
-                        <span className="ml-2 inline-flex rounded-md bg-amber-100 px-2 py-0.5 text-caption font-semibold text-amber-800">
-                          Ön Sipariş
+                        <span className="ml-2 inline-flex rounded-md bg-red-600 px-2 py-0.5 text-caption font-semibold text-white">
+                          Ön Sipariş · Teslim Bekliyor
                         </span>
                       )}
                     </td>

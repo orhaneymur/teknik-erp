@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { SEARCH_MIN_CHARS } from '../lib/api';
 
 export type TypeaheadOption = {
   id: string | number;
@@ -32,7 +33,7 @@ export default function TypeaheadField({
 
   const filtered = useMemo(() => {
     const query = value.trim().toLocaleLowerCase('tr-TR');
-    if (!query) return [];
+    if (query.length < SEARCH_MIN_CHARS) return [];
     return options
       .filter((option) =>
         option.label.toLocaleLowerCase('tr-TR').includes(query)
@@ -40,7 +41,8 @@ export default function TypeaheadField({
       .slice(0, 12);
   }, [options, value]);
 
-  const showList = open && value.trim().length > 0 && filtered.length > 0;
+  const showList =
+    open && value.trim().length >= SEARCH_MIN_CHARS && filtered.length > 0;
 
   useEffect(() => {
     setActiveIndex(0);

@@ -48,6 +48,7 @@ type StatementLine = {
   credit: number;
   invoiceNo?: string;
   invoiceType?: string;
+  isPreOrder?: boolean;
   paymentMethod?: string | null;
   paymentType?: string | null;
   processedBy?: string | null;
@@ -59,6 +60,11 @@ type StatementLine = {
 
 function lineKey(line: StatementLine) {
   return `${line.kind}-${line.id}`;
+}
+
+/** Fatura içindeki toplam ürün adedi */
+function invoiceQuantity(line: StatementLine) {
+  return (line.items ?? []).reduce((sum, item) => sum + (item.quantity ?? 0), 0);
 }
 
 /** İlk oluşturma tarihine göre (yeniden eskiye) — düzenleme sırayı değiştirmez */
@@ -212,6 +218,18 @@ export default function CustomerStatement({
     () => lines.filter((line) => selectedKeys.has(lineKey(line))),
     [lines, selectedKeys]
   );
+
+  /** Satır bazında yürüyen bakiye (eskiden yeniye borç - alacak birikimi) */
+  const balanceByKey = useMemo(() => {
+    const ascending = [...lines].reverse();
+    const map = new Map<string, number>();
+    let running = 0;
+    for (const line of ascending) {
+      running += (line.debit ?? 0) - (line.credit ?? 0);
+      map.set(lineKey(line), running);
+    }
+    return map;
+  }, [lines]);
 
   const toggleExpand = (key: string) => {
     setExpandedKeys((prev) => {
@@ -573,16 +591,28 @@ export default function CustomerStatement({
                     </th>
                     <th className="w-8 px-2 py-3" />
                     <th className="px-3 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                      Sipariş No
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                      Belge No
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                       Tarih
                     </th>
                     <th className="px-3 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                       Açıklama
                     </th>
                     <th className="px-3 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                      Adet
+                    </th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold uppercase text-slate-500">
                       Borç
                     </th>
                     <th className="px-3 py-3 text-right text-xs font-semibold uppercase text-slate-500">
                       Alacak
+                    </th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                      Bakiye
                     </th>
                     <th className="px-3 py-3 text-right text-xs font-semibold uppercase text-slate-500">
                       İşlem
@@ -596,12 +626,16 @@ export default function CustomerStatement({
                     const selected = selectedKeys.has(key);
                     const isInvoice = line.kind === 'invoice';
                     const itemCount = line.items?.length ?? 0;
+                    const isPending = isInvoice && Boolean(line.isPreOrder);
+                    const rowClass = selected
+                      ? 'bg-indigo-50/40'
+                      : isPending
+                        ? 'bg-red-50 hover:bg-red-100'
+                        : 'hover:bg-slate-50/60';
 
                     return (
                       <Fragment key={key}>
-                        <tr
-                          className={`hover:bg-slate-50/60 ${selected ? 'bg-indigo-50/40' : ''}`}
-                        >
+                        <tr className={rowClass}>
                           <td className="px-2 py-3 text-center">
                             <input
                               type="checkbox"
@@ -629,27 +663,55 @@ export default function CustomerStatement({
                               <span className="inline-block w-4" />
                             )}
                           </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-sm">
+                            {isInvoice && isPending ? (
+                              <button
+                                type="button"
+                                onClick={() => openInvoiceView(line.id)}
+                                className="font-medium text-red-700 hover:underline"
+                              >
+                                {line.invoiceNo}
+                              </button>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-3 text-sm">
+                            {isInvoice && !isPending ? (
+                              <button
+                                type="button"
+                                onClick={() => openInvoiceView(line.id)}
+                                className="font-medium text-indigo-700 hover:underline"
+                              >
+                                {line.invoiceNo}
+                              </button>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
                           <td className="whitespace-nowrap px-3 py-3 text-sm text-slate-600">
                             {formatDate(line.date)}
                           </td>
                           <td className="px-3 py-3 text-sm">
                             {isInvoice ? (
                               <div className="text-left">
-                                <button
-                                  type="button"
-                                  onClick={() => openInvoiceView(line.id)}
-                                  className="font-medium text-indigo-700 hover:underline"
-                                >
-                                  {line.invoiceNo}
-                                </button>
-                                <span className="font-normal text-slate-500">
-                                  {' '}
-                                  ({invoiceTypeLabel(line.invoiceType ?? '')})
+                                <span className="font-medium text-slate-700">
+                                  {invoiceTypeLabel(line.invoiceType ?? '')}
                                 </span>
+                                {isPending && (
+                                  <span className="ml-1.5 inline-flex items-center rounded px-1.5 py-0.5 text-caption font-semibold bg-red-600 text-white">
+                                    Ön Sipariş · Teslim Bekliyor
+                                  </span>
+                                )}
                                 {itemCount > 0 && (
                                   <span className="ml-1 text-caption text-slate-400">
                                     · {itemCount} kalem
                                   </span>
+                                )}
+                                {line.orderNotes?.trim() && (
+                                  <p className="text-caption text-slate-500">
+                                    {line.orderNotes.trim()}
+                                  </p>
                                 )}
                               </div>
                             ) : (
@@ -664,11 +726,21 @@ export default function CustomerStatement({
                               </div>
                             )}
                           </td>
+                          <td className="px-3 py-3 text-right text-sm text-slate-700 tabular-nums">
+                            {isInvoice && invoiceQuantity(line) > 0
+                              ? invoiceQuantity(line)
+                              : '—'}
+                          </td>
                           <td className="px-3 py-3 text-right text-sm text-red-600 tabular-nums">
                             {line.debit > 0 ? formatMoney(line.debit) : '—'}
                           </td>
                           <td className="px-3 py-3 text-right text-sm text-emerald-700 tabular-nums">
                             {line.credit > 0 ? formatMoney(line.credit) : '—'}
+                          </td>
+                          <td
+                            className={`px-3 py-3 text-right text-sm font-semibold tabular-nums ${balanceStyles(balanceByKey.get(key) ?? 0).text}`}
+                          >
+                            {formatMoney(balanceByKey.get(key) ?? 0)}
                           </td>
                           <td className="px-3 py-3 text-right">
                             <div className="inline-flex flex-wrap items-center justify-end gap-1">
@@ -708,7 +780,7 @@ export default function CustomerStatement({
                         </tr>
                         {isInvoice && expanded && (
                           <tr className="bg-slate-50/80">
-                            <td colSpan={7} className="px-4 py-3">
+                            <td colSpan={11} className="px-4 py-3">
                               {(line.items ?? []).length === 0 ? (
                                 <p className="text-sm text-slate-400">Kalem yok.</p>
                               ) : (
@@ -772,7 +844,7 @@ export default function CustomerStatement({
                   {lines.length === 0 && (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={11}
                         className="px-4 py-10 text-center text-sm text-slate-400"
                       >
                         Hareket yok.

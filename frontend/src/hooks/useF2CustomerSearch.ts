@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { API_BASE, ensureArray, type Customer, type PaginatedListResponse } from '../lib/api';
+import {
+  API_BASE,
+  SEARCH_MIN_CHARS,
+  ensureArray,
+  type Customer,
+  type PaginatedListResponse,
+} from '../lib/api';
 
 const PAGE_SIZE = 100;
 
@@ -93,6 +99,16 @@ export function useF2CustomerSearch(options: {
     const trimmed = searchQuery.trim();
 
     if (requireQuery && !trimmed) {
+      setResults([]);
+      setTotalCount(0);
+      setHasMore(false);
+      setFocusedIndex(-1);
+      setLoading(false);
+      return;
+    }
+
+    // 1-2 harf: arama başlatma (en az 3 harf gerekli). Boş sorgu tümünü listeler.
+    if (trimmed.length > 0 && trimmed.length < SEARCH_MIN_CHARS) {
       setResults([]);
       setTotalCount(0);
       setHasMore(false);

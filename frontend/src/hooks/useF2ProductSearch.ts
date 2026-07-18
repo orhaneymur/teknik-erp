@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { API_BASE, ensureArray } from '../lib/api';
+import { API_BASE, SEARCH_MIN_CHARS, ensureArray } from '../lib/api';
 import {
   clearF2SearchSession,
   getLastF2FocusedIndex,
@@ -208,7 +208,7 @@ export function useF2ProductSearch(options: {
   const fetchPage = useCallback(
     async (pageNumber: number, query: string, append: boolean) => {
       const trimmed = query.trim();
-      if (!trimmed) {
+      if (trimmed.length < SEARCH_MIN_CHARS) {
         clearResults();
         return;
       }
@@ -291,7 +291,7 @@ export function useF2ProductSearch(options: {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const trimmed = searchQuery.trim();
 
-    if (!trimmed) {
+    if (trimmed.length < SEARCH_MIN_CHARS) {
       clearResults();
       return;
     }

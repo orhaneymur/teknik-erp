@@ -28,6 +28,7 @@ import CustomerPayment from './pages/CustomerPayment';
 import CustomerBalances from './pages/CustomerBalances';
 import ProfitReport from './pages/ProfitReport';
 import CategoryManager from './pages/CategoryManager';
+import BrandModelDefinitions from './pages/BrandModelDefinitions';
 import SafeManager from './pages/SafeManager';
 import PersonnelManager from './pages/PersonnelManager';
 import ProductCreate from './pages/ProductCreate';
@@ -59,7 +60,7 @@ const initialOpenMenus = menuCategories.reduce(
   {} as Record<MenuCategoryId, boolean>
 );
 
-const FRONTEND_VERSION = 'v1.8.45';
+const FRONTEND_VERSION = 'v1.8.46';
 
 function App() {
   const initialUrl = parsePageFromUrl();
@@ -476,7 +477,11 @@ function App() {
           />
         );
       case 'def-categories':
-        return <CategoryManager />;
+        return <CategoryManager onNotify={showNotification} />;
+      case 'def-brands':
+        return <BrandModelDefinitions kind="MARKA" onNotify={showNotification} />;
+      case 'def-models':
+        return <BrandModelDefinitions kind="MODEL" onNotify={showNotification} />;
       case 'def-safes':
         return <SafeManager />;
       case 'def-users':

@@ -830,7 +830,7 @@ export default function SalesCreate({
             <>
               <p>Önceki bakiye: {formatMoney(receiptBalance.before)}</p>
               <p>
-                <strong>Sonraki bakiye: {formatMoney(receiptBalance.after)}</strong>
+                <strong>Güncel bakiye: {formatMoney(receiptBalance.after)}</strong>
               </p>
             </>
           )}
@@ -910,7 +910,7 @@ export default function SalesCreate({
               </span>
             </div>
             <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
-              <span className="receipt-item-name">Sonraki bakiye</span>
+              <span className="receipt-item-name">Güncel bakiye</span>
               <span className="receipt-item-total">
                 {formatMoney(receiptBalance.after)}
               </span>
@@ -1417,15 +1417,17 @@ export default function SalesCreate({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={handlePrint}
-            disabled={cart.length === 0}
-            className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
-          >
-            <Printer className="w-5 h-5" />
-            Fiş Yazdır
-          </button>
+          {isEditMode && (
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={cart.length === 0}
+              className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
+            >
+              <Printer className="w-5 h-5" />
+              Fiş Yazdır
+            </button>
+          )}
 
           {isEditMode && (
             <button

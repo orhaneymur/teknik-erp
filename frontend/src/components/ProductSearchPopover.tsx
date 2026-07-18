@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode, type RefObject } from 'react';
 import { X } from 'lucide-react';
+import { SEARCH_MIN_CHARS } from '../lib/api';
 
 type ProductSearchPopoverProps = {
   open: boolean;
@@ -119,7 +120,12 @@ export default function ProductSearchPopover({
           <p className="px-3 py-2 text-center text-slate-400 text-xs">Daha fazla yükleniyor...</p>
         )}
         {!searchLoading && showEmpty && (
-          <p className="px-3 py-6 text-center text-slate-400 text-xs">{emptyHint}</p>
+          <p className="px-3 py-6 text-center text-slate-400 text-xs">
+            {searchQuery.trim().length > 0 &&
+            searchQuery.trim().length < SEARCH_MIN_CHARS
+              ? `En az ${SEARCH_MIN_CHARS} harf yazın`
+              : emptyHint}
+          </p>
         )}
       </div>
       {footer ? (

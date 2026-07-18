@@ -149,4 +149,12 @@ else
   echo "    = InvoiceItem.isChinaReturn zaten var"
 fi
 
+echo "==> Kasa hareketi ödeme yöntemi (v1.8.46+)..."
+if ! column_exists "Transaction" "method"; then
+  mysql_exec "ALTER TABLE \`Transaction\` ADD COLUMN \`method\` VARCHAR(191) NULL;"
+  echo "    + Transaction.method eklendi"
+else
+  echo "    = Transaction.method zaten var"
+fi
+
 echo "==> Migration tamam."

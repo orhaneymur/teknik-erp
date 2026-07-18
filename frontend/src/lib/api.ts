@@ -7,6 +7,8 @@ export const API_BASE =
     : import.meta.env.DEV
       ? 'http://localhost:3000'
       : '';
+/** Arama kutularında liste/otomatik tamamlama için gereken minimum karakter */
+export const SEARCH_MIN_CHARS = 3;
 export const DEFAULT_USD = 46.39;
 export const DEFAULT_EUR = 53.628;
 /** @deprecated fetchExchangeRates veya useExchangeRates kullanın */

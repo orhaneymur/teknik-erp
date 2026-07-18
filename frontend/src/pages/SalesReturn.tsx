@@ -208,6 +208,14 @@ export default function SalesReturn({
     [receiptParty]
   );
 
+  /** İade fişinde önceki/güncel bakiye — Açık faturada cariden düşer, Kapalıda değişmez */
+  const receiptBalance = useMemo(() => {
+    if (!receiptParty || typeof receiptParty.balance !== 'number') return null;
+    const before = receiptParty.balance;
+    const after = settlementType === 'ACIK' ? roundPrice(before - totalUsd) : before;
+    return { before, after };
+  }, [receiptParty, settlementType, totalUsd]);
+
   const chinaReturnCount = activeLines.filter((r) => r.isChinaReturn).length;
   const stockReturnCount = activeLines.length - chinaReturnCount;
 
@@ -1078,6 +1086,14 @@ export default function SalesReturn({
         <div className="pdf-totals">
           <p>Toplam adet: {totalQuantity}</p>
           <p className="pdf-grand">Net toplam: {formatUsd(totalUsd)}</p>
+          {receiptBalance && (
+            <>
+              <p>Önceki bakiye: {formatMoney(receiptBalance.before)}</p>
+              <p>
+                <strong>Güncel bakiye: {formatMoney(receiptBalance.after)}</strong>
+              </p>
+            </>
+          )}
         </div>
         <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
@@ -1126,6 +1142,23 @@ export default function SalesReturn({
           <span className="receipt-item-name">NET TOPLAM</span>
           <span className="receipt-item-total">{formatUsd(totalUsd)}</span>
         </div>
+        {receiptBalance && (
+          <>
+            <div className="receipt-slip-divider" />
+            <div className="receipt-item-row receipt-slip-summary">
+              <span className="receipt-item-name">Önceki bakiye</span>
+              <span className="receipt-item-total">
+                {formatMoney(receiptBalance.before)}
+              </span>
+            </div>
+            <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+              <span className="receipt-item-name">Güncel bakiye</span>
+              <span className="receipt-item-total">
+                {formatMoney(receiptBalance.after)}
+              </span>
+            </div>
+          </>
+        )}
         <div className="receipt-slip-divider" />
         <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
@@ -1572,15 +1605,6 @@ export default function SalesReturn({
               <Printer className="w-4 h-4" /> Kayıttan sonra fiş yazdır
             </span>
           </label>
-          <button
-            type="button"
-            onClick={handlePrint}
-            disabled={activeLines.length === 0}
-            className="btn btn-block border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100 print:hidden"
-          >
-            <Printer className="h-5 w-5" />
-            Fiş Yazdır
-          </button>
           <button
             type="button"
             onClick={handleSubmit}

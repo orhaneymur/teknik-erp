@@ -173,6 +173,7 @@ model Transaction {
   customerId  Int?
   type        TransactionType
   amount      Float
+  method      String?
   description String
   safe        Safe            @relation(fields: [safeId], references: [id])
   customer    Customer?       @relation(fields: [customerId], references: [id])

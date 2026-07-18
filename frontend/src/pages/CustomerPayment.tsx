@@ -32,13 +32,52 @@ import { printDocument } from '../lib/printMode';
 import { RECEIPT_DISCLAIMER } from '../lib/receiptParty';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
 
-type PaymentCurrency = 'USD' | 'TRY';
+type PaymentCurrency = 'USD' | 'TRY' | 'EUR';
 
-function amountToStoredUsd(value: number, currency: PaymentCurrency, usdRate: number): number {
+type PaymentMethod = 'Nakit' | 'Kredi Kartı' | 'EFT/Havale';
+
+const PAYMENT_METHODS: PaymentMethod[] = ['Nakit', 'Kredi Kartı', 'EFT/Havale'];
+
+const CURRENCY_SYMBOL: Record<PaymentCurrency, string> = {
+  USD: '$',
+  TRY: '₺',
+  EUR: '€',
+};
+
+const moneyFmt = new Intl.NumberFormat('tr-TR', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+function formatTry(value: number): string {
+  return `${moneyFmt.format(roundPrice(value))} ₺`;
+}
+
+function formatEurAmount(value: number): string {
+  return `${moneyFmt.format(roundPrice(value))} €`;
+}
+
+/** Girilen tutarı carinin saklandığı para birimine (USD) çevirir. */
+function amountToStoredUsd(
+  value: number,
+  currency: PaymentCurrency,
+  usdRate: number,
+  eurRate: number
+): number {
   if (!Number.isFinite(value) || value <= 0) return 0;
   if (currency === 'USD') return roundPrice(value);
-  const rate = usdRate > 0 ? usdRate : 1;
-  return roundPrice(value / rate);
+  const usd = usdRate > 0 ? usdRate : 1;
+  if (currency === 'TRY') return roundPrice(value / usd);
+  // EUR → TL → USD
+  const eur = eurRate > 0 ? eurRate : 1;
+  return roundPrice((value * eur) / usd);
+}
+
+/** Saklanan USD tutarının üç para birimi karşılığını döndürür. */
+function usdToAllCurrencies(storedUsd: number, usdRate: number, eurRate: number) {
+  const tl = storedUsd * (usdRate > 0 ? usdRate : 0);
+  const eur = eurRate > 0 ? tl / eurRate : 0;
+  return { usd: storedUsd, tl, eur };
 }
 
 function CurrencyToggle({
@@ -52,25 +91,23 @@ function CurrencyToggle({
     'px-3 py-2.5 text-sm font-semibold transition-colors min-w-[3rem]';
   const active = 'bg-emerald-600 text-white';
   const inactive = 'bg-white text-slate-600 hover:bg-slate-50';
+  const order: PaymentCurrency[] = ['USD', 'TRY', 'EUR'];
 
   return (
     <div className="flex shrink-0 overflow-hidden rounded-xl border border-slate-300">
-      <button
-        type="button"
-        onClick={() => onChange('USD')}
-        className={`${base} border-r border-slate-300 ${value === 'USD' ? active : inactive}`}
-        aria-pressed={value === 'USD'}
-      >
-        $
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange('TRY')}
-        className={`${base} ${value === 'TRY' ? active : inactive}`}
-        aria-pressed={value === 'TRY'}
-      >
-        ₺
-      </button>
+      {order.map((cur, idx) => (
+        <button
+          key={cur}
+          type="button"
+          onClick={() => onChange(cur)}
+          className={`${base} ${idx > 0 ? 'border-l border-slate-300' : ''} ${
+            value === cur ? active : inactive
+          }`}
+          aria-pressed={value === cur}
+        >
+          {CURRENCY_SYMBOL[cur]}
+        </button>
+      ))}
     </div>
   );
 }
@@ -82,6 +119,7 @@ function PaymentAmountField({
   currency,
   onCurrencyChange,
   usdRate,
+  eurRate,
   inputClass,
 }: {
   label: string;
@@ -90,11 +128,16 @@ function PaymentAmountField({
   currency: PaymentCurrency;
   onCurrencyChange: (value: PaymentCurrency) => void;
   usdRate: number;
+  eurRate: number;
   inputClass: string;
 }) {
   const parsed = Number(amount);
   const storedUsd =
-    parsed > 0 ? amountToStoredUsd(parsed, currency, usdRate) : null;
+    parsed > 0 ? amountToStoredUsd(parsed, currency, usdRate, eurRate) : null;
+  const equiv =
+    storedUsd != null && storedUsd > 0
+      ? usdToAllCurrencies(storedUsd, usdRate, eurRate)
+      : null;
 
   return (
     <div>
@@ -106,20 +149,23 @@ function PaymentAmountField({
           step="0.01"
           value={amount}
           onChange={(e) => onAmountChange(e.target.value)}
-          placeholder={currency === 'USD' ? '0,00 $' : '0,00 ₺'}
+          placeholder={`0,00 ${CURRENCY_SYMBOL[currency]}`}
           className={`${inputClass} min-w-0 flex-1`}
         />
         <CurrencyToggle value={currency} onChange={onCurrencyChange} />
       </div>
-      {currency === 'TRY' && storedUsd != null && storedUsd > 0 && (
-        <p className="mt-1.5 text-caption text-slate-500">
-          Cari kaydı: ≈ {formatUsd(storedUsd)} · kur {usdRate.toFixed(4)} ₺/$
-        </p>
-      )}
-      {currency === 'USD' && storedUsd != null && storedUsd > 0 && (
-        <p className="mt-1.5 text-caption text-slate-500">
-          Cari kaydı: {formatUsd(storedUsd)}
-        </p>
+      {equiv && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-slate-50 px-3 py-2 text-caption text-slate-600">
+          <span className="font-semibold text-slate-500">Karşılığı:</span>
+          <span>{formatUsd(equiv.usd)}</span>
+          <span className="text-slate-300">·</span>
+          <span>{formatTry(equiv.tl)}</span>
+          <span className="text-slate-300">·</span>
+          <span>{formatEurAmount(equiv.eur)}</span>
+          <span className="ml-auto text-slate-400">
+            $ {usdRate.toFixed(2)} · € {eurRate.toFixed(2)}
+          </span>
+        </div>
       )}
     </div>
   );
@@ -136,6 +182,7 @@ type PaymentRow = {
   id: number;
   type: 'GIRIS' | 'CIKIS';
   amount: number;
+  method?: string | null;
   description: string;
   createdAt: string;
   customer: { id: number; code: string; name: string; balance?: number } | null;
@@ -145,10 +192,12 @@ type PaymentRow = {
 type PaymentReceipt = {
   type: 'GIRIS' | 'CIKIS';
   amount: number;
+  method?: string | null;
   description: string;
   createdAt: string;
   customerLabel: string;
   safeName: string;
+  balanceBefore?: number | null;
   balanceAfter?: number | null;
 };
 
@@ -165,6 +214,7 @@ export default function CustomerPayment({
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');
   const [amount, setAmount] = useState('');
   const [amountCurrency, setAmountCurrency] = useState<PaymentCurrency>('USD');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Nakit');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -180,6 +230,7 @@ export default function CustomerPayment({
   const [editCustomerSearch, setEditCustomerSearch] = useState('');
   const [editAmount, setEditAmount] = useState('');
   const [editAmountCurrency, setEditAmountCurrency] = useState<PaymentCurrency>('USD');
+  const [editMethod, setEditMethod] = useState<PaymentMethod>('Nakit');
   const [editDescription, setEditDescription] = useState('');
   const [editType, setEditType] = useState<'GIRIS' | 'CIKIS'>('GIRIS');
   const [editSafeId, setEditSafeId] = useState<number | ''>('');
@@ -325,16 +376,25 @@ export default function CustomerPayment({
 
   const printPaymentRow = useCallback(
     (payment: PaymentRow) => {
+      const balanceAfter = payment.customer?.balance ?? null;
+      const balanceBefore =
+        balanceAfter == null
+          ? null
+          : payment.type === 'GIRIS'
+            ? roundPrice(balanceAfter + payment.amount)
+            : roundPrice(balanceAfter - payment.amount);
       printPaymentReceipt({
           type: payment.type,
           amount: payment.amount,
+          method: payment.method,
           description: payment.description,
           createdAt: payment.createdAt,
           customerLabel: payment.customer
             ? `${payment.customer.code} — ${payment.customer.name}`
             : '—',
           safeName: payment.safe.name,
-          balanceAfter: payment.customer?.balance ?? null,
+          balanceBefore,
+          balanceAfter,
         });
     },
     [printPaymentReceipt]
@@ -348,7 +408,12 @@ export default function CustomerPayment({
     }
 
     const parsedAmount = Number(amount);
-    const storedAmount = amountToStoredUsd(parsedAmount, amountCurrency, rates.usd);
+    const storedAmount = amountToStoredUsd(
+      parsedAmount,
+      amountCurrency,
+      rates.usd,
+      rates.eur
+    );
 
     if (!customer || selectedSafe === '') {
       onNotify?.('error', 'Lütfen müşteri ve kasa seçin.');
@@ -367,20 +432,22 @@ export default function CustomerPayment({
         safeId: Number(selectedSafe),
         amount: storedAmount,
         type,
+        method: paymentMethod,
         description: description.trim() || undefined,
       });
 
       if (response.data.success) {
         const label = type === 'GIRIS' ? 'Tahsilat' : 'Ödeme';
         const amountLabel =
-          amountCurrency === 'TRY'
-            ? `${parsedAmount.toLocaleString('tr-TR')} ₺ (≈ ${formatUsd(storedAmount)})`
-            : formatUsd(storedAmount);
+          amountCurrency === 'USD'
+            ? formatUsd(storedAmount)
+            : `${parsedAmount.toLocaleString('tr-TR')} ${CURRENCY_SYMBOL[amountCurrency]} (≈ ${formatUsd(storedAmount)})`;
         onNotify?.('success', `${label} kaydedildi: ${amountLabel}`);
 
         const receipt: PaymentReceipt = {
           type,
           amount: storedAmount,
+          method: paymentMethod,
           description:
             description.trim() ||
             (type === 'GIRIS'
@@ -389,6 +456,7 @@ export default function CustomerPayment({
           createdAt: new Date().toISOString(),
           customerLabel: `${customer.code} — ${customer.name}`,
           safeName: selectedSafeData?.name ?? '—',
+          balanceBefore: roundPrice(customer.balance),
           balanceAfter:
             type === 'GIRIS'
               ? roundPrice(customer.balance - storedAmount)
@@ -438,6 +506,11 @@ export default function CustomerPayment({
     setEditCustomerSearch(`${payment.customer.code} — ${payment.customer.name}`);
     setEditAmount(String(payment.amount));
     setEditAmountCurrency('USD');
+    setEditMethod(
+      PAYMENT_METHODS.includes(payment.method as PaymentMethod)
+        ? (payment.method as PaymentMethod)
+        : 'Nakit'
+    );
     setEditDescription(payment.description);
     setEditType(payment.type);
     setEditSafeId(payment.safe.id);
@@ -461,7 +534,12 @@ export default function CustomerPayment({
       return;
     }
     const parsedAmount = Number(editAmount);
-    const storedAmount = amountToStoredUsd(parsedAmount, editAmountCurrency, rates.usd);
+    const storedAmount = amountToStoredUsd(
+      parsedAmount,
+      editAmountCurrency,
+      rates.usd,
+      rates.eur
+    );
     if (!storedAmount || storedAmount <= 0) {
       onNotify?.('error', 'Geçerli bir tutar girin.');
       return;
@@ -478,6 +556,7 @@ export default function CustomerPayment({
         {
           amount: storedAmount,
           type: editType,
+          method: editMethod,
           description: editDescription.trim() || undefined,
           safeId: Number(editSafeId),
           customerId: editCustomer.id,
@@ -523,15 +602,21 @@ export default function CustomerPayment({
             <p className="pdf-meta">{printReceipt.customerLabel}</p>
             <p className="pdf-meta">{formatDate(printReceipt.createdAt)}</p>
             <p className="pdf-meta">Kasa: {printReceipt.safeName}</p>
+            {printReceipt.method && (
+              <p className="pdf-meta">Ödeme yöntemi: {printReceipt.method}</p>
+            )}
             {printReceipt.description && (
               <div className="pdf-notes">
                 <strong>Açıklama:</strong> {printReceipt.description}
               </div>
             )}
             <div className="pdf-totals">
+              {printReceipt.balanceBefore != null && (
+                <p>Önceki bakiye: {formatMoney(printReceipt.balanceBefore)}</p>
+              )}
               <p className="pdf-grand">Tutar: {formatMoney(printReceipt.amount)}</p>
               {printReceipt.balanceAfter != null && (
-                <p>Sonraki bakiye: {formatMoney(printReceipt.balanceAfter)}</p>
+                <p>Güncel bakiye: {formatMoney(printReceipt.balanceAfter)}</p>
               )}
             </div>
             <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
@@ -543,10 +628,21 @@ export default function CustomerPayment({
             <p className="receipt-slip-customer">{printReceipt.customerLabel}</p>
             <p className="receipt-slip-meta">{formatDate(printReceipt.createdAt)}</p>
             <p className="receipt-slip-meta">Kasa: {printReceipt.safeName}</p>
+            {printReceipt.method && (
+              <p className="receipt-slip-meta">Ödeme yöntemi: {printReceipt.method}</p>
+            )}
             {printReceipt.description && (
               <p className="receipt-slip-notes">{printReceipt.description}</p>
             )}
             <div className="receipt-slip-divider" />
+            {printReceipt.balanceBefore != null && (
+              <div className="receipt-item-row receipt-slip-summary">
+                <span className="receipt-item-name">Önceki bakiye</span>
+                <span className="receipt-item-total">
+                  {formatMoney(printReceipt.balanceBefore)}
+                </span>
+              </div>
+            )}
             <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
               <span className="receipt-item-name">Tutar</span>
               <span className="receipt-item-total">
@@ -555,7 +651,7 @@ export default function CustomerPayment({
             </div>
             {printReceipt.balanceAfter != null && (
               <div className="receipt-item-row receipt-slip-summary">
-                <span className="receipt-item-name">Sonraki bakiye</span>
+                <span className="receipt-item-name">Güncel bakiye</span>
                 <span className="receipt-item-total">
                   {formatMoney(printReceipt.balanceAfter)}
                 </span>
@@ -605,6 +701,16 @@ export default function CustomerPayment({
                 <Search className="w-3.5 h-3.5" />
                 Hızlı Müşteri Bul (F2)
               </button>
+              {selectedCustomer && (
+                <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
+                  <span className="text-xs font-medium text-slate-500">Cari bakiye</span>
+                  <span
+                    className={`text-sm font-bold ${balanceStyles(selectedCustomer.balance).text}`}
+                  >
+                    {formatMoney(selectedCustomer.balance)}
+                  </span>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Kasa</label>
@@ -623,6 +729,27 @@ export default function CustomerPayment({
             </div>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Ödeme Yöntemi</label>
+            <div className="flex flex-wrap gap-2">
+              {PAYMENT_METHODS.map((method) => (
+                <button
+                  key={method}
+                  type="button"
+                  onClick={() => setPaymentMethod(method)}
+                  className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors ${
+                    paymentMethod === method
+                      ? 'border-emerald-600 bg-emerald-600 text-white'
+                      : 'border-slate-300 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                  aria-pressed={paymentMethod === method}
+                >
+                  {method}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <PaymentAmountField
             label="Tutar"
             amount={amount}
@@ -630,6 +757,7 @@ export default function CustomerPayment({
             currency={amountCurrency}
             onCurrencyChange={setAmountCurrency}
             usdRate={rates.usd}
+            eurRate={rates.eur}
             inputClass={inputClass}
           />
 
@@ -790,7 +918,14 @@ export default function CustomerPayment({
                         {payment.type === 'GIRIS' ? 'Tahsilat' : 'Ödeme'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{payment.safe.name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">
+                      <span>{payment.safe.name}</span>
+                      {payment.method && (
+                        <span className="mt-0.5 block text-xs text-slate-400">
+                          {payment.method}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">
                       {formatMoney(payment.amount)}
                     </td>
@@ -875,6 +1010,20 @@ export default function CustomerPayment({
                 </select>
               </div>
               <div>
+                <label className="field-label">Ödeme Yöntemi</label>
+                <select
+                  value={editMethod}
+                  onChange={(e) => setEditMethod(e.target.value as PaymentMethod)}
+                  className="field-input"
+                >
+                  {PAYMENT_METHODS.map((method) => (
+                    <option key={method} value={method}>
+                      {method}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="field-label">Kasa</label>
                 <select
                   value={editSafeId}
@@ -897,6 +1046,7 @@ export default function CustomerPayment({
                 currency={editAmountCurrency}
                 onCurrencyChange={setEditAmountCurrency}
                 usdRate={rates.usd}
+                eurRate={rates.eur}
                 inputClass="field-input"
               />
               <div>

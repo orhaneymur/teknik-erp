@@ -34,6 +34,8 @@ export type PageId =
   | 'report-customer-statement'
   | 'def-products'
   | 'def-categories'
+  | 'def-brands'
+  | 'def-models'
   | 'def-safes'
   | 'def-users'
   | 'invoices'
@@ -133,7 +135,9 @@ export const menuCategories: MenuCategory[] = [
     icon: Settings,
     items: [
       { id: 'def-products', label: 'Ürün Tanımları' },
-      { id: 'def-categories', label: 'Kategori / Marka' },
+      { id: 'def-categories', label: 'Kategoriler' },
+      { id: 'def-brands', label: 'Markalar' },
+      { id: 'def-models', label: 'Modeller' },
       { id: 'def-safes', label: 'Kasa Tanımları' },
       { id: 'def-users', label: 'Personel Tanımları' },
     ],
@@ -200,6 +204,8 @@ const VALID_PAGES = new Set<PageId>([
   'report-customer-statement',
   'def-products',
   'def-categories',
+  'def-brands',
+  'def-models',
   'def-safes',
   'def-users',
   'invoices',

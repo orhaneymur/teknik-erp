@@ -6,7 +6,7 @@
 
 Dükkanın günlük operasyonları — satış, alış, stok, cari, kasa, iade ve raporlama — tek bir monorepo içinde birleştirilmiştir. Canlı veritabanı yedeği (`akgun_canli_data.sql`) repoda tutulur; **16.000+ ürün** ve **180+ müşteri** kaydı ile gerçek veri üzerinde çalışır.
 
-**Canlı ortam:** K3s kümesi · Docker Hub `since1907/akgun-backend:v1.8.18` · `since1907/akgun-frontend:v1.8.45`  
+**Canlı ortam:** K3s kümesi · Docker Hub `since1907/akgun-backend:v1.8.19` · `since1907/akgun-frontend:v1.8.46`  
 **Giriş:** `akgunteknik` / `123456`
 
 ---
@@ -451,6 +451,7 @@ Manifestler: `k8s/apps.yaml`, `k8s/mysql-deployment.yaml` — `kubectl apply -f 
 | v1.8.31 / API v1.8.10 | Stok hareketi popup; termal fiş (satış/alış/iade/ödeme/ekstre); F2 boş açılış + son arama; menü yeni sekme + geri; cari varsayılan; kasa müşteri değiştirme; ekstre içerik/toplu yazdır; ürün düzenle-sil; Excel yeni şablon; rapor odaklı ana sayfa; hızlı işlemler menüde |
 | v1.8.32 / API v1.8.11 | Ana sayfa modern grafikler (trend alan, sıralama barları) ve kartlardan ilgili rapor sayfalarına Tümünü gör |
 | v1.8.33 / API v1.8.12 | Ürünlerdeki marka/model metinleri tanım listesine otomatik senkron; stok kartı formunda listeler dolar |
+| v1.8.46 / API v1.8.19 | Müşteri ödemede ödeme yöntemi (Nakit/Kredi Kartı/EFT-Havale); TL/Dolar/Euro tutar girişi ve üç para birimi karşılığı; müşteri seçilince bakiye çipi; fiş ve listede ödeme yöntemi (Transaction.method kolonu) |
 | v1.8.45 | Müşteri ekstresi üstte yazınca arama; seçince tam ekstre; müşteri kartında iletişim üstte; Tam Ekstre kaldırıldı |
 | v1.8.44 / API v1.8.18 | Alışta Açık/Kapalı fatura (120→Kapalı); müşteri ekstresi F2 arama odaklı tek kolon; stokta Renk ve Görünüm ayrı; renk aramada çıkar |
 | v1.8.43 | İadede de genel müşteri (kod 120) seçilince fatura tipi Kapalı; diğerlerinde Açık |

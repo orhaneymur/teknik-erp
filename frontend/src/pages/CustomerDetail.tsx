@@ -67,6 +67,7 @@ type StatementLine = {
   description: string;
   debit: number;
   credit: number;
+  isPreOrder?: boolean;
 };
 
 type CustomerDetailProps = {
@@ -521,7 +522,10 @@ export default function CustomerDetail({
             </thead>
             <tbody className="divide-y divide-slate-50">
               {invoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-slate-50/60">
+                <tr
+                  key={inv.id}
+                  className={inv.isPreOrder ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50/60'}
+                >
                   <td className="px-4 py-3 font-medium text-slate-900">
                     {isEditableInvoiceType(inv.type) ? (
                       <button
@@ -536,11 +540,18 @@ export default function CustomerDetail({
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${invoiceTypeStyles(inv.type)}`}
-                    >
-                      {invoiceTypeLabel(inv.type)}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${invoiceTypeStyles(inv.type)}`}
+                      >
+                        {invoiceTypeLabel(inv.type)}
+                      </span>
+                      {inv.isPreOrder && (
+                        <span className="inline-flex rounded-md bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                          Teslim Bekliyor
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-slate-600">{inv.paymentMethod}</td>
                   <td className="px-4 py-3 text-right font-semibold">
@@ -610,9 +621,23 @@ export default function CustomerDetail({
             </thead>
             <tbody className="divide-y divide-slate-50">
               {statementLines.map((line, idx) => (
-                <tr key={`${line.date}-${idx}`} className="hover:bg-slate-50/60">
+                <tr
+                  key={`${line.date}-${idx}`}
+                  className={
+                    line.kind === 'invoice' && line.isPreOrder
+                      ? 'bg-red-50 hover:bg-red-100'
+                      : 'hover:bg-slate-50/60'
+                  }
+                >
                   <td className="px-4 py-3 text-slate-600">{formatDate(line.date)}</td>
-                  <td className="px-4 py-3">{line.description}</td>
+                  <td className="px-4 py-3">
+                    {line.description}
+                    {line.kind === 'invoice' && line.isPreOrder && (
+                      <span className="ml-1.5 inline-flex rounded bg-red-600 px-1.5 py-0.5 text-caption font-semibold text-white">
+                        Teslim Bekliyor
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right text-red-600">
                     {line.debit > 0 ? formatMoney(line.debit) : '—'}
                   </td>

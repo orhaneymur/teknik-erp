@@ -522,7 +522,9 @@ export default function Dashboard({
             {data.recentInvoices.map((inv) => (
               <li
                 key={inv.id}
-                className="flex items-center justify-between gap-2 px-4 py-3 hover:bg-slate-50/80"
+                className={`flex items-center justify-between gap-2 px-4 py-3 ${
+                  inv.isPreOrder ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50/80'
+                }`}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
@@ -532,8 +534,8 @@ export default function Dashboard({
                       {invoiceTypeLabel(inv.type)}
                     </span>
                     {inv.isPreOrder && (
-                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-caption font-semibold text-amber-800">
-                        Ön Sipariş
+                      <span className="shrink-0 rounded bg-red-600 px-1.5 py-0.5 text-caption font-semibold text-white">
+                        Ön Sipariş · Teslim Bekliyor
                       </span>
                     )}
                     {['SATIS', 'ALIS', 'IADE'].includes(inv.type) ? (
