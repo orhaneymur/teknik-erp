@@ -791,6 +791,132 @@ function mapProductSearchExtras(
   };
 }
 
+/**
+ * Türkçe duyarlı arama katlaması.
+ * `toLocaleLowerCase('tr-TR')` "INFİNİX" → "ınfinix" (noktasız ı) ürettiği için
+ * kullanıcının yazdığı "infinix" ile eşleşmiyordu. Burada hem büyük/küçük hem de
+ * aksan farkı ASCII tabanına indirgenir: İ/I/ı → i, Ş/ş → s, Ğ/ğ → g ...
+ */
+const TR_FOLD_MAP: Record<string, string> = {
+  İ: 'i', I: 'i', ı: 'i',
+  Ş: 's', ş: 's',
+  Ğ: 'g', ğ: 'g',
+  Ü: 'u', ü: 'u',
+  Ö: 'o', ö: 'o',
+  Ç: 'c', ç: 'c',
+};
+
+function foldSearchText(value: string | null | undefined): string {
+  if (!value) return '';
+  let out = '';
+  for (const char of value) {
+    out += TR_FOLD_MAP[char] ?? char;
+  }
+  return out.toLowerCase();
+}
+
+type ProductRankRow = {
+  id: number;
+  name: string;
+  sku: string;
+  barcode: string | null;
+  brand: string | null;
+  model: string | null;
+  color: string | null;
+  appearance: string | null;
+  quality: string | null;
+};
+
+const PRODUCT_RANK_SELECT = {
+  id: true,
+  name: true,
+  sku: true,
+  barcode: true,
+  brand: true,
+  model: true,
+  color: true,
+  appearance: true,
+  quality: true,
+} as const;
+
+/** Kelime sınırında eşleşme — "8" ifadesi "18" içinde sayılmaz */
+function hasWordBoundary(haystack: string, needle: string): boolean {
+  let from = 0;
+  for (;;) {
+    const at = haystack.indexOf(needle, from);
+    if (at < 0) return false;
+    const before = at === 0 ? '' : haystack[at - 1];
+    const afterIdx = at + needle.length;
+    const after = afterIdx >= haystack.length ? '' : haystack[afterIdx];
+    const isEdge = (ch: string) => ch === '' || !/[a-z0-9]/.test(ch);
+    if (isEdge(before) && isEdge(after)) return true;
+    from = at + 1;
+  }
+}
+
+/**
+ * Relevans puanı. Önceki sürümde sıralama yalnızca `name asc` idi; bu yüzden
+ * "Note 8" aramasında alfabetik olarak önce gelen "NOTE 10..." kayıtları
+ * listenin başına, gerçek "NOTE 8" kayıtları 50. sıralara düşüyordu.
+ */
+function scoreProductMatch(
+  row: ProductRankRow,
+  phrase: string,
+  words: string[]
+): number {
+  const name = foldSearchText(row.name);
+  const sku = foldSearchText(row.sku);
+  const barcode = foldSearchText(row.barcode);
+
+  if (sku === phrase || barcode === phrase) return 1000;
+  if (name === phrase) return 950;
+  if (sku.startsWith(phrase) || barcode.startsWith(phrase)) return 900;
+
+  if (name.startsWith(phrase)) return 850;
+  if (hasWordBoundary(name, phrase)) return 800;
+  if (name.includes(phrase)) return 750;
+
+  if (words.every((word) => hasWordBoundary(name, word))) return 700;
+  if (words.every((word) => name.includes(word))) return 650;
+
+  if (sku.includes(phrase) || barcode.includes(phrase)) return 600;
+
+  const attrs = foldSearchText(
+    [row.brand, row.model, row.color, row.appearance, row.quality]
+      .filter(Boolean)
+      .join(' ')
+  );
+  const nameAndAttrs = `${name} ${attrs}`;
+  if (words.every((word) => nameAndAttrs.includes(word))) return 400;
+
+  // Yalnızca stok kodu / barkod / açıklama üzerinden dolaylı eşleşme
+  return 100;
+}
+
+function rankProductCandidates(
+  rows: ProductRankRow[],
+  search: string
+): ProductRankRow[] {
+  const phrase = foldSearchText(search);
+  const words = phrase.split(/\s+/).filter(Boolean);
+
+  return rows
+    .map((row) => ({ row, score: scoreProductMatch(row, phrase, words) }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      // Aynı puanda kısa ad daha spesifiktir; sonra alfabetik, sonra id (kararlı)
+      if (a.row.name.length !== b.row.name.length) {
+        return a.row.name.length - b.row.name.length;
+      }
+      const byName = a.row.name.localeCompare(b.row.name, 'tr');
+      return byName !== 0 ? byName : a.row.id - b.row.id;
+    })
+    .map((entry) => entry.row);
+}
+
+/** Relevans sıralaması için belleğe alınacak azami aday satır sayısı */
+const RANK_CANDIDATE_CAP = 5000;
+
 async function searchProductsForF2(options: {
   search?: string;
   page: number;
@@ -804,6 +930,64 @@ async function searchProductsForF2(options: {
   const trimmedSearch = search?.trim() ?? '';
   const where = trimmedSearch ? buildProductSearchWhere(trimmedSearch) : {};
   const invoiceType = context === 'purchase' ? 'ALIS' : 'SATIS';
+
+  /*
+   * ARAMALI DURUM — relevansa göre sırala.
+   * Veritabanı tarafında `name asc` sıralaması "Note 8" aramasında "NOTE 10..."
+   * kayıtlarını başa taşıyordu. Adaylar hafif alanlarla çekilir, bellekte
+   * puanlanır, yalnızca ilgili sayfanın tam verisi ikinci sorguda alınır.
+   */
+  if (trimmedSearch) {
+    const candidates = await prisma.product.findMany({
+      where,
+      select: PRODUCT_RANK_SELECT,
+      orderBy: { id: 'asc' },
+      take: RANK_CANDIDATE_CAP + 1,
+    });
+
+    const truncated = candidates.length > RANK_CANDIDATE_CAP;
+    const pool = truncated ? candidates.slice(0, RANK_CANDIDATE_CAP) : candidates;
+    const totalCount = truncated
+      ? await prisma.product.count({ where })
+      : pool.length;
+
+    const ranked = rankProductCandidates(pool, trimmedSearch);
+    const pageRows = ranked.slice((page - 1) * limit, (page - 1) * limit + limit);
+    const pageIds = pageRows.map((row) => row.id);
+
+    if (pageIds.length === 0) {
+      return { data: [], totalCount, page, limit };
+    }
+
+    const full = await prisma.product.findMany({
+      where: { id: { in: pageIds } },
+      select: PRODUCT_SEARCH_SELECT,
+    });
+    const byId = new Map(full.map((product) => [product.id, product]));
+    // Sıra relevans dizisinden gelir; `in` sorgusunun döndürdüğü sıra önemsizdir
+    const orderedProducts = pageIds.flatMap((id) => {
+      const product = byId.get(id);
+      return product ? [product] : [];
+    });
+
+    const searchPartyPriceMap =
+      customerId && !Number.isNaN(customerId)
+        ? await getLastPartyPriceMap(pageIds, customerId, invoiceType)
+        : new Map<number, number>();
+
+    return {
+      data: orderedProducts.map((product) =>
+        mapProductSearchExtras(
+          product,
+          searchPartyPriceMap.get(product.id) ?? null,
+          rate
+        )
+      ),
+      totalCount,
+      page,
+      limit,
+    };
+  }
 
   /**
    * Sabitlenen ürün yalnızca 1. sayfada, listenin başında yer alır ve orada bir
@@ -881,8 +1065,19 @@ const PRODUCT_SEARCH_FIELDS = [
   'description',
 ] as const;
 
+/**
+ * Çok kelimeli aramada KISA parçaların (ör. "8") stok kodu / barkod / açıklama
+ * içindeki rakamlara denk gelip alakasız ürün getirmesini engeller.
+ * "Note 8" araması, stok kodu 3015385 olan "NOTE 10" ürününü getiriyordu.
+ */
+const SHORT_TOKEN_FIELDS = ['name', 'brand', 'model'] as const;
+const SHORT_TOKEN_MAX_LEN = 2;
+
 /** Tek kelime için kolonlar arası OR — tr-TR küçük/büyük varyantları denenir */
-function buildProductWordFilter(word: string): Prisma.ProductWhereInput {
+function buildProductWordFilter(
+  word: string,
+  scope: readonly string[] = PRODUCT_SEARCH_FIELDS
+): Prisma.ProductWhereInput {
   // MySQL Prisma sağlayıcısı mode: 'insensitive' desteklemez.
   // utf8mb4 collation + tr-TR normalize edilmiş terim ile çok yönlü arama yapılır.
   const terms = [
@@ -895,7 +1090,7 @@ function buildProductWordFilter(word: string): Prisma.ProductWhereInput {
 
   return {
     OR: terms.flatMap((term) =>
-      PRODUCT_SEARCH_FIELDS.map(
+      scope.map(
         (field) => ({ [field]: { contains: term } }) as Prisma.ProductWhereInput
       )
     ),
@@ -915,12 +1110,22 @@ function buildProductSearchWhere(search: string): Prisma.ProductWhereInput {
 
   const words = trimmed.split(/\s+/).filter(Boolean).slice(0, MAX_SEARCH_WORDS);
   if (words.length === 0) return {};
+  // Tek kelimede tam kapsam korunur — 2 haneli stok kodu araması da çalışsın
   if (words.length === 1) return buildProductWordFilter(words[0]);
 
   // Kelimeler AND — ayrıca tam ifadeyi tek parça arayan OR dalı korunur
   return {
     OR: [
-      { AND: words.map(buildProductWordFilter) },
+      {
+        AND: words.map((word) =>
+          buildProductWordFilter(
+            word,
+            word.length <= SHORT_TOKEN_MAX_LEN
+              ? SHORT_TOKEN_FIELDS
+              : PRODUCT_SEARCH_FIELDS
+          )
+        ),
+      },
       buildProductWordFilter(trimmed),
     ],
   };

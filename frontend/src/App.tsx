@@ -60,7 +60,7 @@ const initialOpenMenus = menuCategories.reduce(
   {} as Record<MenuCategoryId, boolean>
 );
 
-const FRONTEND_VERSION = 'v1.8.48';
+const FRONTEND_VERSION = 'v1.8.49';
 
 function App() {
   const initialUrl = parsePageFromUrl();

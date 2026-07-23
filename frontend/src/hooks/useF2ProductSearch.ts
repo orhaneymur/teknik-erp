@@ -41,34 +41,59 @@ type ProductsResponse = {
 
 const PAGE_SIZE = 200;
 
-function normalizeTr(value: string): string {
-  return value.toLocaleLowerCase('tr-TR');
+/**
+ * Türkçe duyarlı katlama — backend'deki foldSearchText ile aynı.
+ * `toLocaleLowerCase('tr-TR')` "INFİNİX" → "ınfinix" ürettiği için kullanıcının
+ * yazdığı "infinix" ile eşleşmiyordu.
+ */
+const TR_FOLD_MAP: Record<string, string> = {
+  İ: 'i', I: 'i', ı: 'i',
+  Ş: 's', ş: 's',
+  Ğ: 'g', ğ: 'g',
+  Ü: 'u', ü: 'u',
+  Ö: 'o', ö: 'o',
+  Ç: 'c', ç: 'c',
+};
+
+function foldSearchText(value: string | null | undefined): string {
+  if (!value) return '';
+  let out = '';
+  for (const char of value) {
+    out += TR_FOLD_MAP[char] ?? char;
+  }
+  return out.toLowerCase();
 }
 
-/** Sunucudaki PRODUCT_SEARCH_FIELDS ile aynı küme (description hariç — istemciye gelmiyor) */
-function productHaystack(product: F2Product): string {
-  return normalizeTr(
-    [
-      product.name,
-      product.sku,
-      product.barcode,
-      product.brand,
-      product.model,
-      product.color,
-      product.appearance,
-      product.quality,
-    ]
-      .filter(Boolean)
-      .join(' ')
-  );
+/** Kısa parçaların (ör. "8") stok kodundaki rakamlara denk gelmesi engellenir */
+const SHORT_TOKEN_MAX_LEN = 2;
+
+function joinFolded(parts: Array<string | null | undefined>): string {
+  return foldSearchText(parts.filter(Boolean).join(' '));
 }
 
-/** Yerel filtre — sunucuyla aynı çok kelimeli AND mantığı */
+/** Yerel filtre — sunucudaki buildProductSearchWhere ile aynı kurallar */
 function matchesProductQuery(product: F2Product, query: string): boolean {
-  const words = normalizeTr(query.trim()).split(/\s+/).filter(Boolean);
+  const words = foldSearchText(query.trim()).split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
-  const haystack = productHaystack(product);
-  return words.every((word) => haystack.includes(word));
+
+  // description istemciye gelmez; kalan alanlar sunucudakiyle aynı
+  const wide = joinFolded([
+    product.name,
+    product.sku,
+    product.barcode,
+    product.brand,
+    product.model,
+    product.color,
+    product.appearance,
+    product.quality,
+  ]);
+
+  if (words.length === 1) return wide.includes(words[0]);
+
+  const narrow = joinFolded([product.name, product.brand, product.model]);
+  return words.every((word) =>
+    word.length <= SHORT_TOKEN_MAX_LEN ? narrow.includes(word) : wide.includes(word)
+  );
 }
 
 function filterProducts(products: F2Product[], query: string): F2Product[] {
@@ -353,8 +378,6 @@ export function useF2ProductSearch(options: {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-    // results.length kasıtlı — açılışta doluysa skip; bağımlılık döngüsüne sokma
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, searchQuery, partyId, fetchPage, clearResults, applyLocalFilter]);
 
   const loadMore = useCallback(() => {
