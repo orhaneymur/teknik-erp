@@ -48,6 +48,14 @@ export function formatTimestampInvoiceNo(
   return `${pick('year')}${pick('month')}${pick('day')}${pick('hour')}${pick('minute')}${pick('second')}`;
 }
 
+/** Fiş no serisinde kullanılan yıl (İstanbul saati) — örn. "2026" */
+export function getIstanbulYear(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: ISTANBUL_TZ,
+    year: 'numeric',
+  }).format(date);
+}
+
 export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }

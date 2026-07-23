@@ -16,7 +16,12 @@ import {
   importProductsExcel,
   syncBrandModelsFromProducts,
 } from './utils/excelExchange.js';
-import { buildInvoiceCreatedAt, formatTimestampInvoiceNo, roundMoney } from './utils/datetime.js';
+import {
+  buildInvoiceCreatedAt,
+  formatTimestampInvoiceNo,
+  getIstanbulYear,
+  roundMoney,
+} from './utils/datetime.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const APP_VERSION = process.env.APP_VERSION ?? 'dev';
@@ -54,6 +59,33 @@ async function generateInvoiceNo(
   tx: Prisma.TransactionClient
 ): Promise<string> {
   return generateTimestampInvoiceNo(tx);
+}
+
+/**
+ * Cari tahsilat/tediye fiş no — FATURA serisinden tamamen bağımsızdır.
+ * Format: ÖDM-YYYY-0001, yıl başında 1'den başlar.
+ */
+const PAYMENT_RECEIPT_PREFIX = 'ÖDM';
+
+async function generatePaymentReceiptNo(
+  tx: Prisma.TransactionClient
+): Promise<string> {
+  const prefix = `${PAYMENT_RECEIPT_PREFIX}-${getIstanbulYear()}-`;
+  const used = await tx.transaction.count({
+    where: { receiptNo: { startsWith: prefix } },
+  });
+
+  // count sadece başlangıç noktasıdır; silinen/boşluklu seriler için ileri taranır
+  for (let seq = used + 1; seq <= used + 1000; seq += 1) {
+    const candidate = `${prefix}${String(seq).padStart(4, '0')}`;
+    const existing = await tx.transaction.findFirst({
+      where: { receiptNo: candidate },
+      select: { id: true },
+    });
+    if (!existing) return candidate;
+  }
+
+  return `${prefix}${Date.now().toString().slice(-6)}`;
 }
 
 async function previewNextInvoiceNo(): Promise<string> {
@@ -226,14 +258,18 @@ async function applyInvoiceFinancialDelta(
   tx: Prisma.TransactionClient,
   params: {
     invoiceType: string;
+    /** Ön sipariş: cari ve kasa KESİNLİKLE etkilenmez (stok düşümüyle birlikte tamamlanınca işlenir) */
+    isPreOrder?: boolean;
     paymentMethod: string;
     customerId: number;
     safeId: number;
     amountDelta: number;
   }
 ) {
-  const { invoiceType, paymentMethod, customerId, safeId, amountDelta } = params;
+  const { invoiceType, isPreOrder, paymentMethod, customerId, safeId, amountDelta } =
+    params;
   if (!amountDelta) return;
+  if (isPreOrder) return;
 
   if (invoiceType === 'SATIS') {
     if (paymentMethod === 'Cari') {
@@ -370,11 +406,15 @@ async function reverseInvoiceEffects(
 
   await applyInvoiceFinancialDelta(tx, {
     invoiceType: invoice.type,
+    isPreOrder: invoice.isPreOrder,
     paymentMethod: invoice.paymentMethod,
     customerId: invoice.customerId,
     safeId: invoice.safeId,
     amountDelta: -invoice.totalAmountTl,
   });
+
+  // Ön siparişte kayıt anında kasa hareketi oluşmadığı için ters kayıt da açılmaz
+  if (invoice.isPreOrder) return;
 
   if (invoice.type === 'SATIS' && isCashLikePayment(invoice.paymentMethod)) {
     await tx.transaction.create({
@@ -409,25 +449,23 @@ async function reverseInvoiceEffects(
   }
 }
 
+type InvoiceFinancialSnapshot = {
+  invoiceType: string;
+  isPreOrder: boolean;
+  paymentMethod: string;
+  customerId: number;
+  safeId: number;
+  totalAmountTl: number;
+};
+
 async function reconcileInvoiceFinancials(
   tx: Prisma.TransactionClient,
-  before: {
-    invoiceType: string;
-    paymentMethod: string;
-    customerId: number;
-    safeId: number;
-    totalAmountTl: number;
-  },
-  after: {
-    invoiceType: string;
-    paymentMethod: string;
-    customerId: number;
-    safeId: number;
-    totalAmountTl: number;
-  }
+  before: InvoiceFinancialSnapshot,
+  after: InvoiceFinancialSnapshot
 ) {
   await applyInvoiceFinancialDelta(tx, {
     invoiceType: before.invoiceType,
+    isPreOrder: before.isPreOrder,
     paymentMethod: before.paymentMethod,
     customerId: before.customerId,
     safeId: before.safeId,
@@ -435,6 +473,7 @@ async function reconcileInvoiceFinancials(
   });
   await applyInvoiceFinancialDelta(tx, {
     invoiceType: after.invoiceType,
+    isPreOrder: after.isPreOrder,
     paymentMethod: after.paymentMethod,
     customerId: after.customerId,
     safeId: after.safeId,
@@ -673,6 +712,12 @@ const PRODUCT_SEARCH_SELECT = {
   sku: true,
   barcode: true,
   name: true,
+  // İstemci yerel filtresi sunucuyla aynı alanlarda eşleşsin diye döner
+  brand: true,
+  model: true,
+  color: true,
+  appearance: true,
+  quality: true,
   costPrice: true,
   priceTl: true,
   priceUsd: true,
@@ -690,6 +735,11 @@ type ProductSearchRow = {
   sku: string;
   barcode: string | null;
   name: string;
+  brand: string | null;
+  model: string | null;
+  color: string | null;
+  appearance: string | null;
+  quality: string | null;
   costPrice: number;
   priceTl: number;
   priceUsd: number;
@@ -723,6 +773,11 @@ function mapProductSearchExtras(
     sku: product.sku,
     barcode: product.barcode,
     name: product.name,
+    brand: product.brand,
+    model: product.model,
+    color: product.color,
+    appearance: product.appearance,
+    quality: product.quality,
     costPrice: toFloat(product.costPrice),
     costUsd,
     priceTl: priceUsd,
@@ -748,32 +803,38 @@ async function searchProductsForF2(options: {
   const { search, page, limit, customerId, context, rate, prioritizeProductId } = options;
   const trimmedSearch = search?.trim() ?? '';
   const where = trimmedSearch ? buildProductSearchWhere(trimmedSearch) : {};
-  const skip = (page - 1) * limit;
   const invoiceType = context === 'purchase' ? 'ALIS' : 'SATIS';
 
+  /**
+   * Sabitlenen ürün yalnızca 1. sayfada, listenin başında yer alır ve orada bir
+   * satır tüketir. Sonraki sayfaların bu kaymayı telafi etmesi gerekir; aksi
+   * halde her sayfa geçişinde bir ürün atlanıyordu.
+   */
+  const hasPinnedSlot = Boolean(
+    !trimmedSearch && prioritizeProductId && prioritizeProductId > 0
+  );
+
   let pinnedProduct: ProductSearchRow | null = null;
-  if (
-    page === 1 &&
-    !trimmedSearch &&
-    prioritizeProductId &&
-    prioritizeProductId > 0
-  ) {
+  if (page === 1 && hasPinnedSlot) {
     pinnedProduct = await prisma.product.findUnique({
-      where: { id: prioritizeProductId },
+      where: { id: prioritizeProductId! },
       select: PRODUCT_SEARCH_SELECT,
     });
   }
 
-  const listWhere: Prisma.ProductWhereInput = pinnedProduct
-    ? { AND: [where, { id: { not: pinnedProduct.id } }] }
+  const listWhere: Prisma.ProductWhereInput = hasPinnedSlot
+    ? { AND: [where, { id: { not: prioritizeProductId! } }] }
     : where;
 
   const listTake = pinnedProduct ? Math.max(0, limit - 1) : limit;
+  const skip = hasPinnedSlot
+    ? Math.max(0, (page - 1) * limit - 1)
+    : (page - 1) * limit;
 
   const [products, totalCount] = await Promise.all([
     prisma.product.findMany({
       where: listWhere,
-      orderBy: { name: 'asc' },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
       take: listTake,
       skip,
       select: PRODUCT_SEARCH_SELECT,
@@ -807,32 +868,61 @@ function normalizeSearchTerm(search: string): string {
   return search.trim().toLocaleLowerCase('tr-TR');
 }
 
+/** Aranabilir ürün kolonları — yerel (istemci) filtre ile aynı küme */
+const PRODUCT_SEARCH_FIELDS = [
+  'name',
+  'sku',
+  'barcode',
+  'brand',
+  'model',
+  'color',
+  'appearance',
+  'quality',
+  'description',
+] as const;
+
+/** Tek kelime için kolonlar arası OR — tr-TR küçük/büyük varyantları denenir */
+function buildProductWordFilter(word: string): Prisma.ProductWhereInput {
+  // MySQL Prisma sağlayıcısı mode: 'insensitive' desteklemez.
+  // utf8mb4 collation + tr-TR normalize edilmiş terim ile çok yönlü arama yapılır.
+  const terms = [
+    ...new Set([
+      word,
+      word.toLocaleLowerCase('tr-TR'),
+      word.toLocaleUpperCase('tr-TR'),
+    ]),
+  ];
+
+  return {
+    OR: terms.flatMap((term) =>
+      PRODUCT_SEARCH_FIELDS.map(
+        (field) => ({ [field]: { contains: term } }) as Prisma.ProductWhereInput
+      )
+    ),
+  };
+}
+
+/**
+ * Çok kelimeli arama: kelimeler AND'lenir, her kelime kolonlar arasında OR'lanır.
+ * "samsung 128" → adı "Samsung" + modeli "128GB" olan ürünü de bulur.
+ * Tek parça `contains` kullanılan eski sürümde bu tür kayıtlar hiç listelenmiyordu.
+ */
+const MAX_SEARCH_WORDS = 5;
+
 function buildProductSearchWhere(search: string): Prisma.ProductWhereInput {
   const trimmed = search.trim();
   if (!trimmed) return {};
 
-  const normalized = normalizeSearchTerm(trimmed);
+  const words = trimmed.split(/\s+/).filter(Boolean).slice(0, MAX_SEARCH_WORDS);
+  if (words.length === 0) return {};
+  if (words.length === 1) return buildProductWordFilter(words[0]);
 
-  // MySQL Prisma sağlayıcısı mode: 'insensitive' desteklemez.
-  // utf8mb4 collation + tr-TR normalize edilmiş terim ile çift yönlü arama yapılır.
-  const termFilter = (term: string): Prisma.StringFilter => ({
-    contains: term,
-  });
-
-  const terms = [...new Set([trimmed, normalized])];
-
+  // Kelimeler AND — ayrıca tam ifadeyi tek parça arayan OR dalı korunur
   return {
-    OR: terms.flatMap((term) => [
-      { name: termFilter(term) },
-      { sku: termFilter(term) },
-      { barcode: termFilter(term) },
-      { brand: termFilter(term) },
-      { model: termFilter(term) },
-      { color: termFilter(term) },
-      { appearance: termFilter(term) },
-      { quality: termFilter(term) },
-      { description: termFilter(term) },
-    ]),
+    OR: [
+      { AND: words.map(buildProductWordFilter) },
+      buildProductWordFilter(trimmed),
+    ],
   };
 }
 
@@ -2094,27 +2184,35 @@ app.put<{
         body.customerId !== undefined ||
         body.paymentMethod !== undefined ||
         body.items !== undefined ||
-        body.exchangeRate !== undefined;
+        body.exchangeRate !== undefined ||
+        body.isPreOrder !== undefined;
 
       if (financialChanged) {
-        const beforeFinancial = {
+        const beforeFinancial: InvoiceFinancialSnapshot = {
           invoiceType: existing.type,
+          isPreOrder: existing.isPreOrder,
           paymentMethod: existing.paymentMethod,
           customerId: existing.customerId,
           safeId: existing.safeId,
           totalAmountTl: existing.totalAmountTl,
         };
-        const afterFinancial = {
+        const afterFinancial: InvoiceFinancialSnapshot = {
           invoiceType: existing.type,
+          isPreOrder: nextIsPreOrder,
           paymentMethod: nextPaymentMethod,
           customerId: nextCustomerId,
           safeId: nextSafeId,
           totalAmountTl,
         };
 
+        /*
+         * isPreOrder da mutabakat tetikleyicisidir: ön siparişte mali kayıt
+         * yoktur, satışa dönüşünce eklenir; satıştan ön siparişe alınırsa geri alınır.
+         */
         if (
           beforeFinancial.customerId !== afterFinancial.customerId ||
           beforeFinancial.paymentMethod !== afterFinancial.paymentMethod ||
+          beforeFinancial.isPreOrder !== afterFinancial.isPreOrder ||
           beforeFinancial.totalAmountTl !== afterFinancial.totalAmountTl
         ) {
           await reconcileInvoiceFinancials(tx, beforeFinancial, afterFinancial);
@@ -2229,6 +2327,31 @@ app.post<{ Params: { id: string } }>(
             merkezDepoId,
             -item.quantity
           );
+        }
+
+        /*
+         * Mali etki ön sipariş aşamasında hiç işlenmediği için burada, sipariş
+         * gerçek satışa dönüşürken tek seferde işlenir (cari veya kasa).
+         */
+        await applyInvoiceFinancialDelta(tx, {
+          invoiceType: existing.type,
+          isPreOrder: false,
+          paymentMethod: existing.paymentMethod,
+          customerId: existing.customerId,
+          safeId: existing.safeId,
+          amountDelta: existing.totalAmountTl,
+        });
+
+        if (isCashLikePayment(existing.paymentMethod)) {
+          await tx.transaction.create({
+            data: {
+              safeId: existing.safeId,
+              customerId: existing.customerId,
+              type: 'GIRIS',
+              amount: existing.totalAmountTl,
+              description: `${existing.invoiceNo} satış tahsilatı (${existing.paymentMethod})`,
+            },
+          });
         }
 
         return tx.invoice.update({
@@ -2350,6 +2473,13 @@ app.post<{
   );
   const totalAmountUsd = totalAmountTl / rate;
 
+  // Fiş üzerinde "Eski bakiye / Güncel bakiye" için — Satış ile aynı standart
+  const supplierBefore = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { balance: true },
+  });
+  const balanceBefore = roundMoney(supplierBefore?.balance ?? 0);
+
   try {
     const invoice = await prisma.$transaction(async (tx) => {
       const invoiceNo = await generatePurchaseInvoiceNo(tx);
@@ -2430,9 +2560,19 @@ app.post<{
       return createdInvoice;
     });
 
+    const updatedSupplier = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true, code: true, name: true, balance: true },
+    });
+
     return reply.status(201).send({
       success: true,
-      data: invoice,
+      data: {
+        ...invoice,
+        customer: updatedSupplier,
+        balanceBefore,
+        balanceAfter: roundMoney(updatedSupplier?.balance ?? balanceBefore),
+      },
       message: 'Purchase invoice created successfully.',
     });
   } catch (error) {
@@ -2774,6 +2914,8 @@ app.post<{
         });
       }
 
+      const receiptNo = await generatePaymentReceiptNo(tx);
+
       return tx.transaction.create({
         data: {
           safeId,
@@ -2781,6 +2923,7 @@ app.post<{
           type,
           amount,
           method: method?.trim() || null,
+          receiptNo,
           description:
             description?.trim() ||
             (type === 'GIRIS'
@@ -2951,6 +3094,10 @@ app.put<{
         });
       }
 
+      // Eski kayıtlarda fiş no yoksa düzenleme sırasında seriye dahil edilir
+      const receiptNo =
+        existing.receiptNo ?? (await generatePaymentReceiptNo(tx));
+
       return tx.transaction.update({
         where: { id },
         data: {
@@ -2958,6 +3105,7 @@ app.put<{
           safeId: nextSafeId,
           amount: nextAmount,
           type: nextType,
+          receiptNo,
           ...(body.method !== undefined
             ? { method: body.method.trim() || null }
             : {}),
@@ -3205,6 +3353,15 @@ app.post<{
             });
           }
         }
+      }
+
+      /*
+       * Ön sipariş: yalnızca sipariş kaydıdır. Cari bakiyeye ve kasaya
+       * HİÇBİR kayıt düşmez; mali etki "Stok Düş (Ön Siparişi Tamamla)"
+       * adımında (/fulfill) işlenir.
+       */
+      if (isPreOrder) {
+        return createdInvoice;
       }
 
       if (isCashLikePayment(paymentMethod)) {
@@ -5079,7 +5236,11 @@ app.get<{ Querystring: { customerId?: string } }>(
 
     const [invoices, payments] = await Promise.all([
       prisma.invoice.findMany({
-        where: { customerId, ...ACTIVE_INVOICE_FILTER },
+        /*
+         * Ön siparişler cari hesabı etkilemez; ekstrede de yer almazlar.
+         * Yalnızca "Ön Siparişler" ekranından takip edilirler.
+         */
+        where: { customerId, isPreOrder: false, ...ACTIVE_INVOICE_FILTER },
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
@@ -5141,6 +5302,8 @@ app.get<{ Querystring: { customerId?: string } }>(
       orderNotes?: string | null;
       amount?: number;
       safeName?: string | null;
+      safeId?: number;
+      receiptNo?: string | null;
       items?: StatementItem[];
     };
 
@@ -5186,6 +5349,10 @@ app.get<{ Querystring: { customerId?: string } }>(
         paymentType: pay.type,
         amount: pay.amount,
         safeName: pay.safe?.name ?? null,
+        // Ekstreden "Düzenle" için gereken alanlar
+        receiptNo: pay.receiptNo,
+        safeId: pay.safeId,
+        paymentMethod: pay.method,
       });
     }
 

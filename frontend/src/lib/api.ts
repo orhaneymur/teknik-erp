@@ -7,8 +7,11 @@ export const API_BASE =
     : import.meta.env.DEV
       ? 'http://localhost:3000'
       : '';
-/** Arama kutularında liste/otomatik tamamlama için gereken minimum karakter */
-export const SEARCH_MIN_CHARS = 3;
+/**
+ * Arama kutularında liste/otomatik tamamlama için gereken minimum karakter.
+ * 2 harf: kısa stok kodları ("A1", "TX") ve iki harfli marka kısaltmaları da bulunur.
+ */
+export const SEARCH_MIN_CHARS = 2;
 export const DEFAULT_USD = 46.39;
 export const DEFAULT_EUR = 53.628;
 /** @deprecated fetchExchangeRates veya useExchangeRates kullanın */

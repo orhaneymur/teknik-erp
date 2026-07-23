@@ -60,7 +60,7 @@ const initialOpenMenus = menuCategories.reduce(
   {} as Record<MenuCategoryId, boolean>
 );
 
-const FRONTEND_VERSION = 'v1.8.46';
+const FRONTEND_VERSION = 'v1.8.48';
 
 function App() {
   const initialUrl = parsePageFromUrl();
@@ -508,7 +508,7 @@ function App() {
 
   return (
     <AppNavigationContext.Provider value={navigationValue}>
-    <div className="flex min-h-[100dvh] overflow-x-hidden bg-slate-100 text-slate-900 print:block print:min-h-0 print:overflow-visible print:bg-white">
+    <div className="flex h-[100dvh] overflow-hidden bg-slate-100 text-slate-900 print:block print:h-auto print:overflow-visible print:bg-white">
       {notification && (
         <div
           className={`fixed z-[60] px-4 py-3 text-sm font-medium text-white shadow-lg print:hidden sm:text-base ${
@@ -538,9 +538,9 @@ function App() {
         onMobileClose={() => setMobileNavOpen(false)}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col print:block print:min-w-0">
-        <header className="sticky top-0 z-30 border-b border-slate-200 bg-white shadow-sm print:hidden">
-          <div className="flex flex-col gap-3 px-3 py-2.5 sm:px-6 sm:py-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col print:block print:min-w-0">
+        <header className="sticky top-0 z-30 shrink-0 border-b border-slate-200 bg-white shadow-sm print:hidden">
+          <div className="flex flex-col gap-3 px-3 py-2 sm:px-5 sm:py-2">
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 <button
@@ -594,7 +594,8 @@ function App() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-x-hidden p-3 sm:p-4 lg:p-6 print:overflow-visible print:p-0">
+        {/* Tek dikey kaydırma alanı — pencere kaydırma çubuğu oluşmaz */}
+        <main className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-5 print:h-auto print:overflow-visible print:p-0">
           {pageContent}
         </main>
       </div>

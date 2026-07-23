@@ -157,4 +157,23 @@ else
   echo "    = Transaction.method zaten var"
 fi
 
+echo "==> Cari odeme fis no serisi (v1.8.47+)..."
+if ! column_exists "Transaction" "receiptNo"; then
+  mysql_exec "ALTER TABLE \`Transaction\` ADD COLUMN \`receiptNo\` VARCHAR(191) NULL;"
+  echo "    + Transaction.receiptNo eklendi"
+else
+  echo "    = Transaction.receiptNo zaten var"
+fi
+if ! index_exists "Transaction" "Transaction_receiptNo_key"; then
+  mysql_exec "CREATE UNIQUE INDEX \`Transaction_receiptNo_key\` ON \`Transaction\`(\`receiptNo\`);"
+  echo "    + Transaction.receiptNo unique index eklendi"
+else
+  echo "    = Transaction.receiptNo unique index zaten var"
+fi
+
 echo "==> Migration tamam."
+echo
+echo "NOT: v1.8.47 ile on siparisler artik cari/kasaya kayit dusmuyor."
+echo "     Bu surumden ONCE olusmus ve HALA ACIK olan on siparisler icin"
+echo "     tek seferlik duzeltme gerekir:  ./fix-preorder-ledger.sh"
+echo "     (once --apply olmadan calistirip raporu inceleyin)"

@@ -183,6 +183,8 @@ type PaymentRow = {
   type: 'GIRIS' | 'CIKIS';
   amount: number;
   method?: string | null;
+  /** Faturalardan bagimsiz odeme fis no (ODM-YYYY-0001) */
+  receiptNo?: string | null;
   description: string;
   createdAt: string;
   customer: { id: number; code: string; name: string; balance?: number } | null;
@@ -193,6 +195,7 @@ type PaymentReceipt = {
   type: 'GIRIS' | 'CIKIS';
   amount: number;
   method?: string | null;
+  receiptNo?: string | null;
   description: string;
   createdAt: string;
   customerLabel: string;
@@ -387,6 +390,7 @@ export default function CustomerPayment({
           type: payment.type,
           amount: payment.amount,
           method: payment.method,
+          receiptNo: payment.receiptNo,
           description: payment.description,
           createdAt: payment.createdAt,
           customerLabel: payment.customer
@@ -448,6 +452,10 @@ export default function CustomerPayment({
           type,
           amount: storedAmount,
           method: paymentMethod,
+          receiptNo:
+            typeof response.data.data?.receiptNo === 'string'
+              ? response.data.data.receiptNo
+              : null,
           description:
             description.trim() ||
             (type === 'GIRIS'
@@ -597,8 +605,12 @@ export default function CustomerPayment({
         <>
           <div className="print-pdf-doc hidden">
             <h1>
-              {printReceipt.type === 'GIRIS' ? 'Tahsilat Fişi' : 'Ödeme Fişi'}
+              {printReceipt.receiptNo?.trim() ||
+                (printReceipt.type === 'GIRIS' ? 'Tahsilat Fişi' : 'Ödeme Fişi')}
             </h1>
+            <p className="pdf-meta">
+              {printReceipt.type === 'GIRIS' ? 'Tahsilat Fişi' : 'Ödeme Fişi'}
+            </p>
             <p className="pdf-meta">{printReceipt.customerLabel}</p>
             <p className="pdf-meta">{formatDate(printReceipt.createdAt)}</p>
             <p className="pdf-meta">Kasa: {printReceipt.safeName}</p>
@@ -625,6 +637,9 @@ export default function CustomerPayment({
             <p className="receipt-slip-title">
               {printReceipt.type === 'GIRIS' ? 'TAHSİLAT FİŞİ' : 'ÖDEME FİŞİ'}
             </p>
+            {printReceipt.receiptNo?.trim() && (
+              <p className="receipt-slip-meta">Fiş No: {printReceipt.receiptNo.trim()}</p>
+            )}
             <p className="receipt-slip-customer">{printReceipt.customerLabel}</p>
             <p className="receipt-slip-meta">{formatDate(printReceipt.createdAt)}</p>
             <p className="receipt-slip-meta">Kasa: {printReceipt.safeName}</p>
@@ -805,7 +820,7 @@ export default function CustomerPayment({
           </div>
         </section>
 
-        <aside className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-4 sticky top-6 h-fit">
+        <aside className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 space-y-4 sticky top-0 h-fit max-h-[calc(100dvh-7rem)] overflow-y-auto">
           <h2 className="font-semibold text-slate-800">Anlık Durum</h2>
 
           {selectedCustomer && (
@@ -868,6 +883,9 @@ export default function CustomerPayment({
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                    Fiş No
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                     Tarih
                   </th>
                   {!selectedCustomer && (
@@ -893,6 +911,9 @@ export default function CustomerPayment({
               <tbody className="divide-y divide-slate-50">
                 {payments.map((payment) => (
                   <tr key={payment.id} className="hover:bg-slate-50/60">
+                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-medium text-emerald-700">
+                      {payment.receiptNo?.trim() || `KH-${payment.id}`}
+                    </td>
                     <td className="px-4 py-3 text-sm text-slate-600">
                       {formatDate(payment.createdAt)}
                     </td>
@@ -963,8 +984,13 @@ export default function CustomerPayment({
       {editingPayment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-slate-900">Ödeme Düzenle</h3>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Ödeme Düzenle</h3>
+                <p className="mt-0.5 font-mono text-sm text-emerald-700">
+                  Fiş: {editingPayment.receiptNo?.trim() || `KH-${editingPayment.id}`}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={closeEditPayment}

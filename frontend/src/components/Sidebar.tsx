@@ -104,7 +104,10 @@ export default function Sidebar({
             return (
               <a
                 key={item.id}
-                href={buildPageUrl(item.id)}
+                href={buildPageUrl(
+                  item.id,
+                  item.id === 'pre-orders' ? { preOrderOnly: true } : undefined
+                )}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={handleMenuClick}

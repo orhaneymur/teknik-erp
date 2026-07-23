@@ -178,8 +178,7 @@ export const dashboardQuickLinks: MenuItem[] = [
   { id: 'sales', label: 'Satış Yap', badge: 'F2' },
   { id: 'invoice-purchase', label: 'Alış Yap' },
   { id: 'sales-return', label: 'İade Al' },
-  { id: 'product-create', label: 'Stok Kartı Oluştur' },
-  { id: 'invoices', label: 'Faturalar' },
+  { id: 'pre-orders', label: 'Ön Siparişler' },
 ];
 
 const VALID_PAGES = new Set<PageId>([

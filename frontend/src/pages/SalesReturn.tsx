@@ -1555,7 +1555,7 @@ export default function SalesReturn({
           </section>
         </section>
 
-        <aside className="h-fit space-y-4 rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm sm:p-5 xl:col-span-1 xl:sticky xl:top-4">
+        <aside className="h-fit space-y-4 rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm sm:p-5 xl:col-span-1 xl:sticky xl:top-0 xl:max-h-[calc(100dvh-7rem)] xl:overflow-y-auto">
           <h2 className="border-b border-slate-200 pb-2 text-center font-bold text-slate-800">
             Fatura Özeti
           </h2>

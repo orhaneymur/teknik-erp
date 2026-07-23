@@ -68,6 +68,8 @@ type RecentPayment = {
   type: 'GIRIS' | 'CIKIS';
   amount: number;
   description: string;
+  /** Cari tahsilat/tediye fiş no (ÖDM-YYYY-0001); fatura kaynaklı harekette null */
+  receiptNo?: string | null;
   createdAt: string;
   safe: { id: number; name: string; currency: string };
   customer: { id: number; code: string; name: string } | null;
@@ -315,8 +317,13 @@ export default function Dashboard({
   const { insights } = data;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    /*
+     * Blok sırası `order-*` ile belirlenir (üst → alt):
+     * 1 başlık · 2 son fatura + kasa hareketleri · 3 kasa bakiyeleri
+     * 4 trend/düşük stok · 5 en çok satan ürün + müşteri
+     */
+    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+      <div className="order-1 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="page-title">Ana Sayfa</h1>
           <p className="page-subtitle mt-1">
@@ -326,7 +333,7 @@ export default function Dashboard({
         <SeeAllLink page="report-analytics" label="İşletme özeti" />
       </div>
 
-      <section className="flex gap-3 overflow-x-auto pb-1">
+      <section className="order-3 flex gap-3 overflow-x-auto pb-1">
         {data.safeBalances.map((safe) => (
           <a
             key={safe.id}
@@ -355,7 +362,7 @@ export default function Dashboard({
         </a>
       </section>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="order-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
           <div className="mb-4 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -404,7 +411,7 @@ export default function Dashboard({
           />
         </section>
 
-        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+        <section className="order-2 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
           <div className="mb-4 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
@@ -431,7 +438,7 @@ export default function Dashboard({
           />
         </section>
 
-        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+        <section className="order-2 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
           <div className="mb-4 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-sky-100 p-2 text-sky-700">
@@ -464,7 +471,7 @@ export default function Dashboard({
           )}
         </section>
 
-        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 lg:col-span-2">
+        <section className="order-1 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 lg:col-span-2">
           <div className="mb-4 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-amber-100 p-2 text-amber-800">
@@ -512,10 +519,12 @@ export default function Dashboard({
         </section>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className="order-2 grid grid-cols-1 gap-6 md:grid-cols-2">
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-800">Son Faturalar</h2>
+            <h2 className="text-sm font-semibold text-slate-800">
+              Son Fatura Hareketleri
+            </h2>
             <SeeAllLink page="invoices" />
           </div>
           <ul className="divide-y divide-slate-50">
@@ -539,13 +548,25 @@ export default function Dashboard({
                       </span>
                     )}
                     {['SATIS', 'ALIS', 'IADE'].includes(inv.type) ? (
-                      <button
-                        type="button"
-                        onClick={() => tryOpenEditor(inv)}
-                        className="truncate text-sm font-medium text-violet-700 hover:text-violet-900 hover:underline"
+                      /* Orta tuş / Ctrl+tık → yeni sekme; sol tık → sayfa içinde */
+                      <a
+                        href={buildPageUrl(
+                          inv.isPreOrder ? 'pre-orders' : 'invoices',
+                          {
+                            editInvoiceId: inv.id,
+                            preOrderOnly: inv.isPreOrder,
+                          }
+                        )}
+                        onClick={(event) => {
+                          if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+                          event.preventDefault();
+                          tryOpenEditor(inv);
+                        }}
+                        title="Tıkla: bu sayfada aç · Orta tuş / Ctrl+tık: yeni sekmede aç"
+                        className="truncate text-sm font-medium text-violet-700 no-underline hover:text-violet-900 hover:underline"
                       >
                         {inv.invoiceNo}
-                      </button>
+                      </a>
                     ) : (
                       <span className="truncate text-sm font-medium text-slate-800">
                         {inv.invoiceNo}
@@ -588,12 +609,12 @@ export default function Dashboard({
 
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-            <h2 className="text-sm font-semibold text-slate-800">Son Kasa Hareketleri</h2>
+            <h2 className="text-sm font-semibold text-slate-800">Kasa Hareketleri</h2>
             <SeeAllLink page="customer-payments" />
           </div>
           <ul className="divide-y divide-slate-50">
             {data.recentPayments.map((payment) => {
-              const receiptNo = `KH-${payment.id}`;
+              const receiptNo = payment.receiptNo?.trim() || `KH-${payment.id}`;
               const canOpen = Boolean(payment.customer);
               return (
                 <li
@@ -678,7 +699,7 @@ export default function Dashboard({
               <div>
                 <h3 className="text-lg font-bold text-slate-900">Kasa Hareketi</h3>
                 <p className="mt-0.5 font-mono text-sm text-slate-500">
-                  Fiş: KH-{editingPayment.id}
+                  Fiş: {editingPayment.receiptNo?.trim() || `KH-${editingPayment.id}`}
                 </p>
               </div>
               <button

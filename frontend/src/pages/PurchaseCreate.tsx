@@ -126,6 +126,11 @@ export default function PurchaseCreate({
   const [removedItemIds, setRemovedItemIds] = useState<number[]>([]);
   const [shouldPrint, setShouldPrint] = useState(false);
   const [printParty, setPrintParty] = useState<ReceiptParty | null>(null);
+  /** Kayıt sonrası sunucudan gelen kesin bakiye — fişe basılan değer */
+  const [printBalance, setPrintBalance] = useState<{
+    before: number;
+    after: number;
+  } | null>(null);
 
   const handlePrint = useCallback(() => {
     printDocument();
@@ -173,6 +178,19 @@ export default function PurchaseCreate({
     () => buildReceiptPartyLines(receiptParty),
     [receiptParty]
   );
+
+  /**
+   * Alış fişinde eski/güncel bakiye — Satış fişiyle aynı mantık.
+   * Açık fatura (Cari) tedarikçi carisinden DÜŞER (backend: balance decrement),
+   * Kapalı fatura kasadan ödendiği için cariyi değiştirmez.
+   */
+  const receiptBalance = useMemo(() => {
+    if (printBalance) return printBalance;
+    if (!receiptParty || typeof receiptParty.balance !== 'number') return null;
+    const before = receiptParty.balance;
+    const after = settlementType === 'ACIK' ? roundPrice(before - totalUsd) : before;
+    return { before, after };
+  }, [printBalance, receiptParty, settlementType, totalUsd]);
 
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => {
@@ -485,6 +503,21 @@ export default function PurchaseCreate({
         if (savedInvoiceNo) setDisplayInvoiceNo(savedInvoiceNo);
         setPrintParty(selectedSupplier);
 
+        const balanceBefore =
+          typeof response.data.data?.balanceBefore === 'number'
+            ? response.data.data.balanceBefore
+            : (selectedSupplier?.balance ?? 0);
+        const balanceAfter =
+          typeof response.data.data?.balanceAfter === 'number'
+            ? response.data.data.balanceAfter
+            : settlementType === 'ACIK'
+              ? roundPrice(balanceBefore - totalUsd)
+              : balanceBefore;
+
+        if (settlementType === 'ACIK' || Math.abs(balanceBefore) > 0.0001) {
+          setPrintBalance({ before: balanceBefore, after: balanceAfter });
+        }
+
         notify(
           'success',
           `Alış faturası kaydedildi! ${savedInvoiceNo} · MERKEZ_DEPO stok güncellendi`
@@ -496,6 +529,7 @@ export default function PurchaseCreate({
           afterPurchaseDone = true;
           setShouldPrint(false);
           setPrintParty(null);
+          setPrintBalance(null);
           onDataChange?.();
           void loadInitData();
         };
@@ -590,6 +624,14 @@ export default function PurchaseCreate({
         <div className="pdf-totals">
           <p>Toplam adet: {totalQuantity}</p>
           <p className="pdf-grand">Net toplam: {formatUsd(totalUsd)}</p>
+          {receiptBalance && (
+            <>
+              <p>Önceki bakiye: {formatMoney(receiptBalance.before)}</p>
+              <p>
+                <strong>Güncel bakiye: {formatMoney(receiptBalance.after)}</strong>
+              </p>
+            </>
+          )}
         </div>
         <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
@@ -651,6 +693,24 @@ export default function PurchaseCreate({
           <span className="receipt-item-name">NET TOPLAM</span>
           <span className="receipt-item-total">{formatUsd(totalUsd)}</span>
         </div>
+
+        {receiptBalance && (
+          <>
+            <div className="receipt-slip-divider" />
+            <div className="receipt-item-row receipt-slip-summary">
+              <span className="receipt-item-name">Önceki bakiye</span>
+              <span className="receipt-item-total">
+                {formatMoney(receiptBalance.before)}
+              </span>
+            </div>
+            <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+              <span className="receipt-item-name">Güncel bakiye</span>
+              <span className="receipt-item-total">
+                {formatMoney(receiptBalance.after)}
+              </span>
+            </div>
+          </>
+        )}
 
         <div className="receipt-slip-divider" />
         <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
@@ -1010,7 +1070,7 @@ export default function PurchaseCreate({
           </div>
         </section>
 
-        <aside className="h-fit space-y-4 rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm sm:p-5 xl:col-span-1 xl:sticky xl:top-4">
+        <aside className="h-fit space-y-4 rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm sm:p-5 xl:col-span-1 xl:sticky xl:top-0 xl:max-h-[calc(100dvh-7rem)] xl:overflow-y-auto">
           <h2 className="border-b border-slate-200 pb-2 text-center font-bold text-slate-800">
             Fatura Özeti
           </h2>

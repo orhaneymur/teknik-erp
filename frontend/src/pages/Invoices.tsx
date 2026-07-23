@@ -14,7 +14,7 @@ import ExcelActions from '../components/ExcelActions';
 import CustomerNameLink from '../components/CustomerNameLink';
 import { useInvoiceEditorFromUrl } from '../hooks/useInvoiceEditorFromUrl';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
-import type { PageId } from '../lib/navigation';
+import { buildPageUrl, type PageId } from '../lib/navigation';
 import InvoiceInlineEditor from '../components/InvoiceInlineEditor';
 
 type Invoice = {
@@ -338,10 +338,23 @@ export default function Invoices({
                     className={inv.isPreOrder ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50/60'}
                   >
                     <td className="px-4 py-3 text-sm font-semibold text-slate-900">
-                      <button
-                        type="button"
-                        onClick={() => tryOpenEditor(inv)}
-                        className={`text-left hover:underline ${
+                      {/*
+                       * Gerçek <a href> — sol tık sayfa içinde açar (preventDefault),
+                       * fare ORTA TUŞU / Ctrl+tık tarayıcının kendi davranışıyla
+                       * fişi yeni sekmede açar.
+                       */}
+                      <a
+                        href={buildPageUrl(pageId, {
+                          ...routeOptions,
+                          editInvoiceId: inv.id,
+                        })}
+                        onClick={(event) => {
+                          if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+                          event.preventDefault();
+                          tryOpenEditor(inv);
+                        }}
+                        title="Tıkla: bu sayfada aç · Orta tuş / Ctrl+tık: yeni sekmede aç"
+                        className={`text-left no-underline hover:underline ${
                           inv.type === 'SATIS'
                             ? 'text-violet-700 hover:text-violet-900'
                             : inv.type === 'ALIS'
@@ -350,7 +363,7 @@ export default function Invoices({
                         }`}
                       >
                         {inv.invoiceNo}
-                      </button>
+                      </a>
                     </td>
                     <td className="px-4 py-3">
                       <span

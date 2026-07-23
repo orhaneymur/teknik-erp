@@ -16,6 +16,11 @@ export type F2Product = {
   sku: string;
   barcode: string | null;
   name: string;
+  brand?: string | null;
+  model?: string | null;
+  color?: string | null;
+  appearance?: string | null;
+  quality?: string | null;
   costPrice: number;
   costUsd?: number;
   priceTl: number;
@@ -34,20 +39,36 @@ type ProductsResponse = {
   limit: number;
 };
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 200;
 
 function normalizeTr(value: string): string {
   return value.toLocaleLowerCase('tr-TR');
 }
 
-/** Yerel filtre — sunucu aramasıyla aynı alanlar (sku / barkod / ad) */
+/** Sunucudaki PRODUCT_SEARCH_FIELDS ile aynı küme (description hariç — istemciye gelmiyor) */
+function productHaystack(product: F2Product): string {
+  return normalizeTr(
+    [
+      product.name,
+      product.sku,
+      product.barcode,
+      product.brand,
+      product.model,
+      product.color,
+      product.appearance,
+      product.quality,
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
+}
+
+/** Yerel filtre — sunucuyla aynı çok kelimeli AND mantığı */
 function matchesProductQuery(product: F2Product, query: string): boolean {
-  const q = normalizeTr(query.trim());
-  if (!q) return true;
-  if (normalizeTr(product.sku).includes(q)) return true;
-  if (product.barcode && normalizeTr(product.barcode).includes(q)) return true;
-  if (normalizeTr(product.name).includes(q)) return true;
-  return false;
+  const words = normalizeTr(query.trim()).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = productHaystack(product);
+  return words.every((word) => haystack.includes(word));
 }
 
 function filterProducts(products: F2Product[], query: string): F2Product[] {
@@ -115,6 +136,11 @@ export function useF2ProductSearch(options: {
     [persistFocusedIndex]
   );
 
+  /**
+   * Yalnızca ANLIK geri bildirim içindir; sonuç kümesi burada kesinleşmez.
+   * Elde yalnızca son sunucu sayfası olduğu için tam liste her zaman
+   * sunucudan tazelenir (bkz. arama effect'i).
+   */
   const applyLocalFilter = useCallback(
     (query: string) => {
       const filtered = filterProducts(anchorResultsRef.current, query);
@@ -308,16 +334,21 @@ export function useF2ProductSearch(options: {
       return;
     }
 
-    // Daraltma: "1" → "11" — mevcut listede yerel filtre, yeni API yok
+    /*
+     * Daraltma: "1" → "11". Elde yalnızca son sunucu SAYFASI var; eldeki küme
+     * eksikken yerel filtre uygulanıp orada kalınırsa 1. sayfaya girmemiş
+     * eşleşmeler HİÇ görünmüyordu (bildirilen "bazı ürünler listelenmiyor"
+     * sorununun ana nedeni). Artık yerel filtre yalnızca anında geri bildirim
+     * için uygulanır; sonuç her durumda sunucudan tamamlanır.
+     */
     if (hasAnchor && trimmed.startsWith(anchor) && trimmed !== anchor) {
       applyLocalFilter(trimmed);
-      return;
     }
 
-    // Genişletme / yeni arama / karakter silme → sunucu
+    // Genişletme / daraltma / yeni arama / karakter silme → her hâlükârda sunucu
     debounceRef.current = setTimeout(() => {
       void fetchPage(1, trimmed, false);
-    }, 120);
+    }, 150);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);

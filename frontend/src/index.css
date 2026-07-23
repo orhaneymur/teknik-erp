@@ -1,6 +1,15 @@
 @import "tailwindcss";
 
 /*
+ * Global boşluk ölçeği — p-* / m-* / gap-* / space-* / w-* / h-*
+ * hepsi bu tokendan türer. 0.25rem → 0.21rem ile tüm ekranlar tek
+ * noktadan ~%16 kompaktlaşır (ekran başına ayar gerekmez).
+ */
+@theme {
+  --spacing: 0.21rem;
+}
+
+/*
  * Kompakt UI — rem tabanlı öğeler ~%20 küçülür (16px → 12.8px).
  * Sabit px yazı boyutları kullanmayın; text-caption / btn sınıflarını tercih edin.
  */
@@ -11,13 +20,24 @@
     text-size-adjust: 100%;
   }
 
+  /*
+   * Sayfa gövdesi viewport'a sabitlenir; dikey kaydırma yalnızca
+   * <main> içinde olur. Böylece %100 zoom'da pencere kaydırma çubuğu
+   * çıkmaz, sol menü ve üst başlık her zaman görünür kalır.
+   */
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
   body {
-    overflow-x: hidden;
+    overflow: hidden;
     line-height: 1.45;
   }
 
   #root {
-    min-height: 100dvh;
+    min-height: 100%;
   }
 
   input[type='number']::-webkit-outer-spin-button,
@@ -220,6 +240,15 @@
 
   html {
     font-size: 100% !important;
+  }
+
+  /* Yazdırmada viewport kilidi kalkar, içerik sayfalara akar */
+  html,
+  body,
+  #root {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
   }
 
   body {
