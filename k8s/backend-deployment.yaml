@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: since1907/akgun-backend:v1.8.21
+          image: since1907/akgun-backend:v1.8.23
           imagePullPolicy: Always
           ports:
             - name: http
@@ -36,7 +36,7 @@ spec:
             - name: PORT
               value: "3000"
             - name: APP_VERSION
-              value: "v1.8.21"
+              value: "v1.8.23"
             - name: DATABASE_URL
               value: mysql://root:akgunteknik123@akgunteknik-mysql:3306/akgunteknik
           readinessProbe:

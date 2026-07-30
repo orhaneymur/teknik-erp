@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { generateSku } from './sku.js';
 
 export type ImportResult = {
   created: number;
@@ -226,6 +227,10 @@ type ProductExcelRow = {
   Rmb?: string | number;
   AlisFiyati?: string | number;
   SatisFiyati?: string | number;
+  /** Satış 1 (Toptan) — yoksa SatisFiyati kullanılır */
+  Satis1?: string | number;
+  /** Satış 2 (Perakende) — yoksa Satış 1 kopyalanır */
+  Satis2?: string | number;
   AlisAdedi?: string | number;
   SatisAdedi?: string | number;
   Bakiye?: string | number;
@@ -400,6 +405,34 @@ async function upsertStock(
   }
 }
 
+/**
+ * Eski Excel şeması rengi ayrı kolon yerine açıklamanın sonuna
+ * `... | Renk: Black` biçiminde yazıyordu (v1.8.44'te kaldırıldı). Bu yüzden
+ * canlı kayıtlarda `color` boş, renk bilgisi açıklamada kalmıştı: dışa
+ * aktarımda Renk sütunu boş, Açıklama sütunu "Renk: Black" görünüyordu.
+ * Dışa aktarım bu artığı okuyup doğru sütuna taşır; içe aktarımda Renk
+ * sütunu zaten `color` alanına yazıldığı için bir tur indir/yükle ile veri
+ * kalıcı olarak düzelir (aynı taşıma migration ile de yapılır).
+ */
+const LEGACY_COLOR_TAG = 'Renk:';
+
+function legacyColorFromDescription(description: string | null): string {
+  if (!description) return '';
+  const at = description.lastIndexOf(LEGACY_COLOR_TAG);
+  if (at < 0) return '';
+  return description
+    .slice(at + LEGACY_COLOR_TAG.length)
+    .split('|')[0]
+    .trim();
+}
+
+function stripLegacyColor(description: string | null): string {
+  if (!description) return '';
+  const at = description.lastIndexOf(LEGACY_COLOR_TAG);
+  if (at < 0) return description;
+  return description.slice(0, at).replace(/[\s|]+$/, '').trim();
+}
+
 export async function exportProductsExcel(prisma: PrismaClient): Promise<Buffer> {
   const [products, purchaseQtyRows, salesQtyRows] = await Promise.all([
     prisma.product.findMany({
@@ -432,6 +465,12 @@ export async function exportProductsExcel(prisma: PrismaClient): Promise<Buffer>
     const bakiye =
       p.stocks.find((s) => s.branch.name === 'MERKEZ_DEPO')?.quantity ?? 0;
 
+    const legacyColor = legacyColorFromDescription(p.description);
+    const color = p.color?.trim() || legacyColor;
+    const description = legacyColor
+      ? stripLegacyColor(p.description)
+      : (p.description ?? '');
+
     return {
       Id: p.id,
       StokKodu: p.sku,
@@ -441,10 +480,13 @@ export async function exportProductsExcel(prisma: PrismaClient): Promise<Buffer>
       Model: p.model ?? '',
       Gorunum: appearanceLabel(p.appearance),
       Kalite: qualityLabel(p.quality),
-      Renk: p.color ?? '',
-      Aciklama: p.description ?? '',
+      Renk: color,
+      Aciklama: description,
       Rmb: p.rbmPrice,
       AlisFiyati: p.costPrice,
+      Satis1: p.priceUsd > 0 ? p.priceUsd : p.priceTl,
+      Satis2: p.priceUsd2 > 0 ? p.priceUsd2 : p.priceUsd > 0 ? p.priceUsd : p.priceTl,
+      /** Eski şablon uyumu — Satış 1 ile aynı */
       SatisFiyati: p.priceUsd > 0 ? p.priceUsd : p.priceTl,
       AlisAdedi: purchaseQty.get(p.id) ?? 0,
       SatisAdedi: salesQty.get(p.id) ?? 0,
@@ -491,6 +533,12 @@ export async function importProductsExcel(
   type ParsedRow = {
     rowIndex: number;
     sku: string;
+    /** Excel'deki Id sütunu — StokKodu boş satırlarda mevcut kaydı bulmak için */
+    excelId: number;
+    /** Kod Excel'de boştu, otomatik atandı */
+    autoSku: boolean;
+    /** StokKodu boş + veritabanındaki kod da boş → bu kayda kod yazılır */
+    forcedExistingId: number | null;
     name: string;
     categoryName: string | null;
     hasCategory: boolean;
@@ -511,6 +559,7 @@ export async function importProductsExcel(
     costPrice: number;
     priceTl: number;
     priceUsd: number;
+    priceUsd2: number;
     barcodeRaw: string | null;
     hasBarcodeColumn: boolean;
     merkezQty: number;
@@ -525,15 +574,26 @@ export async function importProductsExcel(
     const sku = asString(cell(record, 'StokKodu', 'StokKod', 'SKU'));
     const name = asString(cell(record, 'StokAdi', 'StokAd', 'UrunAdi', 'UrunAd'));
 
-    if (!sku || !name) {
+    /*
+     * Eskiden StokKodu boş satır atlanıyordu; tam senkron da o ürünü
+     * "Excel'de yok" sayıp siliyordu. Artık yalnızca ad zorunlu; kod boşsa
+     * aşağıda otomatik atanır (varsa Id ile mevcut kayda bağlanır).
+     */
+    if (!name) {
       skipped += 1;
-      errors.push(`Satir ${index + 2}: StokKodu veya StokAdi bos.`);
+      errors.push(`Satir ${index + 2}: StokAdi bos.`);
       continue;
     }
 
     const salePrice = asNumber(cell(record, 'SatisFiyati', 'SatisFiyat'), 0);
     const saleUsd = asNumber(cell(record, 'SatisUsd'), 0);
-    const priceUsd = saleUsd > 0 ? saleUsd : salePrice;
+    const sale1Raw = asNumber(cell(record, 'Satis1', 'SatisBir'), 0);
+    const sale2Raw = asNumber(cell(record, 'Satis2', 'SatisIki'), 0);
+    // Öncelik: Satis1 > SatisUsd > SatisFiyati
+    const priceUsd =
+      sale1Raw > 0 ? sale1Raw : saleUsd > 0 ? saleUsd : salePrice;
+    // Satış 2 yoksa Satış 1 ile aynı
+    const priceUsd2 = sale2Raw > 0 ? sale2Raw : priceUsd;
     const hasGorunum = hasCell(record, 'Gorunum', 'Gorunun');
     const hasRenk = hasCell(record, 'Renk');
     const gorunum = optionalString(cell(record, 'Gorunum', 'Gorunun'));
@@ -550,6 +610,9 @@ export async function importProductsExcel(
     parsedRows.push({
       rowIndex: index,
       sku,
+      excelId: asNumber(cell(record, 'Id'), 0),
+      autoSku: false,
+      forcedExistingId: null,
       name,
       categoryName: optionalString(cell(record, 'Kategori')),
       hasCategory,
@@ -574,6 +637,7 @@ export async function importProductsExcel(
       costPrice: asNumber(cell(record, 'AlisFiyati', 'AlisFiyat'), 0),
       priceTl: priceUsd,
       priceUsd,
+      priceUsd2,
       barcodeRaw: optionalString(cell(record, 'Barkod')),
       hasBarcodeColumn: hasCell(record, 'Barkod'),
       /** Bakiye = MERKEZ_DEPO stok adedi */
@@ -581,6 +645,45 @@ export async function importProductsExcel(
       cinIadeQty: asNumber(cell(record, 'CinIadeDepo'), 0),
       hasCinIadeColumn: hasCell(record, 'CinIadeDepo'),
     });
+  }
+
+  /*
+   * StokKodu boş satırlar için kod çözümü — kayıtları işlemeye başlamadan önce
+   * tek sorguda yapılır:
+   *   · Id mevcut bir ürünü gösteriyor ve o ürünün kodu doluysa → o kod kullanılır
+   *     (kullanıcı Excel'de kodu silmişse mevcut kod korunur, tam senkron
+   *     ürünü yanlışlıkla silmez).
+   *   · Id mevcut ama veritabanındaki kod da boşsa → yeni kod üretilir ve
+   *     doğrudan o kayda yazılır (yeni ürün oluşturulmaz).
+   *   · Id yoksa → yeni ürün, yeni kod.
+   */
+  let autoSkuAssigned = 0;
+  const blankSkuRows = parsedRows.filter((row) => !row.sku);
+
+  if (blankSkuRows.length > 0) {
+    const candidateIds = blankSkuRows
+      .map((row) => row.excelId)
+      .filter((id) => Number.isInteger(id) && id > 0);
+    const existing =
+      candidateIds.length > 0
+        ? await prisma.product.findMany({
+            where: { id: { in: candidateIds } },
+            select: { id: true, sku: true },
+          })
+        : [];
+    const skuById = new Map(existing.map((product) => [product.id, product.sku]));
+
+    for (const row of blankSkuRows) {
+      const currentSku = skuById.get(row.excelId)?.trim();
+      if (currentSku) {
+        row.sku = currentSku;
+        continue;
+      }
+      row.sku = generateSku();
+      row.autoSku = true;
+      row.forcedExistingId = skuById.has(row.excelId) ? row.excelId : null;
+      autoSkuAssigned += 1;
+    }
   }
 
   const BATCH_SIZE = 50;
@@ -591,7 +694,7 @@ export async function importProductsExcel(
     item: ParsedRow,
     existingBySku: Map<string, number>
   ) => {
-    const existingId = existingBySku.get(item.sku);
+    const existingId = item.forcedExistingId ?? existingBySku.get(item.sku);
     let categoryId: number | null = null;
     if (item.hasCategory && item.categoryName) {
       categoryId = await findOrCreateCategory(
@@ -657,10 +760,13 @@ export async function importProductsExcel(
       ? await tx.product.update({
           where: { id: existingId },
           data: {
+            // Kodsuz kayda otomatik kod yazılır
+            ...(item.forcedExistingId ? { sku: item.sku } : {}),
             name: item.name,
             costPrice: item.costPrice,
             priceTl: item.priceTl,
             priceUsd: item.priceUsd,
+            priceUsd2: item.priceUsd2,
             ...categoryUpdate,
             ...detailUpdate,
             ...barcodeUpdate,
@@ -673,6 +779,7 @@ export async function importProductsExcel(
             costPrice: item.costPrice,
             priceTl: item.priceTl,
             priceUsd: item.priceUsd,
+            priceUsd2: item.priceUsd2,
             ...categoryUpdate,
             ...detailUpdate,
             ...barcodeUpdate,
@@ -736,6 +843,12 @@ export async function importProductsExcel(
         }
       }
     }
+  }
+
+  if (autoSkuAssigned > 0) {
+    errors.push(
+      `${autoSkuAssigned} satirda StokKodu bos oldugu icin otomatik stok kodu atandi.`
+    );
   }
 
   // Excel'de olmayan urunleri kaldir (tam senkron)

@@ -45,6 +45,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
   const [rbmPrice, setRbmPrice] = useState('');
   const [costPriceUsd, setCostPriceUsd] = useState('');
   const [priceUsd, setPriceUsd] = useState('');
+  const [priceUsd2, setPriceUsd2] = useState('');
   const [description, setDescription] = useState('');
   const [barcode, setBarcode] = useState('');
   const [initialQuantity, setInitialQuantity] = useState('0');
@@ -138,6 +139,14 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
       .catch(() => setProductModelHints([]));
   }, [resolvedCategoryId, brandText]);
 
+  /*
+   * Marka seçiliyken model listesi YALNIZCA o markanın modellerini gösterir.
+   * Önceden marka tanımlarıyla model tanımları arasında bağ olmadığı için
+   * (BrandModel'de marka→model ilişkisi yok) tüm markaların modelleri
+   * listeleniyordu: "Apple" seçilse bile Samsung/Xiaomi modelleri geliyordu.
+   * Marka bazlı liste sunucudan gelir (`model-suggestions?brand=`), kategori
+   * tanımlarından gelen genel liste yalnızca marka seçili değilken eklenir.
+   */
   const modelTypeaheadOptions = useMemo(() => {
     const options: { id: string | number; label: string }[] = [];
     const seen = new Set<string>();
@@ -149,15 +158,17 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
       options.push({ id: `product-${key}`, label: name });
     }
 
-    for (const item of modelOptions) {
-      const key = normalizeTr(item.name);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      options.push({ id: item.id, label: item.name });
+    if (!brandText.trim()) {
+      for (const item of modelOptions) {
+        const key = normalizeTr(item.name);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        options.push({ id: item.id, label: item.name });
+      }
     }
 
     return options.sort((a, b) => a.label.localeCompare(b.label, 'tr'));
-  }, [modelOptions, productModelHints]);
+  }, [modelOptions, productModelHints, brandText]);
 
   const selectedBrandName = brandText.trim();
   const selectedModelName = modelText.trim();
@@ -184,6 +195,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
 
   const parsedCost = Number(costPriceUsd) || 0;
   const parsedSale = Number(priceUsd) || 0;
+  const parsedSale2 = Number(priceUsd2) || 0;
   const parsedRbm = Number(rbmPrice) || 0;
   const margin =
     parsedSale > 0 ? ((parsedSale - parsedCost) / parsedSale) * 100 : 0;
@@ -205,6 +217,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
     setRbmPrice('');
     setCostPriceUsd('');
     setPriceUsd('');
+    setPriceUsd2('');
     setDescription('');
     setBarcode('');
     setInitialQuantity('0');
@@ -231,9 +244,15 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
     }
 
     if (!priceUsd || Number.isNaN(parsedSale) || parsedSale < 0) {
-      notify('error', 'Geçerli bir satış fiyatı (USD) girin.');
+      notify('error', 'Geçerli bir Satış 1 fiyatı (USD) girin.');
       return;
     }
+
+    // Satış 2 boşsa Satış 1 ile aynı
+    const resolvedSale2 =
+      priceUsd2.trim() !== '' && !Number.isNaN(parsedSale2) && parsedSale2 >= 0
+        ? parsedSale2
+        : parsedSale;
 
     setSubmitting(true);
     try {
@@ -241,6 +260,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         name: generatedPreview || name.trim(),
         costPrice: parsedCost,
         priceUsd: parsedSale,
+        priceUsd2: resolvedSale2,
         priceTl: roundPrice(parsedSale),
         barcode: barcode.trim() || undefined,
         initialQuantity: toIntegerQty(initialQuantity, 0),
@@ -476,16 +496,34 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
             </div>
 
             <div>
-              <label className={labelClass}>Satış Fiyatı (USD) *</label>
+              <label className={labelClass}>Satış 1 — Toptan (USD) *</label>
               <input
                 type="number"
                 min="0"
                 step="0.01"
                 value={priceUsd}
-                onChange={(e) => setPriceUsd(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setPriceUsd(next);
+                  // Satış 2 boşsa otomatik aynı değeri yaz
+                  if (!priceUsd2.trim()) setPriceUsd2(next);
+                }}
                 required
                 className={fieldClass}
                 placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label className={labelClass}>Satış 2 — Perakende (USD)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={priceUsd2}
+                onChange={(e) => setPriceUsd2(e.target.value)}
+                className={fieldClass}
+                placeholder="Boşsa Satış 1 ile aynı"
               />
             </div>
 
@@ -493,7 +531,8 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
               <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-600">
                 <Package className="h-4 w-4 shrink-0 text-indigo-500" />
                 <span>
-                  Kâr: {formatUsd(parsedSale - parsedCost)} · Marj: {margin.toFixed(1)}%
+                  Kâr (Satış 1): {formatUsd(parsedSale - parsedCost)} · Marj:{' '}
+                  {margin.toFixed(1)}%
                 </span>
               </div>
             )}

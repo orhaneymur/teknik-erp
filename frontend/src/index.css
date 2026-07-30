@@ -494,7 +494,6 @@
       align-items: baseline;
       gap: 3px;
       width: 100%;
-      white-space: nowrap;
       font-size: 9px;
       line-height: 1.25;
     }
@@ -503,20 +502,26 @@
       font-size: 8px;
       font-weight: 700;
       text-transform: uppercase;
+      white-space: nowrap;
     }
 
+    /*
+     * Ürün adı kısaltılmaz. Önceden `nowrap` + ellipsis ile uzun adlar termal
+     * fişte "..." olarak kesiliyordu; artık gerekirse alt satıra sarar.
+     */
     .receipt-item-name {
       flex: 1 1 auto;
       min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .receipt-item-qty {
       flex: 0 0 1.5em;
       width: 1.5em;
       text-align: right;
+      white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
 
@@ -524,6 +529,7 @@
       flex: 0 0 4.2em;
       width: 4.2em;
       text-align: right;
+      white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
 
@@ -531,6 +537,7 @@
       flex: 0 0 4.4em;
       width: 4.4em;
       text-align: right;
+      white-space: nowrap;
       font-weight: 700;
       font-variant-numeric: tabular-nums;
     }

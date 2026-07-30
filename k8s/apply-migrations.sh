@@ -171,6 +171,28 @@ else
   echo "    = Transaction.receiptNo unique index zaten var"
 fi
 
+echo "==> Urun Satis 2 fiyati (priceUsd2)..."
+if ! column_exists "Product" "priceUsd2"; then
+  mysql_exec "ALTER TABLE \`Product\` ADD COLUMN \`priceUsd2\` DOUBLE NOT NULL DEFAULT 0;"
+  echo "    + Product.priceUsd2 eklendi"
+else
+  echo "    = Product.priceUsd2 zaten var"
+fi
+# Tek fiyatli kayitlarda Satis 2 = Satis 1
+mysql_exec "UPDATE \`Product\` SET \`priceUsd2\` = \`priceUsd\` WHERE \`priceUsd2\` = 0 AND \`priceUsd\` > 0;"
+echo "    = priceUsd2 bos kayitlar priceUsd ile dolduruldu"
+
+echo "==> Stok kodu bos urunlere otomatik kod..."
+# LEFT JOIN: uretilen kod baska bir urunde kullanilmiyorsa atanir
+mysql_exec "UPDATE \`Product\` \`p\` LEFT JOIN \`Product\` \`q\` ON \`q\`.\`sku\` = CONCAT('SK', LPAD(\`p\`.\`id\`, 6, '0')) SET \`p\`.\`sku\` = CONCAT('SK', LPAD(\`p\`.\`id\`, 6, '0')) WHERE TRIM(\`p\`.\`sku\`) = '' AND \`q\`.\`id\` IS NULL;"
+echo "    = kodsuz urunlere SK000000 bicimi kod atandi"
+
+echo "==> Aciklamadaki renk bilgisini Renk kolonuna tasi..."
+# Eski Excel semasi rengi "... | Renk: Black" olarak aciklamaya yaziyordu
+mysql_exec "UPDATE \`Product\` SET \`color\` = TRIM(SUBSTRING(\`description\`, LOCATE('Renk:', \`description\`) + 5)) WHERE (\`color\` IS NULL OR TRIM(\`color\`) = '') AND \`description\` LIKE '%Renk:%' AND TRIM(SUBSTRING(\`description\`, LOCATE('Renk:', \`description\`) + 5)) <> '';"
+mysql_exec "UPDATE \`Product\` SET \`description\` = NULLIF(TRIM(TRIM(TRAILING '|' FROM TRIM(SUBSTRING(\`description\`, 1, LOCATE('Renk:', \`description\`) - 1)))), '') WHERE \`description\` LIKE '%Renk:%';"
+echo "    = renk kolonu dolduruldu, aciklamadaki artik temizlendi"
+
 echo "==> Migration tamam."
 echo
 echo "NOT: v1.8.47 ile on siparisler artik cari/kasaya kayit dusmuyor."

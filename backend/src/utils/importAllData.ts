@@ -3,6 +3,7 @@ import path from 'node:path';
 import * as XLSX from 'xlsx';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { BranchType, Prisma, PrismaClient } from '@prisma/client';
+import { resolveSku } from './sku.js';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -184,16 +185,19 @@ async function upsertProductWithStock(
   cinIadeDepoId: number,
   rowIndex: number
 ): Promise<void> {
-  const sku = asString(row.StokKodu);
   const name = asString(row.StokAdi);
 
-  if (!sku || !name) {
-    throw new Error('StokKodu veya StokAdi boş');
+  if (!name) {
+    throw new Error('StokAdi boş');
   }
+
+  // Stok kodu boş gelen satırlar atlanmasın — otomatik kod atanır
+  const sku = resolveSku(row.StokKodu == null ? '' : String(row.StokKodu));
 
   const costPrice = asNumber(row.AlisFiyati, 0);
   const priceTl = asNumber(row.SatisFiyati, 0);
   const priceUsd = priceTl > 0 ? priceTl / EXCHANGE_RATE : 0;
+  const priceUsd2 = priceUsd;
   const barcodeRaw = optionalString(row.Barkod);
   const quantity = asNumber(row.MevcutStok ?? row.Bakiye, 0);
   const categoryName = optionalString(row.Kategori);
@@ -205,6 +209,7 @@ async function upsertProductWithStock(
     costPrice,
     priceTl,
     priceUsd,
+    priceUsd2,
     ...(categoryId ? { category: { connect: { id: categoryId } } } : {}),
     ...(barcodeRaw ? { barcode: barcodeRaw } : {}),
   };
@@ -219,6 +224,7 @@ async function upsertProductWithStock(
         costPrice,
         priceTl,
         priceUsd,
+        priceUsd2,
         ...(categoryName != null ? { categoryId } : {}),
         ...(barcodeRaw ? { barcode: barcodeRaw } : { barcode: null }),
       },
@@ -239,6 +245,7 @@ async function upsertProductWithStock(
           costPrice,
           priceTl,
           priceUsd,
+          priceUsd2,
           barcode: null,
         },
         create: {
@@ -247,6 +254,7 @@ async function upsertProductWithStock(
           costPrice,
           priceTl,
           priceUsd,
+          priceUsd2,
         },
         select: { id: true },
       });

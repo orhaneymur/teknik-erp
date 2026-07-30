@@ -74,7 +74,10 @@ model Product {
   description  String?        @db.Text
   costPrice    Float          @default(0.0)
   priceTl      Float          @default(0.0)
+  /// Satış 1 (Toptan) — satışta varsayılan fiyat
   priceUsd     Float          @default(0.0)
+  /// Satış 2 (Perakende) — başlangıçta Satış 1 ile aynı
+  priceUsd2    Float          @default(0.0)
   categoryId   Int?
   brandModelId Int?
   category     Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)

@@ -222,7 +222,10 @@ export type Product = {
   category?: { id: number; name: string } | null;
   costPrice: number;
   priceTl: number;
+  /** Satış 1 (Toptan) */
   priceUsd: number;
+  /** Satış 2 (Perakende) */
+  priceUsd2?: number;
   stocks: ProductStock[];
   createdAt?: string;
   updatedAt?: string;

@@ -16,6 +16,8 @@ import {
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList from '../components/F2ProductList';
+import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
+import { useAppNavigationOptional } from '../context/AppNavigationContext';
 import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
 import { useHoldKeyReveal } from '../hooks/useHoldKeyReveal';
@@ -151,6 +153,11 @@ export default function SalesReturn({
   const [searchModal, setSearchModal] = useState(false);
   const [warning, setWarning] = useState<WarningState | null>(null);
   const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
+  const [historyProduct, setHistoryProduct] = useState<{
+    id: number;
+    sku: string;
+    name: string;
+  } | null>(null);
   const [pickingProduct, setPickingProduct] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [displayInvoiceNo, setDisplayInvoiceNo] = useState('');
@@ -238,6 +245,22 @@ export default function SalesReturn({
   const closeInvoiceView = useCallback(() => {
     setViewingInvoiceId(null);
   }, []);
+
+  /*
+   * Fatura görünümü açıkken üst bardaki Geri tuşu da bu görünümü kapatsın.
+   * Öncesinde o tuş `history.back()` çağırıp ana sayfaya atıyor, iade
+   * ekranındaki müşteri ve sepet seçimi kayboluyordu.
+   */
+  const appNavigation = useAppNavigationOptional();
+
+  useEffect(() => {
+    if (!appNavigation || viewingInvoiceId === null) return;
+    appNavigation.registerBackHandler(() => {
+      setViewingInvoiceId(null);
+      return true;
+    });
+    return () => appNavigation.registerBackHandler(null);
+  }, [appNavigation, viewingInvoiceId]);
 
   const loadInit = useCallback(async () => {
     try {
@@ -1425,9 +1448,20 @@ export default function SalesReturn({
                           className={line.isChinaReturn ? 'bg-orange-50/50' : undefined}
                         >
                           <td className="px-4 py-3">
-                            <p className="text-sm font-medium text-slate-900">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setHistoryProduct({
+                                  id: line.productId,
+                                  sku: line.productSku,
+                                  name: line.productName,
+                                })
+                              }
+                              className="text-left text-sm font-medium text-slate-900 hover:text-violet-700 hover:underline"
+                              title="Stok hareketlerini görüntüle"
+                            >
                               {line.productName}
-                            </p>
+                            </button>
                             <p className="text-xs text-slate-500">{line.productSku}</p>
                           </td>
                           <td className="px-4 py-3">
@@ -1696,6 +1730,13 @@ export default function SalesReturn({
           />
         )}
       </ProductSearchPopover>
+
+      <ProductStockHistoryModal
+        open={historyProduct != null}
+        onClose={() => setHistoryProduct(null)}
+        product={historyProduct}
+        initialCustomer={selectedCustomer}
+      />
     </div>
   );
 }

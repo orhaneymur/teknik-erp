@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { ArrowLeft, Menu } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -60,7 +60,7 @@ const initialOpenMenus = menuCategories.reduce(
   {} as Record<MenuCategoryId, boolean>
 );
 
-const FRONTEND_VERSION = 'v1.8.49';
+const FRONTEND_VERSION = 'v1.8.51';
 
 function App() {
   const initialUrl = parsePageFromUrl();
@@ -173,7 +173,21 @@ function App() {
     [applyRoute]
   );
 
+  /**
+   * Sayfa içi gömülü görünüm açıkken geri tuşunu o görünüme bağlar.
+   * Aksi hâlde `history.back()` sayfayı tamamen değiştiriyor, iade ekranındaki
+   * müşteri/ürün seçimi kayboluyor ve kullanıcı ana sayfaya düşüyordu.
+   */
+  const backHandlerRef = useRef<(() => boolean) | null>(null);
+  const registerBackHandler = useCallback(
+    (handler: (() => boolean) | null) => {
+      backHandlerRef.current = handler;
+    },
+    []
+  );
+
   const goBack = useCallback(() => {
+    if (backHandlerRef.current?.()) return;
     if (window.history.length > 1) {
       window.history.back();
       return;
@@ -222,8 +236,9 @@ function App() {
         navigateTo('customer-detail', { customerId });
       },
       goBack,
+      registerBackHandler,
     }),
-    [navigateTo, goBack]
+    [navigateTo, goBack, registerBackHandler]
   );
 
   const toggleMenu = useCallback((id: MenuCategoryId) => {

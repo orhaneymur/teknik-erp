@@ -22,6 +22,7 @@ import {
   getIstanbulYear,
   roundMoney,
 } from './utils/datetime.js';
+import { resolveSku } from './utils/sku.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const APP_VERSION = process.env.APP_VERSION ?? 'dev';
@@ -855,6 +856,22 @@ function hasWordBoundary(haystack: string, needle: string): boolean {
 }
 
 /**
+ * Kelime BAŞINDA eşleşme — kullanıcı kelimeyi kısaltarak yazar ("kap" → "KAPAK").
+ * `hasWordBoundary` bunu kaçırır (sonrası harf), `includes` ise fazla cömerttir
+ * ("8" → "N980" ortasında). Aradaki doğru kademe budur.
+ */
+function hasWordPrefix(haystack: string, needle: string): boolean {
+  let from = 0;
+  for (;;) {
+    const at = haystack.indexOf(needle, from);
+    if (at < 0) return false;
+    const before = at === 0 ? '' : haystack[at - 1];
+    if (before === '' || !/[a-z0-9]/.test(before)) return true;
+    from = at + 1;
+  }
+}
+
+/**
  * Relevans puanı. Önceki sürümde sıralama yalnızca `name asc` idi; bu yüzden
  * "Note 8" aramasında alfabetik olarak önce gelen "NOTE 10..." kayıtları
  * listenin başına, gerçek "NOTE 8" kayıtları 50. sıralara düşüyordu.
@@ -877,9 +894,21 @@ function scoreProductMatch(
   if (name.includes(phrase)) return 750;
 
   if (words.every((word) => hasWordBoundary(name, word))) return 700;
-  if (words.every((word) => name.includes(word))) return 650;
+  // "note 8 kap" → "NOTE 8 ARKA KAPAK": her parça bir kelimenin başında
+  if (words.every((word) => hasWordPrefix(name, word))) return 680;
 
   if (sku.includes(phrase) || barcode.includes(phrase)) return 600;
+
+  /*
+   * Tüm parçalar adın içinde geçiyor ama en az biri kelime ORTASINDA.
+   * "note 8 kap" aramasında "SAMSUNG N980 NOTE 20 ARKA KAPAK" buraya düşer
+   * ("8" yalnızca "N980" içinde geçiyor); gerçek NOTE 8 kayıtlarının önüne
+   * geçmemesi için kelime başı isabet sayısı kadar küçük bir prim alır.
+   */
+  if (words.every((word) => name.includes(word))) {
+    const prefixHits = words.filter((word) => hasWordPrefix(name, word)).length;
+    return 450 + prefixHits;
+  }
 
   const attrs = foldSearchText(
     [row.brand, row.model, row.color, row.appearance, row.quality]
@@ -893,6 +922,17 @@ function scoreProductMatch(
   return 100;
 }
 
+/**
+ * Aynı relevans kademesindeki sıralama anahtarı — marka alfabetik.
+ * Marka alanı boş ürünlerde ürün adının ilk kelimesi marka yerine geçer
+ * (adlar "INFINIX ...", "SAMSUNG ..." biçiminde markayla başlıyor).
+ */
+function rankBrandKey(row: ProductRankRow): string {
+  const brand = row.brand?.trim();
+  if (brand) return foldSearchText(brand);
+  return foldSearchText(row.name.trim().split(/\s+/)[0] ?? '');
+}
+
 function rankProductCandidates(
   rows: ProductRankRow[],
   search: string
@@ -904,10 +944,10 @@ function rankProductCandidates(
     .map((row) => ({ row, score: scoreProductMatch(row, phrase, words) }))
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
-      // Aynı puanda kısa ad daha spesifiktir; sonra alfabetik, sonra id (kararlı)
-      if (a.row.name.length !== b.row.name.length) {
-        return a.row.name.length - b.row.name.length;
-      }
+      // Aynı puanda: marka alfabetik → ad alfabetik → id (kararlı sayfalama)
+      const brandA = rankBrandKey(a.row);
+      const brandB = rankBrandKey(b.row);
+      if (brandA !== brandB) return brandA.localeCompare(brandB, 'tr');
       const byName = a.row.name.localeCompare(b.row.name, 'tr');
       return byName !== 0 ? byName : a.row.id - b.row.id;
     })
@@ -3093,12 +3133,11 @@ app.post<{
         throw new Error('Kasa bulunamadı.');
       }
 
-      if (type === 'CIKIS' && safe.balance < amount) {
-        throw new Error(
-          `Kasa bakiyesi yetersiz. Mevcut: ${safe.balance}, istenen: ${amount}`
-        );
-      }
-
+      /*
+       * Kasa bakiyesi yetersizlik kontrolü kaldırıldı — kasa eksiye düşebilir.
+       * Nakit fiilen kasadan çıkmışken kaydın engellenmesi, işlemin sisteme
+       * hiç girilmemesine yol açıyordu; eksi bakiye rapordan takip edilir.
+       */
       if (type === 'GIRIS') {
         await tx.customer.update({
           where: { id: customerId },
@@ -3284,11 +3323,7 @@ app.put<{
           data: { balance: { increment: nextAmount } },
         });
       } else {
-        if (nextSafe.balance < nextAmount) {
-          throw new Error(
-            `Kasa bakiyesi yetersiz. Mevcut: ${nextSafe.balance}, istenen: ${nextAmount}`
-          );
-        }
+        // Kasa eksiye düşebilir — bkz. ödeme oluşturma ucundaki not
         await tx.customer.update({
           where: { id: nextCustomerId },
           data: { balance: { increment: nextAmount } },
@@ -3779,9 +3814,7 @@ app.post<{
       } else if (isCashLikePayment(paymentMethod)) {
         const safe = await tx.safe.findUnique({ where: { id: safeId } });
         if (!safe) throw new Error('Kasa bulunamadı.');
-        if (safe.balance < totalAmountTl) {
-          throw new Error('Kasada yeterli bakiye yok (kapalı iade).');
-        }
+        // Kasa eksiye düşebilir — yetersiz bakiye iadeyi engellemez
         await tx.safe.update({
           where: { id: safeId },
           data: { balance: { decrement: totalAmountTl } },
@@ -3931,9 +3964,7 @@ app.post<{
       } else if (isCashLikePayment(paymentMethod)) {
         const safe = await tx.safe.findUnique({ where: { id: safeId } });
         if (!safe) throw new Error('Kasa bulunamadı.');
-        if (safe.balance < totalAmountTl) {
-          throw new Error('Kasada yeterli bakiye yok (kapalı iade).');
-        }
+        // Kasa eksiye düşebilir — yetersiz bakiye iadeyi engellemez
         await tx.safe.update({
           where: { id: safeId },
           data: { balance: { decrement: totalAmountTl } },
@@ -3976,6 +4007,7 @@ app.post<{
     priceTl?: number;
     barcode?: string;
     priceUsd?: number;
+    priceUsd2?: number;
     initialQuantity?: number;
     categoryId?: number;
     brand?: string;
@@ -3995,6 +4027,7 @@ app.post<{
     priceTl,
     barcode,
     priceUsd,
+    priceUsd2,
     initialQuantity,
     categoryId,
     brand,
@@ -4010,12 +4043,17 @@ app.post<{
   if (!name?.trim() || costPrice == null || priceUsd == null) {
     return reply.status(400).send({
       success: false,
-      message: 'Stok adı, alış fiyatı (USD) ve satış fiyatı (USD) zorunludur.',
+      message: 'Stok adı, alış fiyatı (USD) ve Satış 1 (USD) zorunludur.',
       errors: null,
     });
   }
 
-  if (costPrice < 0 || priceUsd < 0 || (rbmPrice != null && rbmPrice < 0)) {
+  if (
+    costPrice < 0 ||
+    priceUsd < 0 ||
+    (priceUsd2 != null && priceUsd2 < 0) ||
+    (rbmPrice != null && rbmPrice < 0)
+  ) {
     return reply.status(400).send({
       success: false,
       message: 'Fiyatlar negatif olamaz.',
@@ -4023,10 +4061,11 @@ app.post<{
     });
   }
 
-  const resolvedSku =
-    sku?.trim() ||
-    `SK${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+  const resolvedSku = resolveSku(sku);
   const resolvedPriceUsd = priceUsd != null && priceUsd >= 0 ? priceUsd : 0;
+  // Satış 2 boşsa Satış 1 ile aynı
+  const resolvedPriceUsd2 =
+    priceUsd2 != null && priceUsd2 > 0 ? priceUsd2 : resolvedPriceUsd;
   const resolvedPriceTl =
     resolvedPriceUsd > 0
       ? resolvedPriceUsd
@@ -4066,6 +4105,7 @@ app.post<{
           costPrice,
           priceTl: resolvedPriceTl,
           priceUsd: resolvedPriceUsd,
+          priceUsd2: resolvedPriceUsd2,
           barcode: barcode?.trim() || null,
           categoryId: categoryId ?? null,
           brand: resolvedBrand,
@@ -4113,13 +4153,44 @@ app.post<{
   }
 });
 
-app.get<{ Querystring: { search?: string; page?: string; limit?: string; take?: string; skip?: string } }>(
+app.get<{
+  Querystring: {
+    search?: string;
+    page?: string;
+    limit?: string;
+    take?: string;
+    skip?: string;
+    categoryId?: string;
+    brand?: string;
+    model?: string;
+    color?: string;
+    appearance?: string;
+  };
+}>(
   '/api/products',
   async (request) => {
-    const { search, page, limit, take, skip } = request.query;
+    const { search, page, limit, take, skip, categoryId, brand, model, color, appearance } =
+      request.query;
     const pagination = parseListPageQuery({ page, limit, take, skip });
 
-    const where = search ? buildProductSearchWhere(search) : {};
+    /*
+     * Serbest metin araması ile kolon filtreleri birlikte çalışır (AND).
+     * Filtre değerleri açılır listeden geldiği için tam eşleşme aranır;
+     * MySQL varsayılan collation büyük/küçük harfe duyarsızdır.
+     */
+    const filters: Prisma.ProductWhereInput[] = [];
+    if (search?.trim()) filters.push(buildProductSearchWhere(search));
+
+    const categoryIdNum = Number(categoryId);
+    if (Number.isFinite(categoryIdNum) && categoryIdNum > 0) {
+      filters.push({ categoryId: categoryIdNum });
+    }
+    if (brand?.trim()) filters.push({ brand: brand.trim() });
+    if (model?.trim()) filters.push({ model: model.trim() });
+    if (color?.trim()) filters.push({ color: color.trim() });
+    if (appearance?.trim()) filters.push({ appearance: appearance.trim() });
+
+    const where: Prisma.ProductWhereInput = filters.length > 0 ? { AND: filters } : {};
 
     const [products, totalCount] = await Promise.all([
       prisma.product.findMany({
@@ -4249,6 +4320,7 @@ app.put<{
     costPrice?: number;
     priceTl?: number;
     priceUsd?: number;
+    priceUsd2?: number;
     categoryId?: number | null;
     brand?: string | null;
     model?: string | null;
@@ -4284,6 +4356,7 @@ app.put<{
     costPrice,
     priceTl,
     priceUsd,
+    priceUsd2,
     categoryId,
     brand,
     model,
@@ -4305,7 +4378,8 @@ app.put<{
   if (
     (costPrice !== undefined && costPrice < 0) ||
     (priceTl !== undefined && priceTl < 0) ||
-    (priceUsd !== undefined && priceUsd < 0)
+    (priceUsd !== undefined && priceUsd < 0) ||
+    (priceUsd2 !== undefined && priceUsd2 < 0)
   ) {
     return reply.status(400).send({
       success: false,
@@ -4318,7 +4392,8 @@ app.put<{
     const product = await prisma.product.update({
       where: { id },
       data: {
-        ...(sku !== undefined ? { sku: sku.trim() } : {}),
+        // Kod boş bırakılırsa kayıt kodsuz kalmasın — otomatik kod atanır
+        ...(sku !== undefined ? { sku: resolveSku(sku) } : {}),
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(barcode !== undefined
           ? { barcode: barcode?.trim() || null }
@@ -4326,6 +4401,7 @@ app.put<{
         ...(costPrice !== undefined ? { costPrice } : {}),
         ...(priceUsd !== undefined ? { priceUsd, priceTl: priceUsd } : {}),
         ...(priceTl !== undefined && priceUsd === undefined ? { priceTl } : {}),
+        ...(priceUsd2 !== undefined ? { priceUsd2 } : {}),
         ...(categoryId !== undefined ? { categoryId: categoryId ?? null } : {}),
         ...(brand !== undefined ? { brand: brand?.trim() || null } : {}),
         ...(model !== undefined ? { model: model?.trim() || null } : {}),
@@ -4909,12 +4985,16 @@ app.get<{ Querystring: { categoryId?: string; brand?: string } }>(
     }
 
     const sorted = [...names].sort((a, b) => a.localeCompare(b, 'tr'));
+    /*
+     * Marka seçiliyse YALNIZCA o markayla kullanılmış modeller döner (önceden
+     * diğer markaların modelleri de listeleniyor, sadece sıraya alınıyordu).
+     * BrandModel tanımlarında marka→model bağı olmadığı için eşleşme ürün
+     * verisinden çıkarılır; o markaya ait hiç model yoksa (yeni marka) tüm
+     * liste döner, aksi hâlde alan hiç öneri vermezdi.
+     */
     const data =
       brandQuery && brandMatched.size > 0
-        ? [
-            ...sorted.filter((name) => brandMatched.has(name)),
-            ...sorted.filter((name) => !brandMatched.has(name)),
-          ]
+        ? sorted.filter((name) => brandMatched.has(name))
         : sorted;
 
     return {

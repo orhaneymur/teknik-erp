@@ -7,6 +7,7 @@ import {
   Package,
   Pencil,
   Search,
+  SlidersHorizontal,
   Trash2,
   X,
 } from 'lucide-react';
@@ -34,6 +35,17 @@ type BrandModelOption = {
   categoryId: number | null;
 };
 
+/** Aynı isimli marka/model tanımlarını tekilleştirir */
+function uniqueByName(items: BrandModelOption[]): BrandModelOption[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = item.name.trim().toLocaleLowerCase('tr-TR');
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 type StockListProps = {
   onNotify?: (type: 'success' | 'error', message: string) => void;
   title?: string;
@@ -50,6 +62,14 @@ export default function StockList({
   const [brandModels, setBrandModels] = useState<BrandModelOption[]>([]);
   const [dbColors, setDbColors] = useState<string[]>([]);
   const [search, setSearch] = useState('');
+  /** Sunucu tarafı kolon filtreleri — serbest arama ile birlikte (AND) çalışır */
+  const [filters, setFilters] = useState({
+    categoryId: '' as number | '',
+    brand: '',
+    model: '',
+    color: '',
+    appearance: '',
+  });
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -68,6 +88,7 @@ export default function StockList({
     description: '',
     costPrice: '',
     priceUsd: '',
+    priceUsd2: '',
   });
   const [stockForm, setStockForm] = useState<Array<{ branchId: number; branchName: string; quantity: string }>>(
     []
@@ -81,34 +102,48 @@ export default function StockList({
     [onNotify]
   );
 
-  const loadProducts = useCallback(async (query: string, pageNumber: number) => {
-    setLoading(true);
-    try {
-      const params: Record<string, string | number> = {
-        page: pageNumber,
-        limit: LIST_PAGE_SIZE,
-      };
-      if (query.trim()) {
-        params.search = query.trim();
-      }
+  const loadProducts = useCallback(
+    async (
+      query: string,
+      pageNumber: number,
+      activeFilters: typeof filters = filters
+    ) => {
+      setLoading(true);
+      try {
+        const params: Record<string, string | number> = {
+          page: pageNumber,
+          limit: LIST_PAGE_SIZE,
+        };
+        if (query.trim()) {
+          params.search = query.trim();
+        }
+        if (activeFilters.categoryId !== '') {
+          params.categoryId = activeFilters.categoryId;
+        }
+        if (activeFilters.brand) params.brand = activeFilters.brand;
+        if (activeFilters.model) params.model = activeFilters.model;
+        if (activeFilters.color) params.color = activeFilters.color;
+        if (activeFilters.appearance) params.appearance = activeFilters.appearance;
 
-      const response = await axios.get<PaginatedListResponse<Product>>(
-        `${API_BASE}/api/products`,
-        { params }
-      );
+        const response = await axios.get<PaginatedListResponse<Product>>(
+          `${API_BASE}/api/products`,
+          { params }
+        );
 
-      if (response.data.success) {
-        setProducts(response.data.data);
-        setTotalCount(response.data.totalCount);
-        setPage(response.data.page);
+        if (response.data.success) {
+          setProducts(response.data.data);
+          setTotalCount(response.data.totalCount);
+          setPage(response.data.page);
+        }
+      } catch {
+        setProducts([]);
+        setTotalCount(0);
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      setProducts([]);
-      setTotalCount(0);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [filters]
+  );
 
   useEffect(() => {
     void Promise.all([
@@ -146,7 +181,7 @@ export default function StockList({
 
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, filters]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -179,6 +214,45 @@ export default function StockList({
     return item.categoryId === form.categoryId || item.categoryId == null;
   });
 
+  /** Filtre çubuğu listeleri — düzenleme formundan bağımsız, seçili kategoriye göre */
+  const filterBrandOptions = useMemo(
+    () =>
+      uniqueByName(
+        brandModels.filter(
+          (item) =>
+            item.kind === 'MARKA' &&
+            (filters.categoryId === '' ||
+              item.categoryId === filters.categoryId ||
+              item.categoryId == null)
+        )
+      ),
+    [brandModels, filters.categoryId]
+  );
+
+  const filterModelOptions = useMemo(
+    () =>
+      uniqueByName(
+        brandModels.filter(
+          (item) =>
+            item.kind === 'MODEL' &&
+            (filters.categoryId === '' ||
+              item.categoryId === filters.categoryId ||
+              item.categoryId == null)
+        )
+      ),
+    [brandModels, filters.categoryId]
+  );
+
+  const activeFilterCount =
+    (filters.categoryId === '' ? 0 : 1) +
+    (filters.brand ? 1 : 0) +
+    (filters.model ? 1 : 0) +
+    (filters.color ? 1 : 0) +
+    (filters.appearance ? 1 : 0);
+
+  const clearFilters = () =>
+    setFilters({ categoryId: '', brand: '', model: '', color: '', appearance: '' });
+
   const openEdit = (product: Product, e?: React.MouseEvent) => {
     e?.stopPropagation();
     setEditing(product);
@@ -195,6 +269,11 @@ export default function StockList({
       description: product.description ?? '',
       costPrice: String(product.costPrice),
       priceUsd: String(product.priceUsd),
+      priceUsd2: String(
+        product.priceUsd2 != null && product.priceUsd2 > 0
+          ? product.priceUsd2
+          : product.priceUsd
+      ),
     });
     setStockForm(
       productStocks(product).map((stock) => ({
@@ -226,6 +305,7 @@ export default function StockList({
         description: form.description.trim() || null,
         costPrice: Number(form.costPrice),
         priceUsd: Number(form.priceUsd),
+        priceUsd2: Number(form.priceUsd2 || form.priceUsd),
         priceTl: Number(form.priceUsd),
       });
 
@@ -305,18 +385,147 @@ export default function StockList({
             onNotify={notify}
             hint="Tam senkron: Excel'deki ürünler güncellenir, Excel'de olmayanlar silinir (fatura geçmişi olanların stoğu 0 olur). Bakiye = stok adedi."
           />
-          <div className="relative w-full sm:w-96">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ürün adı, SKU veya barkod..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:border-indigo-500 focus:ring-indigo-500 shadow-sm"
-          />
-          </div>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="h-4 w-4 text-slate-400" />
+            <h2 className="text-sm font-semibold text-slate-700">Filtreler</h2>
+            {activeFilterCount > 0 && (
+              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700 ring-1 ring-inset ring-indigo-200">
+                {activeFilterCount} aktif
+              </span>
+            )}
+          </div>
+          {(activeFilterCount > 0 || search.trim()) && (
+            <button
+              type="button"
+              onClick={() => {
+                clearFilters();
+                setSearch('');
+              }}
+              className="text-xs font-medium text-slate-500 hover:text-slate-800 hover:underline"
+            >
+              Temizle
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div>
+            <label className="text-xs font-medium text-slate-600">Ürün / SKU / Barkod</label>
+            <div className="relative mt-1">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Ürün ara..."
+                className="w-full rounded-lg border border-slate-300 py-2 pl-8 pr-3 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-600">Kategori</label>
+            <select
+              value={filters.categoryId}
+              onChange={(e) =>
+                setFilters((prev) => ({
+                  ...prev,
+                  categoryId: e.target.value === '' ? '' : Number(e.target.value),
+                  // Kategori değişince o kategoriye ait olmayan marka/model seçimi düşer
+                  brand: '',
+                  model: '',
+                }))
+              }
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">Tümü</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-600">Marka</label>
+            <select
+              value={filters.brand}
+              onChange={(e) =>
+                setFilters((prev) => ({ ...prev, brand: e.target.value }))
+              }
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">Tümü</option>
+              {filterBrandOptions.map((item) => (
+                <option key={item.id} value={item.name}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-600">Model</label>
+            <select
+              value={filters.model}
+              onChange={(e) =>
+                setFilters((prev) => ({ ...prev, model: e.target.value }))
+              }
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">Tümü</option>
+              {filterModelOptions.map((item) => (
+                <option key={item.id} value={item.name}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-slate-600">Renk</label>
+              <select
+                value={filters.color}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, color: e.target.value }))
+                }
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
+              >
+                <option value="">Tümü</option>
+                {colorOptions.map((item) => (
+                  <option key={item.id} value={item.label}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600">Görünüm</label>
+              <select
+                value={filters.appearance}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, appearance: e.target.value }))
+                }
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
+              >
+                <option value="">Tümü</option>
+                {APPEARANCE_OPTIONS.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -341,7 +550,10 @@ export default function StockList({
                   Barkod
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
-                  Fiyat ($)
+                  Satış 1
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
+                  Satış 2
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
                   Toplam Stok
@@ -358,7 +570,7 @@ export default function StockList({
               {loading && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 py-12 text-center text-slate-400 text-sm"
                   >
                     Yükleniyor...
@@ -418,6 +630,13 @@ export default function StockList({
                         </td>
                         <td className="px-4 py-3 text-sm text-right text-slate-700 tabular-nums">
                           {formatUsd(product.priceUsd)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right text-slate-700 tabular-nums">
+                          {formatUsd(
+                            product.priceUsd2 != null && product.priceUsd2 > 0
+                              ? product.priceUsd2
+                              : product.priceUsd
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span
@@ -479,7 +698,7 @@ export default function StockList({
                       </tr>
                       {isExpanded && stocks.length > 0 && (
                         <tr className="bg-slate-50/50">
-                          <td colSpan={8} className="px-6 py-4">
+                          <td colSpan={9} className="px-6 py-4">
                             <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                               Tüm Şube Stokları — {product.name}
                             </p>
@@ -511,7 +730,7 @@ export default function StockList({
               {!loading && products.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="px-4 py-12 text-center text-slate-400 text-sm"
                   >
                     Aramanıza uygun ürün bulunamadı.
@@ -664,7 +883,7 @@ export default function StockList({
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="text-xs font-medium text-slate-600">Maliyet ($)</label>
                   <input
@@ -679,7 +898,7 @@ export default function StockList({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-600">Satış ($)</label>
+                  <label className="text-xs font-medium text-slate-600">Satış 1 ($)</label>
                   <input
                     type="number"
                     min="0"
@@ -687,6 +906,19 @@ export default function StockList({
                     value={form.priceUsd}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, priceUsd: e.target.value }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Satış 2 ($)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.priceUsd2}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, priceUsd2: e.target.value }))
                     }
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
