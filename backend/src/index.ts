@@ -4935,11 +4935,18 @@ app.get('/api/settings/color-suggestions', async () => {
   };
 });
 
-app.get<{ Querystring: { categoryId?: string; brand?: string } }>(
+app.get<{ Querystring: { categoryId?: string; brand?: string; strict?: string } }>(
   '/api/settings/model-suggestions',
   async (request) => {
     const categoryIdRaw = request.query.categoryId;
     const brandQuery = request.query.brand?.trim().toLocaleLowerCase('tr-TR') ?? '';
+    /**
+     * `strict=1` — markanın hiç modeli yoksa tüm listeye DÜŞMEZ, boş döner.
+     * Filtre açılır listesinde doğru davranış budur: marka+model seçimi sıfır
+     * sonuç verecekse o modelin listede görünmemesi gerekir. Öneri alanlarında
+     * (stok kartı formu) ise geniş liste tercih edilir, oralarda gönderilmez.
+     */
+    const strict = request.query.strict === '1';
     const categoryId =
       categoryIdRaw && !Number.isNaN(Number(categoryIdRaw)) ? Number(categoryIdRaw) : undefined;
 
@@ -4993,7 +5000,7 @@ app.get<{ Querystring: { categoryId?: string; brand?: string } }>(
      * liste döner, aksi hâlde alan hiç öneri vermezdi.
      */
     const data =
-      brandQuery && brandMatched.size > 0
+      brandQuery && (strict || brandMatched.size > 0)
         ? sorted.filter((name) => brandMatched.has(name))
         : sorted;
 

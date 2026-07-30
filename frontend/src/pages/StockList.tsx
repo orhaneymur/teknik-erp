@@ -60,6 +60,8 @@ export default function StockList({
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
   const [brandModels, setBrandModels] = useState<BrandModelOption[]>([]);
+  /** Filtrede seçili markayla kullanılmış model adları (sunucudan) */
+  const [brandModelHints, setBrandModelHints] = useState<string[]>([]);
   const [dbColors, setDbColors] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   /** Sunucu tarafı kolon filtreleri — serbest arama ile birlikte (AND) çalışır */
@@ -229,19 +231,62 @@ export default function StockList({
     [brandModels, filters.categoryId]
   );
 
-  const filterModelOptions = useMemo(
-    () =>
-      uniqueByName(
-        brandModels.filter(
-          (item) =>
-            item.kind === 'MODEL' &&
-            (filters.categoryId === '' ||
-              item.categoryId === filters.categoryId ||
-              item.categoryId == null)
-        )
-      ),
-    [brandModels, filters.categoryId]
-  );
+  /*
+   * Marka seçiliyken model listesi YALNIZCA o markanın modellerini gösterir.
+   * BrandModel tanımlarında marka→model bağı olmadığı için (model yalnızca
+   * kategoriye bağlı) marka bazlı liste sunucudan gelir: `model-suggestions`
+   * ucu, o markayla kullanılmış modelleri ürün verisinden çıkarır.
+   */
+  useEffect(() => {
+    if (!filters.brand) {
+      setBrandModelHints([]);
+      return;
+    }
+
+    // strict=1: marka eşleşmesi yoksa tüm modeller yerine boş liste
+    const params = new URLSearchParams({ brand: filters.brand, strict: '1' });
+    if (filters.categoryId !== '') {
+      params.set('categoryId', String(filters.categoryId));
+    }
+
+    let cancelled = false;
+    void axios
+      .get<{ success: boolean; data: string[] }>(
+        `${API_BASE}/api/settings/model-suggestions?${params.toString()}`
+      )
+      .then((res) => {
+        if (!cancelled && res.data.success) {
+          setBrandModelHints(ensureArray(res.data.data));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setBrandModelHints([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.brand, filters.categoryId]);
+
+  const filterModelOptions = useMemo(() => {
+    if (filters.brand) {
+      return brandModelHints.map((name, index) => ({
+        id: -(index + 1),
+        name,
+        kind: 'MODEL' as const,
+        categoryId: null,
+      }));
+    }
+    return uniqueByName(
+      brandModels.filter(
+        (item) =>
+          item.kind === 'MODEL' &&
+          (filters.categoryId === '' ||
+            item.categoryId === filters.categoryId ||
+            item.categoryId == null)
+      )
+    );
+  }, [brandModels, brandModelHints, filters.brand, filters.categoryId]);
 
   const activeFilterCount =
     (filters.categoryId === '' ? 0 : 1) +
@@ -457,7 +502,8 @@ export default function StockList({
             <select
               value={filters.brand}
               onChange={(e) =>
-                setFilters((prev) => ({ ...prev, brand: e.target.value }))
+                // Marka değişince önceki markaya ait model seçimi düşer
+                setFilters((prev) => ({ ...prev, brand: e.target.value, model: '' }))
               }
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
@@ -477,15 +523,25 @@ export default function StockList({
               onChange={(e) =>
                 setFilters((prev) => ({ ...prev, model: e.target.value }))
               }
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              disabled={filters.brand !== '' && filterModelOptions.length === 0}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-400"
             >
-              <option value="">Tümü</option>
+              <option value="">
+                {filters.brand && filterModelOptions.length === 0
+                  ? 'Bu markada model yok'
+                  : 'Tümü'}
+              </option>
               {filterModelOptions.map((item) => (
                 <option key={item.id} value={item.name}>
                   {item.name}
                 </option>
               ))}
             </select>
+            {filters.brand && (
+              <p className="mt-1 text-xs text-slate-400">
+                {filters.brand} modelleri
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
