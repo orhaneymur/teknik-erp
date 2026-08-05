@@ -22,6 +22,7 @@ import InvoiceInlineEditor, {
   type EditableInvoiceRef,
 } from '../components/InvoiceInlineEditor';
 import { useAppNavigationOptional } from '../context/AppNavigationContext';
+import { buildReceiptPartyLines, RECEIPT_DISCLAIMER } from '../lib/receiptParty';
 import {
   API_BASE,
   balanceStyles,
@@ -85,6 +86,13 @@ type StatementSafe = {
 
 function lineKey(line: StatementLine) {
   return `${line.kind}-${line.id}`;
+}
+
+/** Fiş/PDF çıktısı alfabetik — ekrandaki fatura detayı kayıt sırasında kalır */
+function receiptItems(line: StatementLine) {
+  return [...(line.items ?? [])].sort((a, b) =>
+    a.productName.localeCompare(b.productName, 'tr')
+  );
 }
 
 /** Fatura içindeki toplam ürün adedi */
@@ -395,6 +403,35 @@ export default function CustomerStatement({
       });
   };
 
+  /** Fişte müşteri bilgileri — satış/alış/iade fişleriyle aynı blok */
+  const receiptPartyLines = useMemo(
+    () => buildReceiptPartyLines(customer),
+    [customer]
+  );
+
+  /**
+   * Yazdırılan hareketlerin öncesi/sonrası bakiyesi.
+   * `balanceByKey` eskiden yeniye yürüyen bakiyedir; en yeni satırın değeri
+   * "güncel", en eski satırın kendi etkisi düşülmüş değeri "önceki" olur.
+   */
+  const printBalance = useMemo(() => {
+    if (printLines.length === 0) return null;
+    const withBalance = printLines
+      .map((line) => ({ line, balance: balanceByKey.get(lineKey(line)) }))
+      .filter((entry): entry is { line: StatementLine; balance: number } =>
+        typeof entry.balance === 'number'
+      );
+    if (withBalance.length === 0) return null;
+
+    const sorted = [...withBalance].sort(
+      (a, b) => new Date(a.line.date).getTime() - new Date(b.line.date).getTime()
+    );
+    const oldest = sorted[0];
+    const newest = sorted[sorted.length - 1];
+    const oldestDelta = (oldest.line.debit ?? 0) - (oldest.line.credit ?? 0);
+    return { before: oldest.balance - oldestDelta, after: newest.balance };
+  }, [printLines, balanceByKey]);
+
   const printTotal = useMemo(
     () =>
       printLines.reduce((sum, line) => {
@@ -421,10 +458,14 @@ export default function CustomerStatement({
     <div className="space-y-4 print:space-y-0">
       <div className="print-pdf-doc hidden">
         <h1>{printLines.length > 1 ? 'Toplu Ekstre Fişi' : 'Ekstre Fişi'}</h1>
-        {customer && (
-          <p className="pdf-meta">
-            {customer.code} — {customer.name}
-          </p>
+        {receiptPartyLines.length > 0 && (
+          <div className="pdf-party">
+            {receiptPartyLines.map((line) => (
+              <p key={line} className="pdf-party-line">
+                {line}
+              </p>
+            ))}
+          </div>
         )}
         <p className="pdf-meta">
           {printLines.length} hareket · {new Date().toLocaleDateString('tr-TR')}
@@ -455,7 +496,7 @@ export default function CustomerStatement({
                     </tr>
                   </thead>
                   <tbody>
-                    {(line.items ?? []).map((item) => (
+                    {receiptItems(line).map((item) => (
                       <tr key={item.id}>
                         <td className="pdf-name">{item.productName}</td>
                         <td className="pdf-num">{item.quantity}</td>
@@ -491,21 +532,33 @@ export default function CustomerStatement({
             )}
           </div>
         ))}
-        {printLines.length > 1 && (
-          <div className="pdf-totals">
+        <div className="pdf-totals">
+          {printLines.length > 1 && (
             <p className="pdf-grand">Genel toplam: {formatMoney(printTotal)}</p>
-          </div>
-        )}
+          )}
+          {printBalance && (
+            <>
+              <p>Önceki bakiye: {formatMoney(printBalance.before)}</p>
+              <p>
+                <strong>Güncel bakiye: {formatMoney(printBalance.after)}</strong>
+              </p>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="receipt-slip hidden">
         <p className="receipt-slip-title">
           {printLines.length > 1 ? 'Toplu Fiş' : 'Fiş'}
         </p>
-        {customer && (
-          <p className="receipt-slip-customer">
-            {customer.code} — {customer.name}
-          </p>
+        {receiptPartyLines.length > 0 && (
+          <div className="receipt-slip-party">
+            {receiptPartyLines.map((line) => (
+              <p key={line} className="receipt-slip-party-line">
+                {line}
+              </p>
+            ))}
+          </div>
         )}
         <p className="receipt-slip-meta">
           {printLines.length} hareket · {new Date().toLocaleDateString('tr-TR')}
@@ -532,8 +585,8 @@ export default function CustomerStatement({
                   <span className="receipt-item-price">Fiyat</span>
                   <span className="receipt-item-total">Top.</span>
                 </div>
-                {(line.items ?? []).map((item) => (
-                  <div key={item.id} className="receipt-item-row">
+                {receiptItems(line).map((item) => (
+                  <div key={item.id} className="receipt-item-row receipt-item-line">
                     <span className="receipt-item-name" title={item.productName}>
                       {item.productName}
                     </span>
@@ -585,6 +638,27 @@ export default function CustomerStatement({
             </div>
           </>
         )}
+
+        {printBalance && (
+          <>
+            <div className="receipt-slip-divider" />
+            <div className="receipt-item-row receipt-slip-summary">
+              <span className="receipt-item-name">Önceki bakiye</span>
+              <span className="receipt-item-total">
+                {formatMoney(printBalance.before)}
+              </span>
+            </div>
+            <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+              <span className="receipt-item-name">Güncel bakiye</span>
+              <span className="receipt-item-total">
+                {formatMoney(printBalance.after)}
+              </span>
+            </div>
+          </>
+        )}
+
+        <div className="receipt-slip-divider" />
+        <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">

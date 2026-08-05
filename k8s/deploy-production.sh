@@ -6,8 +6,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-BACKEND_IMAGE="${BACKEND_IMAGE:-since1907/akgun-backend:v1.8.24}"
-FRONTEND_IMAGE="${FRONTEND_IMAGE:-since1907/akgun-frontend:v1.8.52}"
+BACKEND_IMAGE="${BACKEND_IMAGE:-since1907/akgun-backend:v1.8.26}"
+FRONTEND_IMAGE="${FRONTEND_IMAGE:-since1907/akgun-frontend:v1.8.59}"
 
 echo "==> Git guncelleme (orhan branch)..."
 git fetch origin orhan

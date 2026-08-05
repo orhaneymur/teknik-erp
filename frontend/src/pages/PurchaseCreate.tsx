@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { Printer, Save, Search, ShoppingCart, Trash2, X, ArrowLeft, FileText } from 'lucide-react';
+import { Printer, Save, Search, ShoppingCart, X, ArrowLeft, FileText } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
+import InvoiceTrashButton from '../components/InvoiceTrashButton';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList, {
   resolvePurchaseUnitPriceUsd,
@@ -25,6 +26,7 @@ import {
   type ReceiptParty,
 } from '../lib/receiptParty';
 import { printDocument } from '../lib/printMode';
+import { productDisplayName } from '../lib/productDisplayName';
 import { buildPageUrl } from '../lib/navigation';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
@@ -45,6 +47,9 @@ type Product = {
   sku: string;
   barcode: string | null;
   name: string;
+  /** Fişte gizlenir — yalnızca adın sadeleştirilmesinde kullanılır */
+  brand?: string | null;
+  model?: string | null;
   costPrice: number;
   priceTl: number;
   priceUsd: number;
@@ -170,6 +175,15 @@ export default function PurchaseCreate({
 
   const totalUsd = useMemo(
     () => roundPrice(cart.reduce((sum, item) => sum + item.quantity * item.unitPriceUsd, 0)),
+    [cart]
+  );
+
+  /** Fiş/PDF çıktısı alfabetik — ekrandaki sepet ekleme sırasında kalır */
+  const receiptCart = useMemo(
+    () =>
+      [...cart].sort((a, b) =>
+        productDisplayName(a.product).localeCompare(productDisplayName(b.product), 'tr')
+      ),
     [cart]
   );
 
@@ -608,11 +622,11 @@ export default function PurchaseCreate({
             </tr>
           </thead>
           <tbody>
-            {cart.map((item) => {
+            {receiptCart.map((item) => {
               const lineTotal = roundPrice(item.quantity * item.unitPriceUsd);
               return (
                 <tr key={item.rowId}>
-                  <td className="pdf-name">{item.product.name}</td>
+                  <td className="pdf-name">{productDisplayName(item.product)}</td>
                   <td className="pdf-num">{item.quantity}</td>
                   <td className="pdf-num">{formatUsd(item.unitPriceUsd)}</td>
                   <td className="pdf-num">{formatUsd(lineTotal)}</td>
@@ -669,12 +683,12 @@ export default function PurchaseCreate({
           <span className="receipt-item-total">Top.</span>
         </div>
 
-        {cart.map((item) => {
+        {receiptCart.map((item) => {
           const lineTotal = roundPrice(item.quantity * item.unitPriceUsd);
           return (
-            <div key={item.rowId} className="receipt-item-row">
-              <span className="receipt-item-name" title={item.product.name}>
-                {item.product.name}
+            <div key={item.rowId} className="receipt-item-row receipt-item-line">
+              <span className="receipt-item-name" title={productDisplayName(item.product)}>
+                {productDisplayName(item.product)}
               </span>
               <span className="receipt-item-qty">{item.quantity}</span>
               <span className="receipt-item-price">{formatUsd(item.unitPriceUsd)}</span>
@@ -990,13 +1004,13 @@ export default function PurchaseCreate({
                             setHistoryProduct({
                               id: item.product.id,
                               sku: item.product.sku,
-                              name: item.product.name,
+                              name: productDisplayName(item.product),
                             })
                           }
                           title="Stok hareketlerini gör"
                           className="receipt-product-name text-left text-[11px] font-medium leading-snug text-indigo-700 break-words underline-offset-2 hover:underline sm:text-xs"
                         >
-                          {item.product.name}
+                          {productDisplayName(item.product)}
                         </button>
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -1140,18 +1154,6 @@ export default function PurchaseCreate({
             </button>
           )}
 
-          {isEditMode && (
-            <button
-              type="button"
-              onClick={() => void handleTrashInvoice()}
-              disabled={trashing || submitting}
-              className="btn btn-block border-2 border-red-200 bg-red-50 font-bold text-red-700 hover:bg-red-100 print:hidden"
-            >
-              <Trash2 className="w-5 h-5" />
-              {trashing ? 'Siliniyor...' : 'Fişi Sil'}
-            </button>
-          )}
-
           <button
             type="button"
             onClick={handleSubmit}
@@ -1167,6 +1169,14 @@ export default function PurchaseCreate({
           </button>
         </aside>
       </div>
+
+      {isEditMode && (
+        <InvoiceTrashButton
+          onTrash={() => void handleTrashInvoice()}
+          trashing={trashing}
+          disabled={submitting}
+        />
+      )}
 
       <ProductSearchPopover
         open={searchModal}

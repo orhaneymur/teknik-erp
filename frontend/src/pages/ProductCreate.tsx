@@ -200,11 +200,6 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
   const margin =
     parsedSale > 0 ? ((parsedSale - parsedCost) / parsedSale) * 100 : 0;
 
-  const generatedPreview = useMemo(() => {
-    const parts = [selectedBrandName, selectedModelName, name.trim()].filter(Boolean);
-    return parts.join(' ') || name.trim();
-  }, [selectedBrandName, selectedModelName, name]);
-
   const resetForm = () => {
     setName('');
     setCategoryId('');
@@ -257,7 +252,8 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
     setSubmitting(true);
     try {
       const response = await axios.post(`${API_BASE}/api/products`, {
-        name: generatedPreview || name.trim(),
+        // Ad yalnızca yazıldığı gibi kaydedilir — marka/model kendi alanlarında durur
+        name: name.trim(),
         costPrice: parsedCost,
         priceUsd: parsedSale,
         priceUsd2: resolvedSale2,
@@ -265,6 +261,10 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         barcode: barcode.trim() || undefined,
         initialQuantity: toIntegerQty(initialQuantity, 0),
         categoryId: resolvedCategoryId !== '' ? Number(resolvedCategoryId) : undefined,
+        // Marka/model artık ada eklenmediği için kendi kolonlarına yazılmak
+        // zorunda; tanım listesinde olmayan serbest metinler de böyle korunur
+        brand: selectedBrandName || undefined,
+        model: selectedModelName || undefined,
         brandModelId: resolvedBrandModelId,
         color: colorText.trim() || undefined,
         appearance: appearance || undefined,
@@ -276,7 +276,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
       if (response.data.success) {
         notify(
           'success',
-          `Stok kartı oluşturuldu: ${response.data.data?.sku ?? generatedPreview}`
+          `Stok kartı oluşturuldu: ${response.data.data?.sku ?? name.trim()}`
         );
         resetForm();
       }
@@ -496,7 +496,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
             </div>
 
             <div>
-              <label className={labelClass}>Satış 1 — Toptan (USD) *</label>
+              <label className={labelClass}>Satış 1 — Perakende (USD) *</label>
               <input
                 type="number"
                 min="0"
@@ -515,7 +515,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
             </div>
 
             <div>
-              <label className={labelClass}>Satış 2 — Perakende (USD)</label>
+              <label className={labelClass}>Satış 2 — Toptan (USD)</label>
               <input
                 type="number"
                 min="0"
@@ -547,12 +547,6 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
                 placeholder="Ürün notları, uyumluluk, tedarikçi bilgisi..."
               />
             </div>
-
-            {generatedPreview && (
-              <p className="text-caption text-slate-500">
-                Kayıt adı: <span className="font-medium text-slate-700">{generatedPreview}</span>
-              </p>
-            )}
           </div>
         </div>
 

@@ -606,10 +606,10 @@ export default function StockList({
                   Barkod
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
-                  Satış 1
+                  Satış 1 (Perakende)
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
-                  Satış 2
+                  Satış 2 (Toptan)
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
                   Toplam Stok
@@ -954,7 +954,7 @@ export default function StockList({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-600">Satış 1 ($)</label>
+                  <label className="text-xs font-medium text-slate-600">Satış 1 — Perakende ($)</label>
                   <input
                     type="number"
                     min="0"
@@ -967,7 +967,7 @@ export default function StockList({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-slate-600">Satış 2 ($)</label>
+                  <label className="text-xs font-medium text-slate-600">Satış 2 — Toptan ($)</label>
                   <input
                     type="number"
                     min="0"

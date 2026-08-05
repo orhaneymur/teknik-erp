@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { formatUsd, roundPrice } from '../lib/api';
+import { productDisplayName } from '../lib/productDisplayName';
 import type { F2Product } from '../hooks/useF2ProductSearch';
 
 type F2ProductListProps = {
@@ -28,17 +29,31 @@ export default function F2ProductList({
     itemRefs.current.get(focusedIndex)?.scrollIntoView({ block: 'nearest' });
   }, [focusedIndex]);
 
-  const focusRing =
+  /*
+   * Satır arka planı stok durumunu gösterir (yeşil = stokta, açık kırmızı = yok).
+   * Bu yüzden odak artık arka planla değil, sol kenar çizgisi + bir ton koyu
+   * stok rengiyle belirtilir; aksi halde odaklanınca stok bilgisi kayboluyordu.
+   */
+  const focusBorder =
     accentClass === 'amber'
-      ? 'bg-amber-50 border-amber-600'
+      ? 'border-amber-600'
       : accentClass === 'rose'
-        ? 'bg-rose-50 border-rose-600'
-        : 'bg-indigo-50 border-indigo-600';
+        ? 'border-rose-600'
+        : 'border-indigo-600';
 
   return (
     <ul className="divide-y divide-slate-100">
       {products.map((product, index) => {
         const partyUsd = resolvePartyPriceUsd(product, partySelected);
+        const inStock = (product.merkezDepoQuantity ?? 0) > 0;
+        const focused = focusedIndex === index;
+        const stockTone = inStock
+          ? focused
+            ? 'bg-emerald-100'
+            : 'bg-emerald-50 hover:bg-emerald-100'
+          : focused
+            ? 'bg-red-100'
+            : 'bg-red-50 hover:bg-red-100';
 
         return (
           <li
@@ -49,12 +64,19 @@ export default function F2ProductList({
             }}
             onClick={() => onSelect(product)}
             onMouseEnter={() => onFocusIndex(index)}
-            className={`px-3 py-2 cursor-pointer flex items-center justify-between gap-2 transition-colors border-l-2 ${
-              focusedIndex === index ? focusRing : 'hover:bg-slate-50 border-transparent'
+            title={
+              inStock
+                ? `Stok: ${product.merkezDepoQuantity ?? 0}`
+                : 'Stokta yok'
+            }
+            className={`px-3 py-2 cursor-pointer flex items-center justify-between gap-2 transition-colors border-l-2 ${stockTone} ${
+              focused ? focusBorder : 'border-transparent'
             }`}
           >
             <div className="min-w-0">
-              <p className="text-[11px] font-medium leading-snug text-slate-900 break-words">{product.name}</p>
+              <p className="text-[11px] font-medium leading-snug text-slate-900 break-words">
+                {productDisplayName(product)}
+              </p>
               <p className="text-caption text-slate-500">{product.sku}</p>
               {partySelected && partyUsd != null && (
                 <p className="text-caption text-amber-700">

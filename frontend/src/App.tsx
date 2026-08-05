@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { ArrowLeft, Menu } from 'lucide-react';
 import Sidebar from './components/Sidebar';
+import CurrencyConverter from './components/CurrencyConverter';
 import { API_BASE, AUTH_STORAGE_KEY, AUTH_TOKEN_KEY } from './lib/api';
 import {
   buildPageUrl,
@@ -60,7 +61,7 @@ const initialOpenMenus = menuCategories.reduce(
   {} as Record<MenuCategoryId, boolean>
 );
 
-const FRONTEND_VERSION = 'v1.8.52';
+const FRONTEND_VERSION = 'v1.8.59';
 
 function App() {
   const initialUrl = parsePageFromUrl();
@@ -593,14 +594,15 @@ function App() {
               </div>
 
               <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-center sm:px-3">
+                <CurrencyConverter />
+                <div className="hidden rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-center sm:block sm:px-3">
                   <span className="text-[10px] font-medium text-slate-500 sm:text-xs">
                     Arayüz {FRONTEND_VERSION}
                     {apiVersion ? ` · API ${apiVersion}` : ''}
                   </span>
                 </div>
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-center sm:px-4 sm:py-2">
-                  <span className="text-xs font-semibold text-emerald-700 sm:text-sm">
+                <div className="hidden rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-center lg:block lg:px-4 lg:py-2">
+                  <span className="text-xs font-semibold text-emerald-700 lg:text-sm">
                     Tutarlar: USD ($)
                   </span>
                 </div>

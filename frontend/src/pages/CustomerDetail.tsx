@@ -11,6 +11,7 @@ import {
   X,
 } from 'lucide-react';
 import InvoiceDetailModal from '../components/InvoiceDetailModal';
+import CityDistrictSelect from '../components/CityDistrictSelect';
 import InvoiceInlineEditor, {
   isEditableInvoiceType,
   type EditableInvoiceRef,
@@ -742,24 +743,13 @@ export default function CustomerDetail({
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div>
-                  <label className="text-xs font-medium text-slate-600">İl</label>
-                  <input
-                    value={editForm.city}
-                    onChange={(e) => setEditForm((f) => f && { ...f, city: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-slate-600">İlçe</label>
-                  <input
-                    value={editForm.district}
-                    onChange={(e) =>
-                      setEditForm((f) => f && { ...f, district: e.target.value })
-                    }
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
+                <CityDistrictSelect
+                  city={editForm.city}
+                  district={editForm.district}
+                  onChange={(next) => setEditForm((f) => f && { ...f, ...next })}
+                  fieldClass="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  labelClass="text-xs font-medium text-slate-600"
+                />
                 <div className="sm:col-span-2">
                   <label className="text-xs font-medium text-slate-600">Vergi Dairesi</label>
                   <input

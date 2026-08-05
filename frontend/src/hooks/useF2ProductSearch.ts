@@ -29,6 +29,8 @@ export type F2Product = {
   lastPartyPriceUsd?: number | null;
   lastSoldPrice?: number | null;
   lastSoldPriceUsd?: number | null;
+  /** MERKEZ_DEPO stok adedi — F2 listesinde satır rengini belirler */
+  merkezDepoQuantity?: number;
 };
 
 type ProductsResponse = {

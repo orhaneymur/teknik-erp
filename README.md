@@ -6,7 +6,7 @@
 
 Dükkanın günlük operasyonları — satış, alış, stok, cari, kasa, iade ve raporlama — tek bir monorepo içinde birleştirilmiştir. Canlı veritabanı yedeği (`akgun_canli_data.sql`) repoda tutulur; **16.000+ ürün** ve **180+ müşteri** kaydı ile gerçek veri üzerinde çalışır.
 
-**Canlı ortam:** K3s kümesi · Docker Hub `since1907/akgun-backend:v1.8.24` · `since1907/akgun-frontend:v1.8.52`  
+**Canlı ortam:** K3s kümesi · Docker Hub `since1907/akgun-backend:v1.8.26` · `since1907/akgun-frontend:v1.8.59`  
 **Giriş:** `akgunteknik` / `123456`
 
 ---
@@ -236,14 +236,14 @@ Müşteri carileri, stoklar ve faturalar için **indir → Excel'de düzenle →
 | Ekran | İndir | Yükle | Excel sütunları |
 |-------|-------|-------|-----------------|
 | **Müşteri Listesi** | Tüm cariler | Yeni ekle / mevcut güncelle | `CariKodu`, `CariAdi`, `YetkiliAdi`, `Adres`, `Ilce`, `Il`, `Email`, `Gsm`, `VergiDairesi`, `VergiTcNo`, `KrediLimiti`, `Bakiye`* |
-| **Stok Listesi / Ürün Tanımları** | Tüm ürünler | Yeni ekle / mevcut güncelle (StokKodu ile) | `Id`, `StokKodu`, `StokAdi`, `Kategori`, `Marka`, `Model`, `Gorunum`, `Kalite`, `Renk`, `Aciklama`, `Rmb`, `AlisFiyati`, `Satis1`, `Satis2`, `SatisFiyati`, `AlisAdedi`, `SatisAdedi`, `Bakiye` |
+| **Stok Listesi / Ürün Tanımları** | Tüm ürünler | Yeni ekle / mevcut güncelle (StokKodu ile) | `Id`, `StokKodu`, `StokAdi`, `Kategori`, `Marka`, `Model`, `Gorunum`, `Kalite`, `Renk`, `Aciklama`, `Rmb`, `AlisFiyati`, `Satis1`, `Satis2`, `AlisAdedi`, `SatisAdedi`, `Bakiye` |
 | **Fatura Listesi** | Faturalar + Kalemler (2 sayfa) | Yalnızca mevcut faturaların üst bilgisi | `FaturaNo`, `Odeme`, `Personel`, `Aciklama`, `Teslimat` |
 
 \* **Bakiye** sütunu dışa aktarımda bilgi amaçlıdır; içe aktarmada **değiştirilmez** (cari bakiye fatura/tahsilat ile hesaplanır).
 
 \* **Kategori** sütunu içe aktarmada yoksa oluşturulur ve ürüne bağlanır (`TAMİR GEREÇLERİ` gibi).
 
-**Stok Excel formatı (tam senkron):** Excel’deki ürünler `StokKodu` ile güncellenir (`Bakiye` = MERKEZ_DEPO stok adedi). Excel’de **olmayan** ürünler silinir; fatura geçmişi olanlar silinemez, stokları **0** yapılır. `AlisAdedi` / `SatisAdedi` yalnızca indirmede bilgi amaçlıdır. `Gorunum` → görünüm, `Kalite` → kalite, `Rmb` → RMB, `Satis1` → Satış 1 / toptan ($), `Satis2` → Satış 2 / perakende ($). `Satis2` boşsa `Satis1` kopyalanır. Eski `SatisFiyati` kolonu hâlâ Satış 1 olarak okunur.
+**Stok Excel formatı (tam senkron):** Excel’deki ürünler `StokKodu` ile güncellenir (`Bakiye` = MERKEZ_DEPO stok adedi). Excel’de **olmayan** ürünler silinir; fatura geçmişi olanlar silinemez, stokları **0** yapılır. `AlisAdedi` / `SatisAdedi` yalnızca indirmede bilgi amaçlıdır. `Gorunum` → görünüm, `Kalite` → kalite, `Rmb` → RMB, `Satis1` → Satış 1 / **perakende** ($), `Satis2` → Satış 2 / **toptan** ($). `Satis2` boşsa `Satis1` kopyalanır. Dışa aktarımda tek fiyatlı `SatisFiyati` kolonu **yer almaz**; eski şablonlarla içeri aktarırken hâlâ Satış 1 olarak okunur.
 
 \* **StokKodu boş satırlar** (v1.8.51): artık atlanmaz. `Id` sütunu mevcut bir ürünü gösteriyorsa o ürünün kodu korunur; veritabanındaki kod da boşsa o kayda otomatik kod yazılır; `Id` yoksa yeni ürün otomatik kod ile oluşturulur. Yalnızca `StokAdi` zorunludur. (Önceden kodsuz satır atlanıyor, tam senkron da o ürünü “Excel’de yok” sayıp siliyordu.)
 
@@ -455,6 +455,8 @@ Manifestler: `k8s/apps.yaml`, `k8s/mysql-deployment.yaml` — `kubectl apply -f 
 | v1.8.31 / API v1.8.10 | Stok hareketi popup; termal fiş (satış/alış/iade/ödeme/ekstre); F2 boş açılış + son arama; menü yeni sekme + geri; cari varsayılan; kasa müşteri değiştirme; ekstre içerik/toplu yazdır; ürün düzenle-sil; Excel yeni şablon; rapor odaklı ana sayfa; hızlı işlemler menüde |
 | v1.8.32 / API v1.8.11 | Ana sayfa modern grafikler (trend alan, sıralama barları) ve kartlardan ilgili rapor sayfalarına Tümünü gör |
 | v1.8.33 / API v1.8.12 | Ürünlerdeki marka/model metinleri tanım listesine otomatik senkron; stok kartı formunda listeler dolar |
+| v1.8.59 / API v1.8.26 | Üst barda döviz çevirici; il/ilçe seçimi; Ana Sayfa hızlı işlemler (Ödeme Al dahil); fişte sade stok adı (marka/model ön eki gizlenir); stok kartında marka/model ayrı kaydedilir; Excel Satis1=perakende / Satis2=toptan (SatisFiyati dışa verilmez); iade ve ekstre iyileştirmeleri |
+| v1.8.53 / API v1.8.25 | **Fişte sade ürün adı** — satış, alış, iade ekranlarında ve yazdırılan fiş/PDF'te ürünün yalnızca stok kartındaki **Stok adı** alanına yazılan metin görünür (F2 arama listesi, sepet, fiş, PDF, fatura detayı). **Stok kartı kaydı** artık adın başına marka/model eklemez; ad yazıldığı gibi kaydedilir, marka ve model kendi kolonlarına yazılır (form bu iki alanı daha önce hiç göndermiyordu — tanım listesinde olmayan serbest metinler de artık korunuyor). Eski kayıtlarda ad içindeki marka/model ön eki fiş ekranlarında gizlenir. Marka/model/kategori verisi duruyor — stok kartı, stok listesi, filtreler, arama ve raporlarda aynen görünür; arama da marka/model üzerinden çalışmayı sürdürür |
 | v1.8.52 / API v1.8.24 | Stok listesi filtre: marka seçilince model listesi yalnızca o markanın modellerini gösterir (`model-suggestions?strict=1`); markada model yoksa liste boş kalır, tüm modellere düşmez; marka değişince model seçimi sıfırlanır |
 | v1.8.51 / API v1.8.23 | **F2 sıralaması:** "note 8 kap" aramasında `8` parçası `N980` içinde eşleştiği için NOTE 20 kayıtları gerçek NOTE 8 kayıtlarıyla aynı puanı alıyordu; kelime başı eşleşme ayrı kademe oldu (`kap` → `KAPAK` sayılır, `8` → `N980` sayılmaz) ve aynı kademede sıralama **marka alfabetik** yapıldı. **İade ekranı:** üst bardaki Geri tuşu gömülü fatura görünümünü kapatır (ana sayfaya atmıyor, müşteri/sepet seçimi korunur); ürün adına tıklayınca stok hareketleri pop-up'ı açılır. **Stok listesi:** Ürün/SKU/Barkod + Kategori/Marka/Model/Renk/Görünüm filtre çubuğu; marka seçiliyken model listesi yalnızca o markanın modellerini gösterir (`model-suggestions?strict=1` — markada model yoksa liste boş kalır, tüm modellere düşmez). **Stok kartı:** aynı marka→model daraltması stok kartı formunda da geçerli. **Kasa:** eksi bakiyede ödeme çıkışı ve kapalı iade engellenmiyor. **Fiş:** ürün adları kısaltılmaz, gerekirse alt satıra sarar. **Excel:** `StokKodu` boş satırlara otomatik kod, açıklamadaki `Renk: ...` artığı Renk sütununa taşınır (migration ile veritabanında da) |
 | v1.8.50 / API v1.8.22 | Ürünlerde **iki satış fiyatı** — `Satış 1 (Toptan)` ve `Satış 2 (Perakende)`; `Product.priceUsd2` kolonu, stok kartı ve ürün tanımlama formunda ayrı alanlar, stok listesinde iki kolon; Excel indir/yükle `Satis1` + `Satis2` sütunları (eski `SatisFiyati` şablonu Satış 1 olarak okunmaya devam eder); tek fiyatlı mevcut kayıtlarda Satış 2 = Satış 1 olarak doldurulur, sonradan güncellenebilir. Satış/alış ekranları şimdilik Satış 1 üzerinden çalışır |

@@ -226,10 +226,11 @@ type ProductExcelRow = {
   Aciklama?: string;
   Rmb?: string | number;
   AlisFiyati?: string | number;
+  /** Eski tek fiyatlı şablonlar — yalnızca içeri aktarmada okunur, dışa verilmez */
   SatisFiyati?: string | number;
-  /** Satış 1 (Toptan) — yoksa SatisFiyati kullanılır */
+  /** Satış 1 (Perakende) — yoksa SatisFiyati kullanılır */
   Satis1?: string | number;
-  /** Satış 2 (Perakende) — yoksa Satış 1 kopyalanır */
+  /** Satış 2 (Toptan) — yoksa Satış 1 kopyalanır */
   Satis2?: string | number;
   AlisAdedi?: string | number;
   SatisAdedi?: string | number;
@@ -484,10 +485,10 @@ export async function exportProductsExcel(prisma: PrismaClient): Promise<Buffer>
       Aciklama: description,
       Rmb: p.rbmPrice,
       AlisFiyati: p.costPrice,
+      /* Fiyat yalnızca Satis1 (perakende) ve Satis2 (toptan) olarak dışa verilir;
+         eski tek sütunlu SatisFiyati içeri aktarmada hâlâ okunur. */
       Satis1: p.priceUsd > 0 ? p.priceUsd : p.priceTl,
       Satis2: p.priceUsd2 > 0 ? p.priceUsd2 : p.priceUsd > 0 ? p.priceUsd : p.priceTl,
-      /** Eski şablon uyumu — Satış 1 ile aynı */
-      SatisFiyati: p.priceUsd > 0 ? p.priceUsd : p.priceTl,
       AlisAdedi: purchaseQty.get(p.id) ?? 0,
       SatisAdedi: salesQty.get(p.id) ?? 0,
       Bakiye: bakiye,

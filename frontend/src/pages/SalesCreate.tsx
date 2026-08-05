@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { ArrowLeft, CheckCircle, FileText, Printer, Save, Search, ShoppingCart, Trash2, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle, FileText, Printer, Save, Search, ShoppingCart, X } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
+import InvoiceTrashButton from '../components/InvoiceTrashButton';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList, {
   resolveSalesUnitPriceUsd,
@@ -28,6 +29,7 @@ import {
   type ReceiptParty,
 } from '../lib/receiptParty';
 import { printDocument } from '../lib/printMode';
+import { productDisplayName } from '../lib/productDisplayName';
 import { buildPageUrl } from '../lib/navigation';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
@@ -56,6 +58,9 @@ type Product = {
   sku: string;
   barcode: string | null;
   name: string;
+  /** Fişte gizlenir — yalnızca adın sadeleştirilmesinde kullanılır */
+  brand?: string | null;
+  model?: string | null;
   costPrice: number;
   costUsd?: number;
   priceTl: number;
@@ -239,12 +244,15 @@ export default function SalesCreate({
     [cart]
   );
 
+  /**
+   * Fişte önceki/güncel bakiye — müşteri seçiliyse HER ZAMAN gösterilir.
+   * Önceden peşin satışta ve bakiye sıfırken satırlar tamamen gizleniyordu;
+   * fişten fişe farklı bilgi çıkıyordu.
+   */
   const receiptBalance = useMemo(() => {
     if (!selectedCustomer) return null;
     // Ön sipariş cariye kayıt düşmez — bakiye değişmemiş gösterilir
     const affectsBalance = paymentMethod === 'Cari' && !isPreOrder;
-    const hasBalance = Math.abs(selectedCustomer.balance) > 0.0001;
-    if (!affectsBalance && !hasBalance) return null;
 
     if (printBalance) return printBalance;
 
@@ -259,6 +267,15 @@ export default function SalesCreate({
     const after = affectsBalance ? roundPrice(before + totalUsd) : before;
     return { before, after };
   }, [selectedCustomer, paymentMethod, isPreOrder, printBalance, isEditMode, totalUsd]);
+
+  /** Fiş/PDF çıktısı alfabetik — ekrandaki sepet ekleme sırasında kalır */
+  const receiptCart = useMemo(
+    () =>
+      [...cart].sort((a, b) =>
+        productDisplayName(a.product).localeCompare(productDisplayName(b.product), 'tr')
+      ),
+    [cart]
+  );
 
   const receiptParty = printParty ?? selectedCustomer;
   const receiptPartyLines = useMemo(
@@ -812,12 +829,12 @@ export default function SalesCreate({
             </tr>
           </thead>
           <tbody>
-            {cart.map((item) => {
+            {receiptCart.map((item) => {
               const lineTotal = calcLineTotalUsd(item);
               const unitNet = unitNetUsd(item);
               return (
                 <tr key={item.rowId}>
-                  <td className="pdf-name">{item.product.name}</td>
+                  <td className="pdf-name">{productDisplayName(item.product)}</td>
                   <td className="pdf-num">{item.quantity}</td>
                   <td className="pdf-num">{formatUsd(unitNet)}</td>
                   <td className="pdf-num">{formatUsd(lineTotal)}</td>
@@ -877,13 +894,13 @@ export default function SalesCreate({
           <span className="receipt-item-total">Top.</span>
         </div>
 
-        {cart.map((item) => {
+        {receiptCart.map((item) => {
           const lineTotal = calcLineTotalUsd(item);
           const unitNet = unitNetUsd(item);
           return (
-            <div key={item.rowId} className="receipt-item-row">
-              <span className="receipt-item-name" title={item.product.name}>
-                {item.product.name}
+            <div key={item.rowId} className="receipt-item-row receipt-item-line">
+              <span className="receipt-item-name" title={productDisplayName(item.product)}>
+                {productDisplayName(item.product)}
               </span>
               <span className="receipt-item-qty">{item.quantity}</span>
               <span className="receipt-item-price">{formatUsd(unitNet)}</span>
@@ -1228,13 +1245,13 @@ export default function SalesCreate({
                             setHistoryProduct({
                               id: item.product.id,
                               sku: item.product.sku,
-                              name: item.product.name,
+                              name: productDisplayName(item.product),
                             })
                           }
                           title="Stok hareketlerini gör"
                           className="receipt-product-name print:pointer-events-none text-left text-[11px] font-medium leading-snug text-indigo-700 break-words underline-offset-2 hover:underline sm:text-xs print:text-[9px] print:leading-tight print:text-slate-900 print:no-underline"
                         >
-                          {item.product.name}
+                          {productDisplayName(item.product)}
                         </button>
                       </td>
                       <td className="px-3 py-2 text-right print:hidden">
@@ -1432,18 +1449,6 @@ export default function SalesCreate({
             </button>
           )}
 
-          {isEditMode && (
-            <button
-              type="button"
-              onClick={() => void handleTrashInvoice()}
-              disabled={trashing || submitting}
-              className="btn btn-block border-2 border-red-200 bg-red-50 font-bold text-red-700 hover:bg-red-100 print:hidden"
-            >
-              <Trash2 className="w-5 h-5" />
-              {trashing ? 'Siliniyor...' : 'Fişi Sil'}
-            </button>
-          )}
-
           <button
             type="button"
             onClick={handleSubmit}
@@ -1459,6 +1464,14 @@ export default function SalesCreate({
           </button>
         </aside>
       </div>
+
+      {isEditMode && (
+        <InvoiceTrashButton
+          onTrash={() => void handleTrashInvoice()}
+          trashing={trashing}
+          disabled={submitting}
+        />
+      )}
 
       {/* F2 — kompakt panel (sayfa arkada kullanılabilir) */}
       <ProductSearchPopover

@@ -31,7 +31,7 @@ import {
   RankingChart,
 } from '../components/DashboardCharts';
 import { useInvoiceEditorFromUrl } from '../hooks/useInvoiceEditorFromUrl';
-import { buildPageUrl, type PageId } from '../lib/navigation';
+import { buildPageUrl, dashboardQuickLinks, type PageId } from '../lib/navigation';
 import InvoiceInlineEditor from '../components/InvoiceInlineEditor';
 
 type SafeBalance = {
@@ -319,8 +319,8 @@ export default function Dashboard({
   return (
     /*
      * Blok sırası `order-*` ile belirlenir (üst → alt):
-     * 1 başlık · 2 son fatura + kasa hareketleri · 3 kasa bakiyeleri
-     * 4 trend/düşük stok · 5 en çok satan ürün + müşteri
+     * 1 başlık · 2 hızlı işlemler · 3 son fatura + kasa hareketleri
+     * 4 kasa bakiyeleri · 5 trend/düşük stok + en çok satan ürün/müşteri
      */
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <div className="order-1 flex flex-wrap items-end justify-between gap-3">
@@ -333,7 +333,47 @@ export default function Dashboard({
         <SeeAllLink page="report-analytics" label="İşletme özeti" />
       </div>
 
-      <section className="order-3 flex gap-3 overflow-x-auto pb-1">
+      {/* Hızlı İşlemler — sol menüdeki liste ile aynı kaynaktan beslenir */}
+      <section className="order-2">
+        <p className="mb-2 text-caption font-semibold uppercase tracking-wide text-slate-500">
+          Hızlı İşlemler
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {dashboardQuickLinks.map((link) => {
+            const LinkIcon = link.icon;
+            return (
+              <a
+                key={link.id}
+                href={buildPageUrl(link.id, link.options)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm no-underline transition hover:border-indigo-300 hover:bg-indigo-50/40 hover:shadow-md"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="rounded-lg bg-indigo-50 p-2 text-indigo-600 transition-colors group-hover:bg-indigo-600 group-hover:text-white">
+                    <LinkIcon className="h-4 w-4" />
+                  </span>
+                  {link.badge && (
+                    <kbd className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-caption text-slate-500">
+                      {link.badge}
+                    </kbd>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-800">
+                    {link.label}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    {link.description}
+                  </p>
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="order-4 flex gap-3 overflow-x-auto pb-1">
         {data.safeBalances.map((safe) => (
           <a
             key={safe.id}
@@ -362,7 +402,7 @@ export default function Dashboard({
         </a>
       </section>
 
-      <div className="order-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="order-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
           <div className="mb-4 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -519,7 +559,7 @@ export default function Dashboard({
         </section>
       </div>
 
-      <div className="order-2 grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className="order-3 grid grid-cols-1 gap-6 md:grid-cols-2">
         <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
             <h2 className="text-sm font-semibold text-slate-800">

@@ -328,7 +328,8 @@
     .print-pdf-doc th,
     .print-pdf-doc td {
       padding: 6px 8px;
-      border-bottom: 1px solid #e2e8f0;
+      /* Kalemler arası ayrım — açık gri baskıda kayboluyordu */
+      border-bottom: 1px solid #94a3b8;
       vertical-align: top;
     }
 
@@ -503,6 +504,25 @@
       font-weight: 700;
       text-transform: uppercase;
       white-space: nowrap;
+      padding-bottom: 2px;
+      border-bottom: 1px solid #000;
+    }
+
+    /*
+     * Ürün satırları — uzun adlar alt satıra sardığı için kalemler görsel
+     * olarak iç içe geçiyordu. Her kalem tam genişlik çizgiyle ayrılır.
+     * Noktalı çizgi termal kafada silik bastığı için düz çizgi kullanılır.
+     */
+    .receipt-item-line {
+      padding: 2.5px 0;
+    }
+
+    /*
+     * Çizgi yalnızca kalemler ARASINA girer. border-bottom kullanılsaydı son
+     * kalemin altındaki receipt-slip-divider ile çift çizgi oluşurdu.
+     */
+    .receipt-item-line + .receipt-item-line {
+      border-top: 1px solid #000;
     }
 
     /*

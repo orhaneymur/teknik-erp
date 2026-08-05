@@ -10,6 +10,7 @@ import {
   roundPrice,
 } from '../lib/api';
 import { isEditableInvoiceType } from './InvoiceInlineEditor';
+import { productDisplayName } from '../lib/productDisplayName';
 
 type InvoiceItemRow = {
   id: number;
@@ -22,6 +23,9 @@ type InvoiceItemRow = {
     sku: string;
     barcode: string | null;
     name: string;
+    /** Fiş görünümünde gizlenir — yalnızca adın sadeleştirilmesinde kullanılır */
+    brand?: string | null;
+    model?: string | null;
   };
 };
 
@@ -218,7 +222,7 @@ export default function InvoiceDetailModal({ invoiceId, onClose, onEdit }: Invoi
                     return (
                       <tr key={item.id}>
                         <td className="py-2.5 pr-2">
-                          <p className="text-sm font-medium text-slate-900">{item.product.name}</p>
+                          <p className="text-sm font-medium text-slate-900">{productDisplayName(item.product)}</p>
                           <p className="text-caption text-slate-400">{item.product.sku}</p>
                         </td>
                         <td className="py-2.5 pr-2 text-right text-sm tabular-nums">{item.quantity}</td>

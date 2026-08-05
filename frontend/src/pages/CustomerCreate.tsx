@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Save, UserPlus } from 'lucide-react';
 import { API_BASE } from '../lib/api';
 import type { NavigateFn } from '../lib/navigation';
+import CityDistrictSelect from '../components/CityDistrictSelect';
 
 type CustomerForm = {
   code: string;
@@ -162,22 +163,13 @@ export default function CustomerCreate({ onNotify, onNavigate }: CustomerCreateP
               className={fieldClass}
             />
           </div>
-          <div>
-            <label className={labelClass}>İl</label>
-            <input
-              value={form.city}
-              onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-              className={fieldClass}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>İlçe</label>
-            <input
-              value={form.district}
-              onChange={(e) => setForm((f) => ({ ...f, district: e.target.value }))}
-              className={fieldClass}
-            />
-          </div>
+          <CityDistrictSelect
+            city={form.city}
+            district={form.district}
+            onChange={(next) => setForm((f) => ({ ...f, ...next }))}
+            fieldClass={fieldClass}
+            labelClass={labelClass}
+          />
           <div>
             <label className={labelClass}>Vergi Dairesi</label>
             <input

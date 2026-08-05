@@ -10,7 +10,6 @@ import {
   Save,
   Search,
   ShoppingCart,
-  Trash2,
   X,
 } from 'lucide-react';
 import ProductSearchPopover from '../components/ProductSearchPopover';
@@ -40,6 +39,8 @@ import {
   type ReceiptParty,
 } from '../lib/receiptParty';
 import { printDocument } from '../lib/printMode';
+import InvoiceTrashButton from '../components/InvoiceTrashButton';
+import { productDisplayName } from '../lib/productDisplayName';
 import { buildPageUrl } from '../lib/navigation';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 import SalesCreate from './SalesCreate';
@@ -65,7 +66,15 @@ type ReturnableLookup =
       sourceInvoiceItemId: number;
       unitPrice: number;
       returnableQty: number;
-      product: { id: number; sku: string; barcode: string | null; name: string };
+      product: {
+        id: number;
+        sku: string;
+        barcode: string | null;
+        name: string;
+        /** Fişte gizlenir — yalnızca adın sadeleştirilmesinde kullanılır */
+        brand?: string | null;
+        model?: string | null;
+      };
     }
   | { status: 'never_purchased' }
   | { status: 'too_old'; lastPurchaseDate: string }
@@ -168,6 +177,8 @@ export default function SalesReturn({
   const [editInvoiceDate, setEditInvoiceDate] = useState('');
   const [editCustomerLabel, setEditCustomerLabel] = useState('');
   const [editCustomerId, setEditCustomerId] = useState<number | ''>('');
+  /** Kayıtlı iadenin tahsil şekli — fişteki bakiye hesabı buna göre yapılır */
+  const [editPaymentMethod, setEditPaymentMethod] = useState('');
   const [shouldPrint, setShouldPrint] = useState(false);
   const [printParty, setPrintParty] = useState<ReceiptParty | null>(null);
   const [orderNotes, setOrderNotes] = useState('');
@@ -222,6 +233,23 @@ export default function SalesReturn({
     const after = settlementType === 'ACIK' ? roundPrice(before - totalUsd) : before;
     return { before, after };
   }, [receiptParty, settlementType, totalUsd]);
+
+  /** Fiş/PDF çıktısı alfabetik — ekrandaki sepet ekleme sırasında kalır */
+  const receiptLines = useMemo(
+    () =>
+      [...activeLines].sort((a, b) =>
+        a.productName.localeCompare(b.productName, 'tr')
+      ),
+    [activeLines]
+  );
+
+  const receiptEditLines = useMemo(
+    () =>
+      [...editLines].sort((a, b) =>
+        a.productName.localeCompare(b.productName, 'tr')
+      ),
+    [editLines]
+  );
 
   const chinaReturnCount = activeLines.filter((r) => r.isChinaReturn).length;
   const stockReturnCount = activeLines.length - chinaReturnCount;
@@ -303,12 +331,19 @@ export default function SalesReturn({
             orderNotes: string | null;
             exchangeRate: number;
             createdAt: string;
+            paymentMethod?: string | null;
             customer: { id: number; code: string; name: string };
             items: Array<{
               id: number;
               quantity: number;
               unitPrice: number;
-              product: { id: number; sku: string; name: string };
+              product: {
+                id: number;
+                sku: string;
+                name: string;
+                brand?: string | null;
+                model?: string | null;
+              };
             }>;
           };
         }>(`${API_BASE}/api/sales/invoices/${editInvoiceId}`);
@@ -325,6 +360,23 @@ export default function SalesReturn({
         setDisplayInvoiceNo(data.invoiceNo);
         setEditCustomerId(data.customer.id);
         setEditCustomerLabel(`${data.customer.code} — ${data.customer.name}`);
+        setEditPaymentMethod(data.paymentMethod ?? '');
+
+        /*
+         * Fişte müşteri bilgileri ve bakiye çıkabilmesi için tam müşteri kartı.
+         * Fatura ucu yalnızca kod/ad döner; adres, telefon, VKN ve bakiye
+         * müşteri kartından gelir.
+         */
+        try {
+          const custRes = await axios.get<{ success: boolean; data: Customer }>(
+            `${API_BASE}/api/customers/${data.customer.id}`
+          );
+          if (!cancelled && custRes.data.success) {
+            setSelectedCustomer(custRes.data.data);
+          }
+        } catch {
+          /* fiş yine basılır — yalnızca ek bilgiler eksik kalır */
+        }
         setEditProcessedBy(data.processedBy ?? '');
         setEditNotes(data.orderNotes ?? '');
         setEditInvoiceDate(data.createdAt.slice(0, 10));
@@ -336,7 +388,7 @@ export default function SalesReturn({
               rowId: `inv-${line.id}`,
               invoiceItemId: line.id,
               productId: line.product.id,
-              productName: line.product.name,
+              productName: productDisplayName(line.product),
               productSku: line.product.sku,
               quantity: toIntegerQty(line.quantity, 1),
               unitPriceTl: roundPrice(line.unitPrice / rate),
@@ -433,7 +485,7 @@ export default function SalesReturn({
         {
           rowId: newRowId('manual', product.id),
           productId: product.id,
-          productName: product.name,
+          productName: productDisplayName(product),
           productSku: product.sku,
           sourceInvoiceItemId: 0,
           invoiceId: 0,
@@ -446,7 +498,7 @@ export default function SalesReturn({
           manualOverride: true,
         },
       ]);
-      notify('success', `${product.name} sepete eklendi — fiyatı satırda düzenleyebilirsiniz.`);
+      notify('success', `${productDisplayName(product)} sepete eklendi — fiyatı satırda düzenleyebilirsiniz.`);
       setWarning(null);
     },
     [notify, selectedCustomer]
@@ -504,7 +556,7 @@ export default function SalesReturn({
           {
             rowId: newRowId('ret', data.product.id),
             productId: data.product.id,
-            productName: data.product.name,
+            productName: productDisplayName(data.product),
             productSku: data.product.sku,
             sourceInvoiceItemId: data.sourceInvoiceItemId,
             invoiceId: data.invoiceId,
@@ -521,7 +573,7 @@ export default function SalesReturn({
 
         notify(
           'success',
-          `${data.product.name} yeni satır olarak eklendi (adet: 1) — ${formatUsd(
+          `${productDisplayName(data.product)} yeni satır olarak eklendi (adet: 1) — ${formatUsd(
             roundPrice(data.unitPrice / data.exchangeRate)
           )} · ${data.invoiceNo}`
         );
@@ -775,11 +827,37 @@ export default function SalesReturn({
     );
     const editTotalQty = editLines.reduce((sum, line) => sum + line.quantity, 0);
 
+    /*
+     * Kayıtlı iade zaten cariye işlendiği için güncel bakiye = müşterinin
+     * şu anki bakiyesi; önceki bakiye bu iade eklenmeden önceki değerdir.
+     * (Açık faturada iade cariden DÜŞER, kapalıda cariyi etkilemez.)
+     */
+    const editAffectsBalance = editPaymentMethod === 'Cari';
+    const editReceiptBalance =
+      selectedCustomer && typeof selectedCustomer.balance === 'number'
+        ? {
+            before: editAffectsBalance
+              ? roundPrice(selectedCustomer.balance + editTotalTl)
+              : selectedCustomer.balance,
+            after: selectedCustomer.balance,
+          }
+        : null;
+
     return (
       <div className="space-y-4 print:space-y-0">
         <div className="print-pdf-doc hidden">
           <h1>{displayInvoiceNo || 'İade Fişi'}</h1>
-          {editCustomerLabel && <p className="pdf-meta">{editCustomerLabel}</p>}
+          {receiptPartyLines.length > 0 ? (
+            <div className="pdf-party">
+              {receiptPartyLines.map((line) => (
+                <p key={line} className="pdf-party-line">
+                  {line}
+                </p>
+              ))}
+            </div>
+          ) : (
+            editCustomerLabel && <p className="pdf-meta">{editCustomerLabel}</p>
+          )}
           <p className="pdf-meta">
             {editInvoiceDate}
             {editProcessedBy ? ` · ${editProcessedBy}` : ''}
@@ -799,7 +877,7 @@ export default function SalesReturn({
               </tr>
             </thead>
             <tbody>
-              {editLines.map((line) => {
+              {receiptEditLines.map((line) => {
                 const lineTotal = roundPrice(line.quantity * line.unitPriceTl);
                 return (
                   <tr key={line.rowId}>
@@ -815,14 +893,32 @@ export default function SalesReturn({
           <div className="pdf-totals">
             <p>Toplam adet: {editTotalQty}</p>
             <p className="pdf-grand">Net toplam: {formatUsd(editTotalTl)}</p>
+            {editReceiptBalance && (
+              <>
+                <p>Önceki bakiye: {formatMoney(editReceiptBalance.before)}</p>
+                <p>
+                  <strong>Güncel bakiye: {formatMoney(editReceiptBalance.after)}</strong>
+                </p>
+              </>
+            )}
           </div>
           <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
         </div>
 
         <div className="receipt-slip hidden">
           <p className="receipt-slip-title">{displayInvoiceNo || 'İade Fişi'}</p>
-          {editCustomerLabel && (
-            <p className="receipt-slip-customer">{editCustomerLabel}</p>
+          {receiptPartyLines.length > 0 ? (
+            <div className="receipt-slip-party">
+              {receiptPartyLines.map((line) => (
+                <p key={line} className="receipt-slip-party-line">
+                  {line}
+                </p>
+              ))}
+            </div>
+          ) : (
+            editCustomerLabel && (
+              <p className="receipt-slip-customer">{editCustomerLabel}</p>
+            )
           )}
           <p className="receipt-slip-meta">
             {editInvoiceDate}
@@ -838,10 +934,10 @@ export default function SalesReturn({
             <span className="receipt-item-price">Fiyat</span>
             <span className="receipt-item-total">Top.</span>
           </div>
-          {editLines.map((line) => {
+          {receiptEditLines.map((line) => {
             const lineTotal = roundPrice(line.quantity * line.unitPriceTl);
             return (
-              <div key={line.rowId} className="receipt-item-row">
+              <div key={line.rowId} className="receipt-item-row receipt-item-line">
                 <span className="receipt-item-name" title={line.productName}>
                   {line.productName}
                 </span>
@@ -860,6 +956,23 @@ export default function SalesReturn({
             <span className="receipt-item-name">NET TOPLAM</span>
             <span className="receipt-item-total">{formatUsd(editTotalTl)}</span>
           </div>
+          {editReceiptBalance && (
+            <>
+              <div className="receipt-slip-divider" />
+              <div className="receipt-item-row receipt-slip-summary">
+                <span className="receipt-item-name">Önceki bakiye</span>
+                <span className="receipt-item-total">
+                  {formatMoney(editReceiptBalance.before)}
+                </span>
+              </div>
+              <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
+                <span className="receipt-item-name">Güncel bakiye</span>
+                <span className="receipt-item-total">
+                  {formatMoney(editReceiptBalance.after)}
+                </span>
+              </div>
+            </>
+          )}
           <div className="receipt-slip-divider" />
           <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
         </div>
@@ -1022,15 +1135,6 @@ export default function SalesReturn({
             </button>
             <button
               type="button"
-              onClick={() => void handleTrashInvoice()}
-              disabled={trashing || submitting}
-              className="btn inline-flex items-center gap-2 border-2 border-red-200 bg-red-50 font-bold text-red-700 hover:bg-red-100"
-            >
-              <Trash2 className="h-5 w-5" />
-              {trashing ? 'Siliniyor...' : 'Fişi Sil'}
-            </button>
-            <button
-              type="button"
               onClick={handleEditSave}
               disabled={submitting}
               className="btn btn-lg btn-primary inline-flex items-center gap-2"
@@ -1040,6 +1144,12 @@ export default function SalesReturn({
             </button>
           </div>
         </div>
+
+        <InvoiceTrashButton
+          onTrash={() => void handleTrashInvoice()}
+          trashing={trashing}
+          disabled={submitting}
+        />
       </div>
     );
   }
@@ -1093,7 +1203,7 @@ export default function SalesReturn({
             </tr>
           </thead>
           <tbody>
-            {activeLines.map((line) => {
+            {receiptLines.map((line) => {
               const lineTotal = roundPrice(line.returnQty * line.unitPriceTl);
               return (
                 <tr key={line.rowId}>
@@ -1143,10 +1253,10 @@ export default function SalesReturn({
           <span className="receipt-item-price">Fiyat</span>
           <span className="receipt-item-total">Top.</span>
         </div>
-        {activeLines.map((line) => {
+        {receiptLines.map((line) => {
           const lineTotal = roundPrice(line.returnQty * line.unitPriceTl);
           return (
-            <div key={line.rowId} className="receipt-item-row">
+            <div key={line.rowId} className="receipt-item-row receipt-item-line">
               <span className="receipt-item-name" title={line.productName}>
                 {line.productName}
               </span>

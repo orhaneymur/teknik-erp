@@ -1,10 +1,13 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   BarChart3,
+  ClipboardList,
   FileInput,
   FileText,
+  HandCoins,
   Home,
   Layers,
+  RotateCcw,
   Settings,
   ShoppingCart,
   Users,
@@ -173,12 +176,48 @@ export const dashboardItem = {
   icon: Home,
 };
 
-/** Ana Sayfa altında sol menü hızlı işlemler */
-export const dashboardQuickLinks: MenuItem[] = [
-  { id: 'sales', label: 'Satış Yap', badge: 'F2' },
-  { id: 'invoice-purchase', label: 'Alış Yap' },
-  { id: 'sales-return', label: 'İade Al' },
-  { id: 'pre-orders', label: 'Ön Siparişler' },
+/** Sol menü ve Ana Sayfa kartları aynı listeden beslenir */
+export type QuickLink = MenuItem & {
+  icon: LucideIcon;
+  /** Ana Sayfa kartında etiketin altında görünen açıklama */
+  description: string;
+  options?: NavigateOptions;
+};
+
+export const dashboardQuickLinks: QuickLink[] = [
+  {
+    id: 'sales',
+    label: 'Satış Yap',
+    badge: 'F2',
+    icon: ShoppingCart,
+    description: 'Yeni satış faturası',
+  },
+  {
+    id: 'invoice-purchase',
+    label: 'Alış Yap',
+    icon: FileInput,
+    description: 'Yeni alış faturası',
+  },
+  {
+    id: 'sales-return',
+    label: 'İade Al',
+    icon: RotateCcw,
+    description: 'Satış iadesi işle',
+  },
+  {
+    id: 'customer-payments',
+    label: 'Ödeme Al',
+    badge: 'F2',
+    icon: HandCoins,
+    description: 'Cari tahsilat / ödeme',
+  },
+  {
+    id: 'pre-orders',
+    label: 'Ön Siparişler',
+    icon: ClipboardList,
+    description: 'Teslim bekleyenler',
+    options: { preOrderOnly: true },
+  },
 ];
 
 const VALID_PAGES = new Set<PageId>([

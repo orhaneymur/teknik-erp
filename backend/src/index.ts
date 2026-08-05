@@ -548,7 +548,15 @@ async function findReturnableInvoiceItem(
         },
       },
       product: {
-        select: { id: true, sku: true, barcode: true, name: true },
+        // marka/model — iade ekranı fiş adını bunlara göre sadeleştirir
+        select: {
+          id: true,
+          sku: true,
+          barcode: true,
+          name: true,
+          brand: true,
+          model: true,
+        },
       },
     },
   });
@@ -2131,6 +2139,9 @@ app.get<{ Params: { id: string } }>('/api/sales/invoices/:id', async (request, r
               sku: true,
               barcode: true,
               name: true,
+              // marka/model — fatura düzenleme ve fiş ekranı adı sadeleştirir
+              brand: true,
+              model: true,
               priceTl: true,
               priceUsd: true,
             },

@@ -29,7 +29,7 @@ import {
 } from '../lib/api';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import { printDocument } from '../lib/printMode';
-import { RECEIPT_DISCLAIMER } from '../lib/receiptParty';
+import { RECEIPT_DISCLAIMER, buildReceiptPartyLines } from '../lib/receiptParty';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
 
 type PaymentCurrency = 'USD' | 'TRY' | 'EUR';
@@ -199,6 +199,8 @@ type PaymentReceipt = {
   description: string;
   createdAt: string;
   customerLabel: string;
+  /** Diğer fişlerdeki müşteri bloğunun aynısı (kod/ünvan, yetkili, tel, VKN, adres) */
+  partyLines: string[];
   safeName: string;
   balanceBefore?: number | null;
   balanceAfter?: number | null;
@@ -379,13 +381,26 @@ export default function CustomerPayment({
 
   const printPaymentRow = useCallback(
     (payment: PaymentRow) => {
-      const balanceAfter = payment.customer?.balance ?? null;
+      /*
+       * Liste satırındaki müşteri yalnızca kod/ünvan/bakiye taşır. Seçili cari
+       * aynı müşteriyse tam kart kullanılır; böylece yeniden basılan fişte de
+       * yetkili/telefon/VKN/adres satırları kaybolmaz.
+       */
+      const fullCustomer =
+        selectedCustomer && selectedCustomer.id === payment.customer?.id
+          ? selectedCustomer
+          : null;
+      const balanceAfter =
+        payment.customer?.balance ?? fullCustomer?.balance ?? null;
       const balanceBefore =
         balanceAfter == null
           ? null
           : payment.type === 'GIRIS'
             ? roundPrice(balanceAfter + payment.amount)
             : roundPrice(balanceAfter - payment.amount);
+      const customerLabel = payment.customer
+        ? `${payment.customer.code} — ${payment.customer.name}`
+        : '—';
       printPaymentReceipt({
           type: payment.type,
           amount: payment.amount,
@@ -393,15 +408,18 @@ export default function CustomerPayment({
           receiptNo: payment.receiptNo,
           description: payment.description,
           createdAt: payment.createdAt,
-          customerLabel: payment.customer
-            ? `${payment.customer.code} — ${payment.customer.name}`
-            : '—',
+          customerLabel,
+          partyLines: fullCustomer
+            ? buildReceiptPartyLines(fullCustomer)
+            : payment.customer
+              ? [customerLabel]
+              : [],
           safeName: payment.safe.name,
           balanceBefore,
           balanceAfter,
         });
     },
-    [printPaymentReceipt]
+    [printPaymentReceipt, selectedCustomer]
   );
 
   const handlePayment = async (type: 'GIRIS' | 'CIKIS') => {
@@ -463,6 +481,7 @@ export default function CustomerPayment({
               : `${customer.code} cari ödeme`),
           createdAt: new Date().toISOString(),
           customerLabel: `${customer.code} — ${customer.name}`,
+          partyLines: buildReceiptPartyLines(customer),
           safeName: selectedSafeData?.name ?? '—',
           balanceBefore: roundPrice(customer.balance),
           balanceAfter:
@@ -611,7 +630,17 @@ export default function CustomerPayment({
             <p className="pdf-meta">
               {printReceipt.type === 'GIRIS' ? 'Tahsilat Fişi' : 'Ödeme Fişi'}
             </p>
-            <p className="pdf-meta">{printReceipt.customerLabel}</p>
+            {printReceipt.partyLines.length > 0 ? (
+              <div className="pdf-party">
+                {printReceipt.partyLines.map((line) => (
+                  <p key={line} className="pdf-party-line">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="pdf-meta">{printReceipt.customerLabel}</p>
+            )}
             <p className="pdf-meta">{formatDate(printReceipt.createdAt)}</p>
             <p className="pdf-meta">Kasa: {printReceipt.safeName}</p>
             {printReceipt.method && (
@@ -640,7 +669,17 @@ export default function CustomerPayment({
             {printReceipt.receiptNo?.trim() && (
               <p className="receipt-slip-meta">Fiş No: {printReceipt.receiptNo.trim()}</p>
             )}
-            <p className="receipt-slip-customer">{printReceipt.customerLabel}</p>
+            {printReceipt.partyLines.length > 0 ? (
+              <div className="receipt-slip-party">
+                {printReceipt.partyLines.map((line) => (
+                  <p key={line} className="receipt-slip-party-line">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <p className="receipt-slip-customer">{printReceipt.customerLabel}</p>
+            )}
             <p className="receipt-slip-meta">{formatDate(printReceipt.createdAt)}</p>
             <p className="receipt-slip-meta">Kasa: {printReceipt.safeName}</p>
             {printReceipt.method && (
