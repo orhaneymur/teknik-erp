@@ -77,6 +77,16 @@ export default function F2ProductList({
               <p className="text-[11px] font-medium leading-snug text-slate-900 break-words">
                 {productDisplayName(product)}
               </p>
+              {/*
+               * Yeni stok kartlarında marka/model ada eklenmiyor, kendi
+               * kolonlarında duruyor. "11 Pro" araması yapınca hangi markanın
+               * modeli olduğu görünsün diye bu satır basılır.
+               */}
+              {brandModelLabel(product) && (
+                <p className="text-caption font-medium text-slate-700 break-words">
+                  {brandModelLabel(product)}
+                </p>
+              )}
               <p className="text-caption text-slate-500">{product.sku}</p>
               {partySelected && partyUsd != null && (
                 <p className="text-caption text-amber-700">
@@ -104,6 +114,14 @@ export default function F2ProductList({
       })}
     </ul>
   );
+}
+
+/** "Marka · Model" — ikisi de boşsa boş string döner */
+function brandModelLabel(product: F2Product): string {
+  return [product.brand, product.model]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(' · ');
 }
 
 function resolvePartyPriceUsd(product: F2Product, partySelected: boolean) {

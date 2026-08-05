@@ -6,7 +6,7 @@
 
 Dükkanın günlük operasyonları — satış, alış, stok, cari, kasa, iade ve raporlama — tek bir monorepo içinde birleştirilmiştir. Canlı veritabanı yedeği (`akgun_canli_data.sql`) repoda tutulur; **16.000+ ürün** ve **180+ müşteri** kaydı ile gerçek veri üzerinde çalışır.
 
-**Canlı ortam:** K3s kümesi · Docker Hub `since1907/akgun-backend:v1.8.26` · `since1907/akgun-frontend:v1.8.59`  
+**Canlı ortam:** K3s kümesi · Docker Hub `since1907/akgun-backend:v1.8.26` · `since1907/akgun-frontend:v1.8.61`  
 **Giriş:** `akgunteknik` / `123456`
 
 ---
@@ -455,6 +455,7 @@ Manifestler: `k8s/apps.yaml`, `k8s/mysql-deployment.yaml` — `kubectl apply -f 
 | v1.8.31 / API v1.8.10 | Stok hareketi popup; termal fiş (satış/alış/iade/ödeme/ekstre); F2 boş açılış + son arama; menü yeni sekme + geri; cari varsayılan; kasa müşteri değiştirme; ekstre içerik/toplu yazdır; ürün düzenle-sil; Excel yeni şablon; rapor odaklı ana sayfa; hızlı işlemler menüde |
 | v1.8.32 / API v1.8.11 | Ana sayfa modern grafikler (trend alan, sıralama barları) ve kartlardan ilgili rapor sayfalarına Tümünü gör |
 | v1.8.33 / API v1.8.12 | Ürünlerdeki marka/model metinleri tanım listesine otomatik senkron; stok kartı formunda listeler dolar |
+| v1.8.61 | F2 listesinde marka·model ayrı satır; fiş/sepet ürün adı artık kırpılmaz (stok kartındaki ad olduğu gibi) |
 | v1.8.59 / API v1.8.26 | Üst barda döviz çevirici; il/ilçe seçimi; Ana Sayfa hızlı işlemler (Ödeme Al dahil); fişte sade stok adı (marka/model ön eki gizlenir); stok kartında marka/model ayrı kaydedilir; Excel Satis1=perakende / Satis2=toptan (SatisFiyati dışa verilmez); iade ve ekstre iyileştirmeleri |
 | v1.8.53 / API v1.8.25 | **Fişte sade ürün adı** — satış, alış, iade ekranlarında ve yazdırılan fiş/PDF'te ürünün yalnızca stok kartındaki **Stok adı** alanına yazılan metin görünür (F2 arama listesi, sepet, fiş, PDF, fatura detayı). **Stok kartı kaydı** artık adın başına marka/model eklemez; ad yazıldığı gibi kaydedilir, marka ve model kendi kolonlarına yazılır (form bu iki alanı daha önce hiç göndermiyordu — tanım listesinde olmayan serbest metinler de artık korunuyor). Eski kayıtlarda ad içindeki marka/model ön eki fiş ekranlarında gizlenir. Marka/model/kategori verisi duruyor — stok kartı, stok listesi, filtreler, arama ve raporlarda aynen görünür; arama da marka/model üzerinden çalışmayı sürdürür |
 | v1.8.52 / API v1.8.24 | Stok listesi filtre: marka seçilince model listesi yalnızca o markanın modellerini gösterir (`model-suggestions?strict=1`); markada model yoksa liste boş kalır, tüm modellere düşmez; marka değişince model seçimi sıfırlanır |

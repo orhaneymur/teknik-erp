@@ -104,7 +104,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: since1907/akgun-frontend:v1.8.59
+          image: since1907/akgun-frontend:v1.8.61
           imagePullPolicy: Always
           ports:
             - name: http
