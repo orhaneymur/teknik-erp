@@ -1,9 +1,9 @@
 -- AlterTable
-ALTER TABLE `invoice` ADD COLUMN `dueDate` DATETIME(3) NULL,
+ALTER TABLE `Invoice` ADD COLUMN `dueDate` DATETIME(3) NULL,
     ADD COLUMN `isPreOrder` BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN `orderNotes` TEXT NULL,
     ADD COLUMN `paymentType` VARCHAR(191) NULL,
     ADD COLUMN `processedBy` VARCHAR(191) NULL;
 
 -- AlterTable
-ALTER TABLE `invoiceitem` ADD COLUMN `discountPercent` DOUBLE NOT NULL DEFAULT 0;
+ALTER TABLE `InvoiceItem` ADD COLUMN `discountPercent` DOUBLE NOT NULL DEFAULT 0;

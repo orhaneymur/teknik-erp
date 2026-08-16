@@ -1,5 +1,5 @@
 -- AlterTable
-ALTER TABLE `product` ADD COLUMN `brandModelId` INTEGER NULL,
+ALTER TABLE `Product` ADD COLUMN `brandModelId` INTEGER NULL,
     ADD COLUMN `categoryId` INTEGER NULL;
 
 -- CreateTable
