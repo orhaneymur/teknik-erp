@@ -86,7 +86,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
-                placeholder="akgunteknik"
+                placeholder="admin"
                 className="w-full pl-10 pr-4 py-3 bg-slate-950/60 border border-slate-700 rounded-xl text-white placeholder:text-slate-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-colors"
               />
             </div>

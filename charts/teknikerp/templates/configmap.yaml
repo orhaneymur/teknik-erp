@@ -16,7 +16,7 @@ data:
     {
       "tenantId": {{ .Values.tenant.id | quote }},
       "companyName": {{ required "tenant.companyName zorunludur" .Values.tenant.companyName | quote }},
-      "documentTitle": {{ printf "%s ERP" .Values.tenant.companyName | quote }},
+      "documentTitle": {{ .Values.tenant.companyName | quote }},
       "companyContact": {{ .Values.tenant.contact | quote }},
       "currency": {{ .Values.tenant.currency | quote }}
     }

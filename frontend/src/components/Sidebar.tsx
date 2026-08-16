@@ -1,5 +1,6 @@
 import { ChevronDown, Keyboard, LogOut, X, Zap } from 'lucide-react';
 import type { MenuCategoryId, PageId } from '../lib/navigation';
+import { getTenantConfig } from '../lib/tenantConfig';
 import {
   buildPageUrl,
   dashboardItem,
@@ -61,9 +62,9 @@ export default function Sidebar({
             </div>
             <div className="min-w-0">
               <h1 className="truncate text-base font-bold tracking-wide text-white">
-                AKG
+                {getTenantConfig().companyName}
               </h1>
-              <p className="text-caption text-slate-400">Teknik ERP</p>
+              <p className="text-caption text-slate-400">ERP</p>
             </div>
           </div>
           {onMobileClose && (

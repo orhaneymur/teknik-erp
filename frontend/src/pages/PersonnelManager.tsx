@@ -161,7 +161,7 @@ export default function PersonnelManager() {
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="YUSUF AKGÜN"
+                placeholder="AD SOYAD"
                 className="w-full rounded-xl border-slate-300 text-sm px-3 py-2 border uppercase"
                 required
               />
