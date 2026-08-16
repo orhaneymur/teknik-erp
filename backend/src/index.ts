@@ -1640,16 +1640,66 @@ app.get('/api/version', async () => ({
   message: 'API version',
 }));
 
-const JWT_SECRET =
-  process.env.JWT_SECRET ?? 'akgunteknik-dev-secret-degistirin';
+// Kubernetes readiness/liveness probe'u burayı kullanır. İş verisine bakmaz —
+// yalnızca veritabanı bağlantısını doğrular. Yeni açılan boş bir müşteride de
+// başarılı döner, aksi halde pod hiç Ready olmaz.
+app.get('/api/health', async (_request, reply) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return {
+      success: true,
+      data: { tenant: TENANT_ID, version: APP_VERSION, database: 'up' },
+      message: 'OK',
+    };
+  } catch {
+    return reply.status(503).send({
+      success: false,
+      data: { tenant: TENANT_ID, version: APP_VERSION, database: 'down' },
+      message: 'Veritabanına ulaşılamıyor.',
+    });
+  }
+});
 
-app.register(jwt, { secret: JWT_SECRET });
+// ── Tenant (müşteri) kimliği ───────────────────────────────────────────────
+// SaaS modelinde her müşteri kendi namespace'inde çalışır; bu değerler
+// Helm chart'ın oluşturduğu Secret/ConfigMap'ten env olarak gelir.
+const TENANT_ID = process.env.TENANT_ID ?? 'local';
+const TENANT_NAME = process.env.TENANT_NAME ?? 'TeknikERP';
+
+// JWT secret müşteri başına farklı olmalı — aynı secret paylaşılırsa
+// bir müşteride alınan token diğerinde de geçerli olur.
+const JWT_SECRET = process.env.JWT_SECRET ?? '';
+
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error(
+      `[${TENANT_ID}] HATA: JWT_SECRET tanımlı değil. ` +
+        'Canlı ortamda müşteriye özel secret zorunludur (openssl rand -hex 32).'
+    );
+    process.exit(1);
+  }
+  console.warn('[dev] JWT_SECRET yok — geçici geliştirme secret\'i kullanılıyor.');
+}
+
+app.register(jwt, { secret: JWT_SECRET || 'teknikerp-dev-secret-degistirin' });
 app.register(rateLimit, { global: false });
 app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 
-const ADMIN_USERNAME = 'akgunteknik';
-const ADMIN_PASSWORD = '123456';
-const ADMIN_BCRYPT_HASH = bcrypt.hashSync(ADMIN_PASSWORD, 10);
+// Yönetici girişi de müşteri başına farklı. ADMIN_PASSWORD_HASH tercih edilir
+// (bcrypt); yoksa düz ADMIN_PASSWORD kabul edilir ve açılışta hash'lenir.
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME?.trim() || 'admin';
+const ADMIN_BCRYPT_HASH =
+  process.env.ADMIN_PASSWORD_HASH?.trim() ||
+  (process.env.ADMIN_PASSWORD
+    ? bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10)
+    : '');
+
+if (!ADMIN_BCRYPT_HASH && process.env.NODE_ENV === 'production') {
+  console.error(
+    `[${TENANT_ID}] HATA: ADMIN_PASSWORD_HASH (veya ADMIN_PASSWORD) tanımlı değil.`
+  );
+  process.exit(1);
+}
 
 type AuthUserPayload = {
   sub: string;
@@ -1687,14 +1737,11 @@ app.post<{ Body: { username: string; password: string } }>(
       });
     }
 
-    if (trimmedUsername === ADMIN_USERNAME) {
-      const valid =
-        password === ADMIN_PASSWORD ||
-        bcrypt.compareSync(password, ADMIN_BCRYPT_HASH);
-      if (valid) {
+    if (trimmedUsername === ADMIN_USERNAME && ADMIN_BCRYPT_HASH) {
+      if (bcrypt.compareSync(password, ADMIN_BCRYPT_HASH)) {
         const token = await issueAuthToken(reply, {
           sub: ADMIN_USERNAME,
-          name: 'Akgün Teknik',
+          name: TENANT_NAME,
           role: 'admin',
         });
         return {
@@ -1703,7 +1750,7 @@ app.post<{ Body: { username: string; password: string } }>(
             token,
             user: {
               username: ADMIN_USERNAME,
-              name: 'Akgün Teknik',
+              name: TENANT_NAME,
               role: 'admin',
             },
           },

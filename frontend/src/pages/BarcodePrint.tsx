@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Barcode, Printer, Search, X } from 'lucide-react';
 import { API_BASE, LIST_PAGE_SIZE, type PaginatedListResponse, type Product } from '../lib/api';
+import { getTenantConfig } from '../lib/tenantConfig';
 
 export default function BarcodePrint() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -196,7 +197,7 @@ export default function BarcodePrint() {
                 className="border-2 border-dashed border-slate-300 rounded-xl bg-white p-6 flex flex-col items-center justify-center gap-3 w-72 min-h-40"
               >
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider text-center">
-                  Akgün Teknik
+                  {getTenantConfig().companyName}
                 </p>
                 <div className="font-mono text-2xl font-bold tracking-[0.2em] text-slate-900">
                   {barcodeValue}

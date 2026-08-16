@@ -1,0 +1,81 @@
+{{- if .Values.demoReset.enabled -}}
+{{/*
+Demo ortamını her gece sıfırlar.
+
+Nasıl çalışır: yedek diskindeki "altın kopya" dosyasını geri yükler.
+Altın kopyayı bir kez sen oluşturursun — demoyu istediğin örnek veriyle
+doldurduktan sonra:
+
+  bash k8s/demo-snapshot.sh
+
+Dosya bulunamazsa iş HATA VERMEZ, uyarı basıp çıkar; demo eldeki veriyle
+devam eder (yanlışlıkla veri silinmesin diye).
+*/}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: teknikerp-demo-reset
+  labels:
+    {{- include "teknikerp.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.demoReset.schedule | quote }}
+  timeZone: {{ .Values.timezone | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: reset
+              image: mysql:8.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: TZ
+                  value: {{ .Values.timezone | quote }}
+                - name: MYSQL_PWD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "teknikerp.secretName" . }}
+                      key: mysql-root-password
+              command:
+                - sh
+                - -c
+                - |
+                  set -e
+                  GOLDEN="/backups/demo-golden.sql.gz"
+
+                  if [ ! -s "${GOLDEN}" ]; then
+                    echo "UYARI: ${GOLDEN} yok — sifirlama atlandi."
+                    echo "Altin kopya olusturmak icin: bash k8s/demo-snapshot.sh"
+                    exit 0
+                  fi
+
+                  echo "==> Demo veritabani sifirlaniyor..."
+                  mysql -h {{ include "teknikerp.mysqlName" . }} -u root -e \
+                    "DROP DATABASE IF EXISTS {{ include "teknikerp.database" . }}; \
+                     CREATE DATABASE {{ include "teknikerp.database" . }} \
+                       CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+                  echo "==> Altin kopya geri yukleniyor..."
+                  gunzip -c "${GOLDEN}" | mysql -h {{ include "teknikerp.mysqlName" . }} -u root {{ include "teknikerp.database" . }}
+
+                  echo "==> Demo sifirlandi."
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: teknikerp-backup-pvc
+{{- end }}

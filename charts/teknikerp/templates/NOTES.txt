@@ -1,0 +1,25 @@
+
+  TeknikERP — "{{ .Values.tenant.companyName }}" kuruldu.
+
+  Adres    : http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ include "teknikerp.host" . }}
+  Namespace: {{ .Release.Namespace }}
+  Surum    : {{ .Values.image.tag }}
+
+  Giris bilgileri (Secret'tan okunur):
+
+    Kullanici: {{ .Values.auth.adminUsername }}
+    Sifre    : kubectl get secret {{ include "teknikerp.secretName" . }} \
+                 -n {{ .Release.Namespace }} \
+                 -o jsonpath='{.data.admin-password}' | base64 -d; echo
+
+  Durum kontrolu:
+
+    kubectl get pods -n {{ .Release.Namespace }}
+    kubectl logs -n {{ .Release.Namespace }} job/teknikerp-migrate
+
+  Ilk kurulumda semanin olusmasi 1-2 dakika surer (teknikerp-migrate job'i).
+  O tamamlanana kadar backend pod'u Ready olmayabilir — normaldir.
+{{ if and .Values.demoReset.enabled (not .Values.backup.enabled) }}
+  UYARI: demoReset acik ama backup kapali. Sifirlama isi yedek diskindeki
+  altin kopyayi kullanir — backup.enabled=true olmali.
+{{ end }}

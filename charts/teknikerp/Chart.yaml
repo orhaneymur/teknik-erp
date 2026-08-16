@@ -1,0 +1,10 @@
+apiVersion: v2
+name: teknikerp
+description: TeknikERP — müşteri (tenant) başına eksiksiz ERP kurulumu
+type: application
+
+# Chart sürümü — chart dosyalarını her değiştirdiğinde artır.
+version: 1.0.0
+
+# Varsayılan uygulama sürümü. values.yaml içindeki image.tag bunu ezer.
+appVersion: "v1.9.0"

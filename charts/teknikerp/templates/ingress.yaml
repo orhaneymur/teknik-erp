@@ -1,0 +1,45 @@
+{{- if .Values.ingress.enabled -}}
+{{- $host := include "teknikerp.host" . -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: teknikerp-ingress
+  labels:
+    {{- include "teknikerp.labels" . | nindent 4 }}
+  annotations:
+    {{- if eq .Values.ingress.className "nginx" }}
+    # Excel içe/dışa aktarım uzun sürebilir — 504 önlemek için.
+    # Bu annotation'lari yalnizca nginx anlar; traefik'te etkisizdir.
+    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.proxyBodySize | quote }}
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: {{ .Values.ingress.proxyTimeout | quote }}
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.proxyTimeout | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.proxyTimeout | quote }}
+    nginx.ingress.kubernetes.io/client-body-timeout: {{ .Values.ingress.proxyTimeout | quote }}
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    {{- end }}
+    {{- if .Values.ingress.tls.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.clusterIssuer | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ $host | quote }}
+      secretName: teknikerp-tls
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          # Tarayıcı /api'ye aynı origin'den gider; nginx (frontend imajı içinde)
+          # bunu kendi namespace'indeki teknikerp-backend'e iletir.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "teknikerp.frontendName" . }}
+                port:
+                  number: 80
+{{- end }}

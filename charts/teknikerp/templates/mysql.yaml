@@ -1,0 +1,95 @@
+{{- $name := include "teknikerp.mysqlName" . -}}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}-pvc
+  labels:
+    {{- include "teknikerp.labels" . | nindent 4 }}
+  annotations:
+    # Müşteri verisi burada. helm uninstall diski SİLMEZ — kasıtlı.
+    # Gerçekten silmek için: kubectl delete pvc {{ $name }}-pvc -n <namespace>
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.mysql.storage }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+    tier: database
+    {{- include "teknikerp.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    # Tek diske iki pod bağlanamaz — önce eskisi kapanmalı.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+        tier: database
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: mysql
+              containerPort: 3306
+          args:
+            - --character-set-server=utf8mb4
+            - --collation-server=utf8mb4_unicode_ci
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "teknikerp.secretName" . }}
+                  key: mysql-root-password
+            - name: MYSQL_DATABASE
+              value: {{ include "teknikerp.database" . }}
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", 'mysqladmin ping -h localhost -uroot -p"$MYSQL_ROOT_PASSWORD"']
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", 'mysqladmin ping -h localhost -uroot -p"$MYSQL_ROOT_PASSWORD"']
+            initialDelaySeconds: 45
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.mysql.resources | nindent 12 }}
+      volumes:
+        - name: mysql-data
+          persistentVolumeClaim:
+            claimName: {{ $name }}-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+    {{- include "teknikerp.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ $name }}
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306

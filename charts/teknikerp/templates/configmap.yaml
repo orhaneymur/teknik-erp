@@ -1,0 +1,22 @@
+{{/*
+Frontend'in çalışma anında okuduğu marka bilgisi.
+
+Bu dosya nginx'e /usr/share/nginx/html/config.json olarak mount edilir ve
+tarayıcı açılışta fetch('/config.json') ile okur (frontend/src/lib/tenantConfig.ts).
+Sayesinde yeni müşteri açmak için imaj derlemeye gerek kalmaz.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "teknikerp.configName" . }}
+  labels:
+    {{- include "teknikerp.labels" . | nindent 4 }}
+data:
+  config.json: |
+    {
+      "tenantId": {{ .Values.tenant.id | quote }},
+      "companyName": {{ required "tenant.companyName zorunludur" .Values.tenant.companyName | quote }},
+      "documentTitle": {{ printf "%s ERP" .Values.tenant.companyName | quote }},
+      "companyContact": {{ .Values.tenant.contact | quote }},
+      "currency": {{ .Values.tenant.currency | quote }}
+    }

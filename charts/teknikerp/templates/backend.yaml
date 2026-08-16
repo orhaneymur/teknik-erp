@@ -1,0 +1,99 @@
+{{- $name := include "teknikerp.backendName" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+    tier: backend
+    {{- include "teknikerp.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+        tier: backend
+    spec:
+      containers:
+        - name: backend
+          image: {{ include "teknikerp.backendImage" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: TZ
+              value: {{ .Values.timezone | quote }}
+            - name: PORT
+              value: "3000"
+            - name: APP_VERSION
+              value: {{ .Values.image.tag | quote }}
+            - name: TENANT_ID
+              value: {{ .Values.tenant.id | quote }}
+            - name: TENANT_NAME
+              value: {{ .Values.tenant.companyName | quote }}
+            - name: ADMIN_USERNAME
+              value: {{ .Values.auth.adminUsername | quote }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "teknikerp.secretName" . }}
+                  key: database-url
+            # Müşteriye özel — paylaşılırsa bir müşterinin oturum token'ı
+            # diğerinde de geçerli olur.
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "teknikerp.secretName" . }}
+                  key: jwt-secret
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "teknikerp.secretName" . }}
+                  key: admin-password
+          # /api/health yalnızca "SELECT 1" atar. İş verisine bakan bir
+          # endpoint kullanılsaydı yeni açılan boş müşteride pod hiç Ready
+          # olmaz, kurulum takılırdı.
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    app: {{ $name }}
+    {{- include "teknikerp.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ $name }}
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000

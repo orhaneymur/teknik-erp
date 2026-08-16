@@ -1,0 +1,46 @@
+# TeknikERP — demo musterisi icin HAFIF profil.
+#
+# Neden ayri profil? dev.prod.com sunucusunda 7.8 Gi RAM'in 6.1 Gi'i dolu,
+# yalnizca ~1.7 Gi bos. Varsayilan degerlerle (MySQL 512Mi istek) demo
+# sunucuyu zorlar. Bu profil toplam ~340 Mi istekle calisir.
+#
+# Kullanim:
+#   bash k8s/new-tenant.sh demo "TeknikERP Demo" \
+#     -f charts/teknikerp/values-demo.yaml
+
+tenant:
+  contact: "TeknikERP — Demo Ortami"
+
+# Demo verisi kucuk — 2 Gi fazlasiyla yeter.
+mysql:
+  storage: "2Gi"
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "768Mi"
+      cpu: "500m"
+
+backend:
+  replicas: 1
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+frontend:
+  replicas: 1
+
+backup:
+  enabled: true
+  storage: "2Gi"
+  keepDays: 7
+
+# Her gece 04:00'te altin kopyaya doner.
+demoReset:
+  enabled: true
+  schedule: "0 4 * * *"

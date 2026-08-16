@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import { getTenantConfig } from './tenantConfig';
 import {
   BarChart3,
   ClipboardList,
@@ -316,7 +317,10 @@ export function getPageLabel(page: PageId): string {
   return dashboardItem.label;
 }
 
-export const APP_DOCUMENT_TITLE = 'Akgün Teknik ERP';
+/** Sekme başlığı ConfigMap'ten gelir — müşteriye göre değişir. */
+export function appDocumentTitle(): string {
+  return getTenantConfig().documentTitle;
+}
 
 export type DocumentTitleOptions = {
   invoiceFilter?: InvoiceFilter;
@@ -356,7 +360,8 @@ function getDocumentTitleLabel(
 
 export function formatDocumentTitle(pageTitle: string): string {
   const label = pageTitle.trim();
-  return label ? `${label} · ${APP_DOCUMENT_TITLE}` : APP_DOCUMENT_TITLE;
+  const appTitle = appDocumentTitle();
+  return label ? `${label} · ${appTitle}` : appTitle;
 }
 
 export function getDocumentTitle(

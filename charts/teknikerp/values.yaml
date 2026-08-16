@@ -1,0 +1,119 @@
+# TeknikERP — müşteri başına varsayılan değerler.
+#
+# Her müşteri kendi namespace'inde bu chart'tan bir kopya çalıştırır.
+# Kurulum: bash k8s/new-tenant.sh <kisa-ad> "<Firma Adı>"
+
+# ── Müşteri kimliği ────────────────────────────────────────────────────────
+tenant:
+  # Kısa ad — namespace ve alt alan adında kullanılır. Küçük harf, tire.
+  # Örn: "akgunteknik", "demo", "xyzoto"
+  id: ""
+  # Arayüzde, fişlerde ve barkod etiketlerinde görünen firma adı.
+  companyName: ""
+  # Fiş altına basılan iletişim satırı (isteğe bağlı).
+  contact: ""
+  currency: "TRY"
+
+# ── Alan adı ───────────────────────────────────────────────────────────────
+domain:
+  # Musteri adresi soyle olusur:  <tenant.id><tenantSuffix>.<base>
+  #   demo        -> demo-erp.derneklab.com
+  #   akgunteknik -> akgunteknik-erp.derneklab.com
+  #
+  # Tek seviyeli tutuldu cunku derneklab.com Cloudflare'de yonetiliyor ve
+  # kayitlar tek tek giriliyor (wildcard yok). Her yeni musteri icin
+  # Cloudflare'e bir A kaydi eklemen gerekir:
+  #   <ad>-erp.derneklab.com  A  213.238.168.227  (proxy: acik / turuncu bulut)
+  base: "derneklab.com"
+  tenantSuffix: "-erp"
+
+# ── Docker imajları — tüm müşterilerde AYNI ────────────────────────────────
+image:
+  registry: "since1907"
+  backend: "teknikerp-backend"
+  frontend: "teknikerp-frontend"
+  # Müşteri bazında farklı sürüm çalıştırmak için helm upgrade --set image.tag=
+  tag: "v1.9.0"
+  pullPolicy: "IfNotPresent"
+
+# ── Uygulama katmanları ────────────────────────────────────────────────────
+backend:
+  # Küçük müşterilerde 1 yeterli. Akgün Teknik gibi yoğun kullanımda 2.
+  replicas: 1
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "50m"
+    limits:
+      memory: "256Mi"
+      cpu: "500m"
+
+frontend:
+  replicas: 1
+  resources:
+    requests:
+      memory: "16Mi"
+      cpu: "10m"
+    limits:
+      memory: "128Mi"
+      cpu: "200m"
+
+mysql:
+  storage: "5Gi"
+  # Boş bırak — kurulumda rastgele üretilir ve Secret'ta saklanır.
+  # Elle verirsen YALNIZCA harf/rakam kullan (URL'de kaçış sorunu olmasın).
+  rootPassword: ""
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+
+# ── Giriş bilgileri ────────────────────────────────────────────────────────
+auth:
+  adminUsername: "admin"
+  # Boş bırak — rastgele üretilir, kurulum sonunda ekrana yazılır.
+  adminPassword: ""
+  # Boş bırak — müşteriye özel rastgele JWT secret üretilir.
+  # ASLA müşteriler arasında paylaşma: paylaşılırsa bir müşterinin token'ı
+  # diğerinde de geçerli olur.
+  jwtSecret: ""
+
+# ── Dış erişim ─────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  # DIKKAT — dev.prod.com kumesinde hem traefik hem nginx kurulu, ama
+  # 80/443 portlarini traefik tutuyor (ingress-nginx'in svclb pod'u
+  # "Pending" durumda). Calisan tum ingress'ler traefik kullaniyor,
+  # akgun.derneklab.com dahil. Bu yuzden varsayilan traefik.
+  className: "traefik"
+  # Boş ise <tenant.id>.<domain.base> kullanılır.
+  host: ""
+  tls:
+    # cert-manager bu kumede KURULU DEGIL — acilirsa sertifika alinamaz
+    # ve site acilmaz. Kurulduktan sonra true yapilacak.
+    enabled: false
+    clusterIssuer: "letsencrypt-prod"
+  # Asagidaki iki deger YALNIZCA className "nginx" iken kullanilir.
+  # Traefik bu annotation'lari yok sayar (varsayilanlari zaten yeterli).
+  proxyBodySize: "50m"
+  proxyTimeout: "600"
+
+# ── Yedekleme ──────────────────────────────────────────────────────────────
+backup:
+  enabled: true
+  # Her gece 03:00 (Europe/Istanbul)
+  schedule: "0 3 * * *"
+  # Yedeklerin tutulacağı süre (gün)
+  keepDays: 14
+  storage: "5Gi"
+
+# ── Demo ortamı ────────────────────────────────────────────────────────────
+# Yalnızca demo müşterisinde açılır: her gece veritabanını sıfırlar.
+demoReset:
+  enabled: false
+  schedule: "0 4 * * *"
+
+timezone: "Europe/Istanbul"
