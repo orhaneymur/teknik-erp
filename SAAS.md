@@ -284,7 +284,7 @@ kubectl get pvc akgun-mysql-pvc -n default
 kubectl get pods -n tenant-xyzoto
 
 # Şema kurulmadıysa — migration job'unun günlüğü
-kubectl logs -n tenant-xyzoto job/teknikerp-migrate
+kubectl logs -n tenant-xyzoto deploy/teknikerp-backend -c migrate
 
 # Backend açılmıyorsa (JWT_SECRET / ADMIN_PASSWORD eksikse burada yazar)
 kubectl logs -n tenant-xyzoto deploy/teknikerp-backend

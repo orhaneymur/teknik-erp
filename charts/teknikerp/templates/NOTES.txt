@@ -15,9 +15,10 @@
   Durum kontrolu:
 
     kubectl get pods -n {{ .Release.Namespace }}
-    kubectl logs -n {{ .Release.Namespace }} job/teknikerp-migrate
+    kubectl logs -n {{ .Release.Namespace }} deploy/teknikerp-backend -c migrate
 
-  Ilk kurulumda semanin olusmasi 1-2 dakika surer (teknikerp-migrate job'i).
+  Ilk kurulumda semanin olusmasi 1-2 dakika surer (backend'in migrate
+  initContainer'i once MySQL'i bekler, sonra semayi kurar).
   O tamamlanana kadar backend pod'u Ready olmayabilir — normaldir.
 {{ if and .Values.demoReset.enabled (not .Values.backup.enabled) }}
   UYARI: demoReset acik ama backup kapali. Sifirlama isi yedek diskindeki
