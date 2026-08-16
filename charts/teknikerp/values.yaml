@@ -32,7 +32,8 @@ image:
   backend: "teknikerp-backend"
   frontend: "teknikerp-frontend"
   # Müşteri bazında farklı sürüm çalıştırmak için helm upgrade --set image.tag=
-  tag: "v1.9.0"
+  # v1.9.1: migration'lardaki tablo adi buyuk/kucuk harf duzeltmesi
+  tag: "v1.9.1"
   pullPolicy: "IfNotPresent"
 
 # ── Uygulama katmanları ────────────────────────────────────────────────────
