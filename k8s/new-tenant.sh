@@ -60,15 +60,28 @@ echo "==> Namespace: ${NAMESPACE}"
 echo ""
 
 # --create-namespace: namespace yoksa olusturur
-# --wait: pod'lar hazir olana kadar bekler (migration job dahil)
+#
+# DIKKAT: burada --wait KULLANILMIYOR. Sebebi: --wait tum PVC'lerin
+# "Bound" olmasini da bekler, ama k3s'in local-path surucusu
+# WaitForFirstConsumer modunda calisir — diski ancak onu kullanan ilk
+# pod olusunca ayirir. Yedek diskini yalnizca gecelik CronJob kullandigi
+# icin o disk sabaha kadar Pending kalir ve --wait bosuna bekleyip
+# zaman asimina ugrar. Onun yerine asagida yalnizca uygulamanin
+# hazir olmasini bekliyoruz.
 helm upgrade --install "$RELEASE" "$CHART" \
   --namespace "$NAMESPACE" \
   --create-namespace \
   --set "tenant.id=${TENANT_ID}" \
   --set-string "tenant.companyName=${COMPANY_NAME}" \
-  --wait \
   --timeout 10m \
   "${EXTRA_ARGS[@]}"
+
+echo ""
+echo "==> Uygulamanin hazir olmasi bekleniyor..."
+# Backend'in initContainer'i once semayi kurar, bu yuzden suresi daha uzun.
+kubectl rollout status deployment/teknikerp-mysql -n "$NAMESPACE" --timeout=300s
+kubectl rollout status deployment/teknikerp-backend -n "$NAMESPACE" --timeout=600s
+kubectl rollout status deployment/teknikerp-frontend -n "$NAMESPACE" --timeout=300s
 
 # Namespace'i etiketle — toplu guncelleme scripti bunu kullanir
 kubectl label namespace "$NAMESPACE" "teknikerp.io/tenant=${TENANT_ID}" --overwrite >/dev/null

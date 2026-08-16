@@ -51,12 +51,16 @@ for ns in $NAMESPACES; do
 
   # --reuse-values: musteriye ozel ayarlar (firma adi, replica sayisi,
   # disk boyutu) korunur; yalnizca imaj surumu degisir.
+  # --wait kullanilmiyor: yedek diski (WaitForFirstConsumer) gecelik
+  # CronJob calisana kadar Pending kalir ve --wait bosuna bekler.
+  # Bunun yerine yalnizca uygulama deployment'larini bekliyoruz.
   if helm upgrade teknikerp "$CHART" \
       --namespace "$ns" \
       --reuse-values \
       --set "image.tag=${TAG}" \
-      --wait \
-      --timeout 10m; then
+      --timeout 10m \
+    && kubectl rollout status deployment/teknikerp-backend -n "$ns" --timeout=600s \
+    && kubectl rollout status deployment/teknikerp-frontend -n "$ns" --timeout=300s; then
     echo "    OK: ${ns}"
   else
     echo "    HATA: ${ns} guncellenemedi."
