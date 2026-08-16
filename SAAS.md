@@ -87,12 +87,12 @@ ve `test3.derneklab.com` Cloudflare IP'lerine (104.21.26.247 / 172.67.139.174)
 | Alan | Değer |
 |---|---|
 | Type | `A` |
-| Name | `demo-erp` |
+| Name | `demo.erp` |
 | IPv4 | `213.238.168.227` |
 | Proxy | **Proxied** (turuncu bulut) — mevcut kayıtlarla aynı |
 
-Müşteri adresleri `<ad>-erp.derneklab.com` kalıbında: `demo-erp`,
-`akgunteknik-erp`, `xyzoto-erp`. Chart bunu `domain.tenantSuffix` ile üretir.
+Müşteri adresleri `<ad>.erp.derneklab.com` kalıbında: `demo.erp`,
+`akgunteknik.erp`, `xyzoto.erp`. Chart bunu `domain.base` ile üretir.
 
 ### HTTPS — Cloudflare hallediyor
 

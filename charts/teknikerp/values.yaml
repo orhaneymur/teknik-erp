@@ -17,15 +17,14 @@ tenant:
 # ── Alan adı ───────────────────────────────────────────────────────────────
 domain:
   # Musteri adresi soyle olusur:  <tenant.id><tenantSuffix>.<base>
-  #   demo        -> demo-erp.derneklab.com
-  #   akgunteknik -> akgunteknik-erp.derneklab.com
+  #   demo        -> demo.erp.derneklab.com
+  #   akgunteknik -> akgunteknik.erp.derneklab.com
   #
-  # Tek seviyeli tutuldu cunku derneklab.com Cloudflare'de yonetiliyor ve
-  # kayitlar tek tek giriliyor (wildcard yok). Her yeni musteri icin
-  # Cloudflare'e bir A kaydi eklemen gerekir:
-  #   <ad>-erp.derneklab.com  A  213.238.168.227  (proxy: acik / turuncu bulut)
-  base: "derneklab.com"
-  tenantSuffix: "-erp"
+  # Cloudflare'de wildcard yok (ucretsiz planda proxied wildcard verilmiyor),
+  # bu yuzden HER yeni musteri icin tek bir kayit acilmali:
+  #   Type A | Name <ad>.erp | IPv4 213.238.168.227 | Proxy: Proxied
+  base: "erp.derneklab.com"
+  tenantSuffix: ""
 
 # ── Docker imajları — tüm müşterilerde AYNI ────────────────────────────────
 image:
