@@ -14,6 +14,8 @@ type BrandModelOption = {
   name: string;
   kind: 'MARKA' | 'MODEL';
   categoryId: number | null;
+  /** MODEL kayitlarinda bagli oldugu MARKA kaydinin id'si (v1.12.0) */
+  parentId?: number | null;
   category: { id: number; name: string } | null;
 };
 
@@ -158,7 +160,27 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
       options.push({ id: `product-${key}`, label: name });
     }
 
-    if (!brandText.trim()) {
+    /*
+     * Marka secilmisse ve o marka tanimli bir MARKA kaydiysa, tanim
+     * listesinden yalnizca O MARKAYA BAGLI modeller eklenir (v1.12.0'da
+     * eklenen parentId bagi). Bag kurulmamis eski modeller icin sunucudan
+     * gelen urun tabanli oneriler zaten yukarida eklendi.
+     */
+    if (brandText.trim()) {
+      const brandKey = normalizeTr(brandText);
+      const definedBrand = brandModels.find(
+        (item) => item.kind === 'MARKA' && normalizeTr(item.name) === brandKey
+      );
+      if (definedBrand) {
+        for (const item of modelOptions) {
+          if (item.parentId !== definedBrand.id) continue;
+          const key = normalizeTr(item.name);
+          if (!key || seen.has(key)) continue;
+          seen.add(key);
+          options.push({ id: item.id, label: item.name });
+        }
+      }
+    } else {
       for (const item of modelOptions) {
         const key = normalizeTr(item.name);
         if (!key || seen.has(key)) continue;
@@ -168,7 +190,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
     }
 
     return options.sort((a, b) => a.label.localeCompare(b.label, 'tr'));
-  }, [modelOptions, productModelHints, brandText]);
+  }, [modelOptions, productModelHints, brandText, brandModels]);
 
   const selectedBrandName = brandText.trim();
   const selectedModelName = modelText.trim();

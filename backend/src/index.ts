@@ -5135,10 +5135,18 @@ app.get<{ Querystring: { categoryId?: string; brand?: string; strict?: string } 
   }
 );
 
-app.post<{ Body: { name: string; categoryId?: number; kind?: 'MARKA' | 'MODEL' } }>(
+app.post<{
+  Body: {
+    name: string;
+    categoryId?: number;
+    kind?: 'MARKA' | 'MODEL';
+    /** MODEL eklerken bagli oldugu MARKA kaydinin id'si */
+    parentId?: number;
+  };
+}>(
   '/api/settings/brand-model',
   async (request, reply) => {
-    const { name, categoryId, kind } = request.body;
+    const { name, categoryId, kind, parentId } = request.body;
     const trimmed = name?.trim();
     const resolvedKind = kind === 'MARKA' ? 'MARKA' : 'MODEL';
 
@@ -5150,12 +5158,40 @@ app.post<{ Body: { name: string; categoryId?: number; kind?: 'MARKA' | 'MODEL' }
       });
     }
 
+    /*
+     * Model her zaman bir markaya baglanir: "iPhone 14" tek basina anlamli
+     * degil, "Apple > iPhone 14" anlamli. Marka kayitlarinda ust kayit olmaz.
+     */
+    let resolvedParentId: number | null = null;
+    if (resolvedKind === 'MODEL') {
+      if (!parentId || parentId <= 0) {
+        return reply.status(400).send({
+          success: false,
+          message: 'Model eklemek için önce marka seçin.',
+          errors: null,
+        });
+      }
+      const parent = await prisma.brandModel.findFirst({
+        where: { id: parentId, kind: 'MARKA' },
+        select: { id: true },
+      });
+      if (!parent) {
+        return reply.status(400).send({
+          success: false,
+          message: 'Seçilen marka bulunamadı.',
+          errors: null,
+        });
+      }
+      resolvedParentId = parent.id;
+    }
+
     try {
       const brandModel = await prisma.brandModel.create({
         data: {
           name: trimmed,
           kind: resolvedKind,
           categoryId: categoryId ?? null,
+          parentId: resolvedParentId,
         },
         include: { category: { select: { id: true, name: true } } },
       });

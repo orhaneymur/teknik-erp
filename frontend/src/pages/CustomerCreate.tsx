@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Save, UserPlus } from 'lucide-react';
-import { API_BASE } from '../lib/api';
+import { API_BASE, ensureArray } from '../lib/api';
 import type { NavigateFn } from '../lib/navigation';
 import CityDistrictSelect from '../components/CityDistrictSelect';
 
@@ -46,18 +46,59 @@ export default function CustomerCreate({ onNotify, onNavigate }: CustomerCreateP
     onNotify?.(type, message);
   };
 
+  /*
+   * "Yetkili" alani serbest metin yerine personel listesinden secilir.
+   * Amac: bu musterinin bizden sorumlusu kim, kayitli kalsin. Elle
+   * yazildiginda ayni kisi "Ahmet", "ahmet", "Ahmet B." diye uc farkli
+   * deger olarak birikiyordu.
+   */
+  const [personnels, setPersonnels] = useState<Array<{ id: number; name: string }>>([]);
+
+  useEffect(() => {
+    let iptal = false;
+    void (async () => {
+      try {
+        const response = await axios.get<{
+          success: boolean;
+          data: Array<{ id: number; name: string }>;
+        }>(`${API_BASE}/api/settings/personnels`);
+        if (!iptal && response.data.success) {
+          setPersonnels(ensureArray(response.data.data));
+        }
+      } catch {
+        // Liste gelmezse alan bos kalir; kart yine olusturulabilir
+      }
+    })();
+    return () => {
+      iptal = true;
+    };
+  }, []);
+
   const resetForm = () => setForm(emptyForm());
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!form.name.trim()) {
-      notify('error', 'Ünvan zorunludur.');
+    /*
+     * Zorunlu alanlar. Eksik müşteri kartı sonradan fatura kesilirken,
+     * kargo gönderilirken ve ekstre yollanırken sorun çıkarıyordu; kartı
+     * açan kişi o an bilgiye ulaşabiliyor, bir hafta sonra ulaşamıyor.
+     */
+    const zorunlu: Array<[string, string]> = [
+      [form.name, 'Ünvan'],
+      [form.phone, 'Telefon'],
+      [form.city, 'İl'],
+      [form.district, 'İlçe'],
+      [form.address, 'Adres'],
+    ];
+    const eksik = zorunlu.filter(([value]) => !value.trim()).map(([, label]) => label);
+    if (eksik.length > 0) {
+      notify('error', `Şu alanlar zorunlu: ${eksik.join(', ')}`);
       return;
     }
 
     setSubmitting(true);
     const payload = {
-      code: form.code.trim() || undefined,
+      // code gonderilmiyor — backend otomatik uretir
       name: form.name.trim(),
       phone: form.phone.trim() || undefined,
       email: form.email.trim() || undefined,
@@ -110,11 +151,14 @@ export default function CustomerCreate({ onNotify, onNavigate }: CustomerCreateP
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className={labelClass}>Cari Kodu</label>
+            {/* Kod sistem tarafindan uretilir. Alan bilerek kapali: elle
+                yazilan kodlar cakisiyor ve sonradan duzeltmesi zor oluyordu. */}
             <input
-              value={form.code}
-              onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-              placeholder="Otomatik"
-              className={fieldClass}
+              value=""
+              readOnly
+              disabled
+              placeholder="Kaydedince otomatik atanır"
+              className={`${fieldClass} bg-slate-100 text-slate-500 cursor-not-allowed`}
             />
           </div>
           <div>
@@ -139,15 +183,25 @@ export default function CustomerCreate({ onNotify, onNavigate }: CustomerCreateP
             />
           </div>
           <div>
-            <label className={labelClass}>Yetkili</label>
-            <input
+            <label className={labelClass}>Yetkili (Sorumlu Personel)</label>
+            <select
               value={form.contactPerson}
               onChange={(e) => setForm((f) => ({ ...f, contactPerson: e.target.value }))}
               className={fieldClass}
-            />
+            >
+              <option value="">Seçiniz</option>
+              {personnels.map((person) => (
+                <option key={person.id} value={person.name}>
+                  {person.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Bu müşteri bizden kimin müşterisi?
+            </p>
           </div>
           <div>
-            <label className={labelClass}>Telefon</label>
+            <label className={labelClass}>Telefon *</label>
             <input
               value={form.phone}
               onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
@@ -187,7 +241,7 @@ export default function CustomerCreate({ onNotify, onNavigate }: CustomerCreateP
             />
           </div>
           <div className="md:col-span-2">
-            <label className={labelClass}>Adres</label>
+            <label className={labelClass}>Adres *</label>
             <textarea
               rows={3}
               value={form.address}

@@ -53,6 +53,12 @@ model BrandModel {
   kind       BrandModelKind @default(MODEL)
   categoryId Int?
   category   Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  /// MODEL kayıtları bağlı oldukları MARKA kaydını gösterir; MARKA
+  /// kayıtlarında boştur. Marka silinirse model sahipsiz kalır (SetNull) —
+  /// modele bağlı ürün kartları bozulmasın diye model silinmez.
+  parentId   Int?
+  parent     BrandModel?    @relation("BrandModelHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children   BrandModel[]   @relation("BrandModelHierarchy")
   products   Product[]
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt

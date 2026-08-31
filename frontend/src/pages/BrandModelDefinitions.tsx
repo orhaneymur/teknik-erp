@@ -8,6 +8,7 @@ type BrandModel = {
   name: string;
   kind: 'MARKA' | 'MODEL';
   categoryId: number | null;
+  parentId?: number | null;
   category: { id: number; name: string } | null;
   _count?: { products: number };
 };
@@ -30,6 +31,8 @@ export default function BrandModelDefinitions({
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState('');
   const [categoryId, setCategoryId] = useState<number | ''>('');
+  /* Model eklerken bagli olacagi marka. Marka eklerken kullanilmaz. */
+  const [parentId, setParentId] = useState<number | ''>('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -81,15 +84,22 @@ export default function BrandModelDefinitions({
   const addItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+    // Model her zaman bir markaya baglanir
+    if (!isBrand && parentId === '') {
+      notify('error', 'Model eklemek için önce marka seçin.');
+      return;
+    }
     setSubmitting(true);
     try {
       await axios.post(`${API_BASE}/api/settings/brand-model`, {
         name: name.trim(),
         kind,
         categoryId: categoryId === '' ? undefined : categoryId,
+        parentId: isBrand || parentId === '' ? undefined : parentId,
       });
       setName('');
       setCategoryId('');
+      setParentId('');
       notify('success', `${label} eklendi.`);
       await loadData();
     } catch {
@@ -150,6 +160,33 @@ export default function BrandModelDefinitions({
                 </option>
               ))}
             </select>
+            {/* Model eklerken marka ZORUNLU: "iPhone 14" tek basina anlamli
+                degil, "Apple > iPhone 14" anlamli. Kategori secildiyse
+                yalnizca o kategorinin markalari listelenir. */}
+            {!isBrand && (
+              <select
+                value={parentId}
+                onChange={(e) =>
+                  setParentId(e.target.value ? Number(e.target.value) : '')
+                }
+                className={`flex-1 rounded-xl border-slate-300 text-sm px-3 py-2 border ${inputFocus}`}
+              >
+                <option value="">Marka seçin *</option>
+                {brandModels
+                  .filter((item) => item.kind === 'MARKA')
+                  .filter(
+                    (item) =>
+                      categoryId === '' ||
+                      item.categoryId == null ||
+                      item.categoryId === categoryId
+                  )
+                  .map((brand) => (
+                    <option key={brand.id} value={brand.id}>
+                      {brand.name}
+                    </option>
+                  ))}
+              </select>
+            )}
             <button
               type="submit"
               disabled={submitting}
