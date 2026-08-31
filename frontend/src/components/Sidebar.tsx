@@ -13,6 +13,8 @@ type SidebarProps = {
   openMenus: Record<MenuCategoryId, boolean>;
   mobileOpen?: boolean;
   appVersion?: string;
+  /** Backend surumu — /api/version'dan gelir, gelmezse gosterilmez */
+  apiVersion?: string | null;
   onToggleMenu: (id: MenuCategoryId) => void;
   onLogout: () => void;
   onMobileClose?: () => void;
@@ -23,6 +25,7 @@ export default function Sidebar({
   openMenus,
   mobileOpen = false,
   appVersion,
+  apiVersion,
   onToggleMenu,
   onLogout,
   onMobileClose,
@@ -211,8 +214,13 @@ export default function Sidebar({
       </nav>
 
       <div className="space-y-3 border-t border-slate-800/80 px-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        {/* Surum bilgisi TEK YERDE: arayuz ve API surumu birlikte.
+            Ust seritteki kopyasi kaldirildi. */}
         {appVersion && (
-          <p className="px-2 text-center text-[10px] font-mono text-slate-600">{appVersion}</p>
+          <p className="px-2 text-center text-[10px] font-mono text-slate-600">
+            Arayüz {appVersion}
+            {apiVersion ? ` · API ${apiVersion}` : ''}
+          </p>
         )}
         <div className="flex items-center gap-2 px-2 text-xs text-slate-500">
           <Keyboard className="h-3.5 w-3.5" />

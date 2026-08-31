@@ -1,5 +1,9 @@
 /**
- * TÜM ÜRÜNLERİN STOK KODLARINI YENİDEN ÜRETİR.
+ * ESKİ OTOMATİK STOK KODLARINI YENİDEN ÜRETİR.
+ *
+ * Varsayılan olarak yalnızca `SK...` biçimindeki uzun otomatik kodlara
+ * dokunur. Elle girilmiş / eski sistemden gelen anlamlı kodlar (ör. 7 haneli
+ * `3013044`) korunur — `--hepsi` ile onlar da dahil edilebilir.
  *
  * Eski biçim ~16 karakterdi (SKM2K4X9P001ABC); yeni biçim kategoriye göre
  * 8 karakter (TEL00001). Bu script mevcut ürünleri yeni biçime geçirir.
@@ -23,7 +27,12 @@
  * baglanti MariaDB adaptoru uzerinden lib/prisma.ts icinde kuruluyor.
  */
 import { prisma } from '../lib/prisma.js';
-import { buildSku, uniqueCategoryPrefix } from '../utils/sku.js';
+import {
+  LEGACY_AUTO_SKU_PATTERN,
+  buildSku,
+  maxSequenceForPrefix,
+  uniqueCategoryPrefix,
+} from '../utils/sku.js';
 
 async function main() {
   const uygula = process.argv.includes('--uygula');
@@ -59,13 +68,34 @@ async function main() {
     select: { id: true, sku: true, name: true, categoryId: true },
   });
 
-  // Her önek için 1'den başlayarak sıra ver
+  const hepsi = process.argv.includes('--hepsi');
+
+  /*
+   * VARSAYILAN: yalnızca ESKİ OTOMATİK kodlar (SK...) yenilenir.
+   *
+   * Elle girilmiş ya da eski sistemden gelen anlamlı kodlara (ör. 7 haneli
+   * `3013044`) DOKUNULMAZ: onların kâğıtta, Excel'de ve müşteri
+   * listelerinde karşılığı var, değiştirilirse tüm referanslar kopar.
+   * Üstelik 7 haneli sayısal kod, 8 karakterlik yeni koddan zaten kısa.
+   *
+   * `--hepsi` verilirse TÜM ürünler yeniden numaralandırılır.
+   */
+  const eskiOtomatik = products.filter((p) =>
+    LEGACY_AUTO_SKU_PATTERN.test(p.sku.trim())
+  );
+  const hedef = hepsi ? products : eskiOtomatik;
+
+  // Sıra numaraları mevcut yeni biçimli kodların DEVAMINDAN başlar
+  const tumSkular = products.map((p) => p.sku);
   const counters = new Map<string, number>();
   const plan: Array<{ id: number; eski: string; yeni: string; ad: string }> = [];
 
-  for (const product of products) {
+  for (const product of hedef) {
     const prefix = prefixByCategoryId.get(product.categoryId ?? null)
       ?? prefixByCategoryId.get(null)!;
+    if (!counters.has(prefix)) {
+      counters.set(prefix, maxSequenceForPrefix(tumSkular, prefix));
+    }
     const next = (counters.get(prefix) ?? 0) + 1;
     counters.set(prefix, next);
     const yeni = buildSku(prefix, next);
@@ -75,9 +105,13 @@ async function main() {
   }
 
   console.log('\n--- ÖZET ---');
+  console.log(
+    `  MOD                  : ${hepsi ? 'TÜM ÜRÜNLER (--hepsi)' : 'yalnızca eski otomatik kodlar'}`
+  );
   console.log(`  Toplam ürün          : ${products.length}`);
+  console.log(`  Eski otomatik kodlu  : ${eskiOtomatik.length}`);
+  console.log(`  Dokunulmayacak       : ${products.length - hedef.length}`);
   console.log(`  Kodu değişecek       : ${plan.length}`);
-  console.log(`  Zaten doğru biçimde  : ${products.length - plan.length}`);
   console.log('\n  Önek başına adet:');
   for (const [prefix, count] of [...counters.entries()].sort()) {
     console.log(`    ${prefix.padEnd(4)} ${count}`);

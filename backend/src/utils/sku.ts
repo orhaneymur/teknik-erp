@@ -25,6 +25,16 @@ const SEQUENCE_DIGITS = 5;
 /** Yeni kod biçimi: 3 harf + 5 rakam */
 export const SKU_PATTERN = /^[A-Z]{3}\d{5}$/;
 
+/**
+ * ESKİ otomatik üretilmiş kod biçimi: SK + zaman damgası + sayaç + rastgele.
+ * Örn. SKMRN9SYQ1NNRN — 14-16 karakter.
+ *
+ * Yalnızca bunlar yeniden numaralandırılır. Elle girilmiş ya da eski
+ * sistemden gelen anlamlı kodlara (ör. 7 haneli `3013044`) DOKUNULMAZ —
+ * onlar kâğıtta, Excel'de ve müşteri listelerinde karşılığı olan kodlar.
+ */
+export const LEGACY_AUTO_SKU_PATTERN = /^SK[0-9A-Z]{9,}$/;
+
 const TR_MAP: Record<string, string> = {
   Ç: 'C', Ğ: 'G', İ: 'I', Ö: 'O', Ş: 'S', Ü: 'U',
   ç: 'C', ğ: 'G', ı: 'I', ö: 'O', ş: 'S', ü: 'U',

@@ -560,6 +560,7 @@ function App() {
         openMenus={openMenus}
         mobileOpen={mobileNavOpen}
         appVersion={FRONTEND_VERSION}
+        apiVersion={apiVersion}
         onToggleMenu={toggleMenu}
         onLogout={handleLogout}
         onMobileClose={() => setMobileNavOpen(false)}
@@ -606,12 +607,9 @@ function App() {
 
               <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
                 <CurrencyConverter />
-                <div className="hidden rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-center sm:block sm:px-3">
-                  <span className="text-[10px] font-medium text-slate-500 sm:text-xs">
-                    Arayüz {FRONTEND_VERSION}
-                    {apiVersion ? ` · API ${apiVersion}` : ''}
-                  </span>
-                </div>
+                {/* Sürüm bilgisi buradan kaldırıldı; sol menünün altında
+                    tek yerde gösteriliyor. Üst şerit günlük işte kullanılan
+                    bilgilere ayrıldı. */}
                 <div className="hidden rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-center lg:block lg:px-4 lg:py-2">
                   <span className="text-xs font-semibold text-emerald-700 lg:text-sm">
                     Tutarlar: USD ($)
