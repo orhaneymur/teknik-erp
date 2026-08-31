@@ -129,7 +129,10 @@ curl -s --max-time 5 https://ifconfig.me 2>/dev/null || \
   curl -s --max-time 5 https://api.ipify.org 2>/dev/null || \
   echo "ogrenilemedi (internet cikisi kisitli olabilir)"
 echo ""
-echo "DNS'te su kayit gerekecek:  *.teknikerp.derneklab.com  ->  yukaridaki IP"
+echo "Her musteri icin Cloudflare'de bir A kaydi gerekir:"
+echo "  <ad>-erp.derneklab.com  ->  yukaridaki IP   (Proxy: Proxied)"
+echo "Adres TEK seviye olmali (demo-erp), iki seviyeli (demo.erp) olursa"
+echo "Cloudflare'in ucretsiz sertifikasi kapsamaz ve HTTPS calismaz."
 
 title "RAPOR SONU"
 echo "Bu ciktinin TAMAMINI kopyalayip Claude'a yapistir."

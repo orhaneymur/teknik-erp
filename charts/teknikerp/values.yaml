@@ -17,14 +17,23 @@ tenant:
 # ── Alan adı ───────────────────────────────────────────────────────────────
 domain:
   # Musteri adresi soyle olusur:  <tenant.id><tenantSuffix>.<base>
-  #   demo        -> demo.erp.derneklab.com
-  #   akgunteknik -> akgunteknik.erp.derneklab.com
+  #   demo        -> demo-erp.derneklab.com
+  #   akgunteknik -> akgunteknik-erp.derneklab.com
   #
-  # Cloudflare'de wildcard yok (ucretsiz planda proxied wildcard verilmiyor),
-  # bu yuzden HER yeni musteri icin tek bir kayit acilmali:
-  #   Type A | Name <ad>.erp | IPv4 213.238.168.227 | Proxy: Proxied
-  base: "erp.derneklab.com"
-  tenantSuffix: ""
+  # NEDEN NOKTA DEGIL TIRE ("demo-erp" ama "demo.erp" degil)?
+  # Cloudflare'in ucretsiz Universal SSL sertifikasi yalnizca
+  # "derneklab.com" ve "*.derneklab.com"u kapsar — TEK seviye.
+  # "demo.erp.derneklab.com" iki seviye oldugu icin sertifikanin disinda
+  # kalir ve Cloudflare TLS el sikismasini reddeder: site HTTP'de acilir,
+  # HTTPS'te acilmaz. Tire kullanarak adresi tek seviyede tutuyoruz,
+  # boylece HTTPS ucretsiz ve otomatik calisir.
+  # (Cok seviyeli isteniyorsa: Cloudflare Advanced Certificate Manager,
+  #  ayda 10 USD — ya da kumeye cert-manager kurulup proxy kapatilir.)
+  #
+  # Wildcard kaydi da yok, bu yuzden HER yeni musteri icin tek bir kayit:
+  #   Type A | Name <ad>-erp | IPv4 213.238.168.227 | Proxy: Proxied
+  base: "derneklab.com"
+  tenantSuffix: "-erp"
 
 # ── Docker imajları — tüm müşterilerde AYNI ────────────────────────────────
 image:
@@ -92,10 +101,15 @@ ingress:
   # Boş ise <tenant.id>.<domain.base> kullanılır.
   host: ""
   tls:
-    # cert-manager bu kumede KURULU DEGIL — acilirsa sertifika alinamaz
-    # ve site acilmaz. Kurulduktan sonra true yapilacak.
+    # Kume icinde sertifika URETILMEZ: cert-manager kurulu degil, acilirsa
+    # sertifika alinamaz ve site hic acilmaz. Kapali kalmali.
     enabled: false
     clusterIssuer: "letsencrypt-prod"
+    # HTTPS'i Cloudflare sonlandiriyor (kayitlar "Proxied"): tarayici ->
+    # Cloudflare HTTPS, Cloudflare -> sunucu HTTP. Yani kullanici HTTPS
+    # gorur ama Ingress'in TLS yapmasi gerekmez. Bu deger yalnizca ekrana
+    # dogru adresin ("https://...") yazilmasi icin kullanilir.
+    edgeTerminated: true
   # Asagidaki iki deger YALNIZCA className "nginx" iken kullanilir.
   # Traefik bu annotation'lari yok sayar (varsayilanlari zaten yeterli).
   proxyBodySize: "50m"

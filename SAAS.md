@@ -12,11 +12,11 @@ Her müşteri (tenant) k3s içinde **kendi namespace'ini** alır. Namespace'ler
 birbirinden yalıtıktır: ayrı veritabanı, ayrı disk, ayrı şifreler.
 
 ```
-*.teknikerp.com  →  sunucu IP  →  nginx-ingress
-                                        │
-        ┌───────────────────────────────┼───────────────────────────────┐
+<ad>-erp.derneklab.com  →  Cloudflare (HTTPS burada biter)  →  sunucu IP  →  traefik
+                                                                        │
+        ┌───────────────────────────────┬───────────────────────────────┐
         ▼                               ▼                               ▼
- akgunteknik.teknikerp.com       demo.teknikerp.com          xyzoto.teknikerp.com
+ akgunteknik-erp.derneklab.com   demo-erp.derneklab.com      xyzoto-erp.derneklab.com
  ns: tenant-akgunteknik          ns: tenant-demo             ns: tenant-xyzoto
    teknikerp-frontend              teknikerp-frontend          teknikerp-frontend
    teknikerp-backend               teknikerp-backend           teknikerp-backend
@@ -62,7 +62,7 @@ Kurulum `dev.prod.com` / **213.238.168.227** üzerinde yapılacak.
 | StorageClass | ✅ `local-path` (varsayılan) |
 | metrics-server | ✅ kurulu — `kubectl top` çalışır |
 | Ingress | ⚠️ Hem traefik hem nginx kurulu, ama **80/443'ü traefik tutuyor** |
-| cert-manager | ❌ kurulu değil — şimdilik HTTPS yok |
+| cert-manager | ❌ kurulu değil — gerekmiyor, HTTPS'i Cloudflare veriyor |
 | RAM | ⚠️ 7.8 Gi'nin 6.1 Gi'i dolu, **~1.7 Gi boş** |
 | Disk | ✅ 79 G'nin 35 G'i boş |
 
@@ -87,23 +87,40 @@ ve `test3.derneklab.com` Cloudflare IP'lerine (104.21.26.247 / 172.67.139.174)
 | Alan | Değer |
 |---|---|
 | Type | `A` |
-| Name | `demo.erp` |
+| Name | `demo-erp` |
 | IPv4 | `213.238.168.227` |
 | Proxy | **Proxied** (turuncu bulut) — mevcut kayıtlarla aynı |
 
-Müşteri adresleri `<ad>.erp.derneklab.com` kalıbında: `demo.erp`,
-`akgunteknik.erp`, `xyzoto.erp`. Chart bunu `domain.base` ile üretir.
+Müşteri adresleri `<ad>-erp.derneklab.com` kalıbında: `demo-erp`,
+`akgunteknik-erp`, `xyzoto-erp`. Chart bunu `domain.base` +
+`domain.tenantSuffix` ile üretir.
 
-### HTTPS — Cloudflare hallediyor
+### HTTPS — Cloudflare hallediyor, ama adres TEK seviye olmalı
 
-Kayıtlar **proxied** olduğu için TLS'i Cloudflare sonlandırıyor; kullanıcı
-HTTPS görür, Cloudflare origin'e HTTP ile gider. Bu yüzden kümede
-cert-manager'a gerek yok ve `ingress.tls.enabled` **kapalı** kalır —
-mevcut uygulamalar da tam olarak böyle çalışıyor.
+Kayıtlar **proxied** olduğu için TLS'i Cloudflare sonlandırıyor: tarayıcı →
+Cloudflare HTTPS, Cloudflare → origin HTTP. Bu yüzden kümede cert-manager'a
+gerek yok ve `ingress.tls.enabled` **kapalı** kalır.
+
+> 🔴 **Adreste nokta değil tire kullanın.** Ücretsiz plandaki Universal SSL
+> sertifikası yalnızca `derneklab.com` ve `*.derneklab.com`'u kapsar —
+> **tek seviye**. `demo.erp.derneklab.com` iki seviye olduğu için
+> sertifikanın dışında kalır: Cloudflare TLS el sıkışmasını reddeder,
+> site HTTP'de açılır ama **HTTPS'te hiç açılmaz**. Bu 2026-08-17'de
+> canlıda birebir yaşandı; adres `demo-erp.derneklab.com`'a çekilerek
+> çözüldü.
+>
+> Çok seviyeli adres şart olursa iki yol var: Cloudflare **Advanced
+> Certificate Manager** (ayda 10 USD) ya da kümeye **cert-manager** kurup
+> DNS kayıtlarını gri buluta (DNS only) almak.
+
+**`http://` ile gelenleri otomatik yönlendirmek için** (bir kez, tüm zone
+için): Cloudflare → SSL/TLS → Edge Certificates → **Always Use HTTPS: On**.
+Kümede hiçbir değişiklik gerekmez.
 
 > ⚠️ Cloudflare ücretsiz planında istek zaman aşımı **100 saniye**
 > (hata 524) ve yükleme sınırı **100 MB**'dır. Çok büyük Excel içe
 > aktarımları bu sınıra takılabilir — origin'de değil Cloudflare'de.
+> Bu sınırlar rahatsız edici olursa cert-manager'a geçmek gerekir.
 
 ---
 
@@ -139,9 +156,13 @@ bash k8s/new-tenant.sh demo "TeknikERP Demo" --set demoReset.enabled=true
 bash k8s/new-tenant.sh akgunteknik "Akgün Teknik" \
   --set backend.replicas=2 --set mysql.storage=10Gi
 
-# HTTPS olmadan (cert-manager kurulu değilse)
-bash k8s/new-tenant.sh test "Test Firma" --set ingress.tls.enabled=false
+# Kalibin disinda, elle verilen adres (yine TEK seviye olmali)
+bash k8s/new-tenant.sh test "Test Firma" --set ingress.host=test-erp.derneklab.com
 ```
+
+> Yeni müşteride **önce Cloudflare kaydını aç** (`<ad>-erp`, A,
+> `213.238.168.227`, Proxied), sonra script'i çalıştır. Kayıt yoksa adres
+> açılmaz.
 
 Yönetici şifresini sonradan okumak için:
 
@@ -299,7 +320,8 @@ kubectl exec -n tenant-xyzoto deploy/teknikerp-backend -- \
 | Backend pod `CrashLoopBackOff`, günlükte "JWT_SECRET tanımlı değil" | Secret oluşmamış — `helm upgrade` tekrarla |
 | Arayüz açılıyor, veri gelmiyor (502) | `teknikerp-backend` servisi yok ya da backend Ready değil |
 | Firma adı yanlış görünüyor | ConfigMap değişti ama pod yeniden başlamadı — `kubectl rollout restart deploy/teknikerp-frontend -n <ns>` |
-| Sertifika alınamadı | DNS wildcard kaydı yok veya cert-manager `ClusterIssuer` eksik |
+| HTTP açılıyor ama **HTTPS açılmıyor** (bağlantı sıfırlanıyor) | Adres iki seviyeli (`x.erp.derneklab.com`) — Cloudflare ücretsiz sertifikası kapsamıyor. Tek seviyeye çek: `x-erp.derneklab.com` |
+| Adres hiç açılmıyor | Cloudflare'de `<ad>-erp` A kaydı yok |
 
 ---
 

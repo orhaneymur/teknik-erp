@@ -25,3 +25,7 @@ backend/prisma/*.db-journal
 
 # TypeScript
 *.tsbuildinfo
+
+# Veritabanı dökümleri — canlı müşteri verisi ASLA repoya girmez
+*.sql
+*.sql.gz

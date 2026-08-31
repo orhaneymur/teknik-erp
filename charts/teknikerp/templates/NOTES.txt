@@ -1,7 +1,7 @@
 
   TeknikERP — "{{ .Values.tenant.companyName }}" kuruldu.
 
-  Adres    : http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ include "teknikerp.host" . }}
+  Adres    : http{{ if or .Values.ingress.tls.enabled .Values.ingress.tls.edgeTerminated }}s{{ end }}://{{ include "teknikerp.host" . }}
   Namespace: {{ .Release.Namespace }}
   Surum    : {{ .Values.image.tag }}
 

@@ -1,0 +1,47 @@
+# TeknikERP Demo  —  tenant-demo
+#
+# Musteri degil: urunu gosterdigin vitrin ve surum guncellemelerini
+# once denedigin prova alani. Icinde ornek veri var, gercek musteri
+# verisi ASLA konmaz.
+#
+# Kurulum / guncelleme:
+#   helm upgrade --install teknikerp charts/teknikerp -n tenant-demo \
+#     --create-namespace -f tenants/demo.yaml
+
+tenant:
+  id: demo
+  companyName: "TeknikERP Demo"
+  contact: "TeknikERP - Demo Ortami"
+
+image:
+  tag: v1.9.2
+
+domain:
+  base: derneklab.com
+  tenantSuffix: "-erp"
+
+backend:
+  replicas: 1
+  resources:
+    requests: { memory: 64Mi,  cpu: 50m }
+    limits:   { memory: 256Mi, cpu: 500m }
+
+frontend:
+  replicas: 1
+
+mysql:
+  storage: 2Gi
+  resources:
+    requests: { memory: 256Mi, cpu: 100m }
+    limits:   { memory: 768Mi, cpu: 500m }
+
+backup:
+  enabled: true
+  keepDays: 7
+  storage: 2Gi
+
+# 31 Agustos 2026'da kapatildi. Zaten calismiyordu: sifirlamanin ihtiyac
+# duydugu /backups/demo-golden.sql.gz dosyasi hic olusturulmamisti, is
+# her gece uyari basip cikiyordu. Demo artik kalici bir alan.
+demoReset:
+  enabled: false

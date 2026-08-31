@@ -1,0 +1,28 @@
+# Shenzhen Market  —  tenant-shenzhen
+#
+# Eski adi Akgun Teknik. 30 Agustos 2026'da eski kurulumdan bu tenant'a
+# tasindi; veri korundu (5278 urun, 181 musteri, 75 fatura).
+#
+# Kurulum / guncelleme:
+#   helm upgrade --install teknikerp charts/teknikerp -n tenant-shenzhen \
+#     --create-namespace -f tenants/shenzhen.yaml
+
+tenant:
+  id: shenzhen
+  companyName: "Shenzhen Market"
+
+image:
+  tag: v1.9.2
+
+ingress:
+  # Kendi alan adi — kalibin disinda oldugu icin acikca veriliyor.
+  host: teknik.shenzhenmarket.com.tr
+
+backend:
+  replicas: 1
+
+# --- Firmaya ozel ayarlar ---
+# Bu musterinin istedigi, digerlerinde kapali olan ozellikler buraya.
+# Ornek (henuz uygulanmadi):
+# ui:
+#   yeniSekmedeAc: true
