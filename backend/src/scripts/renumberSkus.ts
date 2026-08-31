@@ -18,10 +18,12 @@
  * Eski→yeni eşleşme listesi ekrana basılır. Elinde eski kodla basılmış
  * liste varsa bu çıktıyı saklayın.
  */
-import { PrismaClient } from '@prisma/client';
+/*
+ * Ortak istemci kullanilir. Prisma 7 istemciyi bos kurmaya izin vermiyor;
+ * baglanti MariaDB adaptoru uzerinden lib/prisma.ts icinde kuruluyor.
+ */
+import { prisma } from '../lib/prisma.js';
 import { buildSku, uniqueCategoryPrefix } from '../utils/sku.js';
-
-const prisma = new PrismaClient();
 
 async function main() {
   const uygula = process.argv.includes('--uygula');

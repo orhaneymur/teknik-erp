@@ -26,6 +26,18 @@ command -v docker >/dev/null 2>&1 || { echo "HATA: docker bulunamadi."; exit 1; 
 BACKEND="${REGISTRY}/teknikerp-backend:${TAG}"
 FRONTEND="${REGISTRY}/teknikerp-frontend:${TAG}"
 
+# Chart'in appVersion alanini imaj etiketiyle esitle.
+#
+# Onceden elle yazildigi icin geride kaliyordu: v1.13.0 calisirken
+# "helm list" ciktisi v1.9.2 gosteriyordu. Ayni sorunun arayuz surumu
+# VITE_APP_VERSION ile cozuldu; burasi da ayni mantikla otomatik.
+CHART_YAML="${ROOT}/charts/teknikerp/Chart.yaml"
+if [[ -f "$CHART_YAML" ]]; then
+  sed -i.bak -E "s|^appVersion:.*|appVersion: \"${TAG}\"|" "$CHART_YAML"
+  rm -f "${CHART_YAML}.bak"
+  echo "==> Chart appVersion -> ${TAG}"
+fi
+
 echo "==> Backend derleniyor: ${BACKEND}"
 docker build -t "$BACKEND" ./backend
 
