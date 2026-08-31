@@ -7,4 +7,4 @@ type: application
 version: 1.0.0
 
 # Varsayılan uygulama sürümü. values.yaml içindeki image.tag bunu ezer.
-appVersion: "v1.9.2"
+appVersion: "v1.13.1"
