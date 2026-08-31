@@ -240,6 +240,8 @@ type ProductExcelRow = {
   SatisUsd?: string | number;
   MerkezDepo?: string | number;
   CinIadeDepo?: string | number;
+  /** Yeni gelen adet — mevcut stoga EKLENIR (Bakiye gibi uzerine yazmaz) */
+  GelenAdet?: string | number;
 };
 
 async function findOrCreateCategory(
@@ -407,6 +409,36 @@ async function upsertStock(
 }
 
 /**
+ * Mevcut stoga adet EKLER (uzerine yazmaz).
+ *
+ * "Gelen Adet" sutunu icin kullanilir: kullanici yalnizca yeni gelen adedi
+ * yazar, mevcut stogu bilmesi ve toplamasi gerekmez. Kayit yoksa dogrudan
+ * gelen adet yazilir.
+ */
+async function addToStock(
+  tx: Prisma.TransactionClient,
+  productId: number,
+  branchId: number,
+  delta: number
+) {
+  const existing = await tx.productStock.findUnique({
+    where: { productId_branchId: { productId, branchId } },
+  });
+  const current = existing ? Number(existing.quantity) : 0;
+  const next = current + delta;
+  if (existing) {
+    await tx.productStock.update({
+      where: { productId_branchId: { productId, branchId } },
+      data: { quantity: next },
+    });
+  } else {
+    await tx.productStock.create({
+      data: { productId, branchId, quantity: next },
+    });
+  }
+}
+
+/**
  * Eski Excel şeması rengi ayrı kolon yerine açıklamanın sonuna
  * `... | Renk: Black` biçiminde yazıyordu (v1.8.44'te kaldırıldı). Bu yüzden
  * canlı kayıtlarda `color` boş, renk bilgisi açıklamada kalmıştı: dışa
@@ -507,6 +539,13 @@ export async function exportProductsExcel(
       AlisAdedi: purchaseQty.get(p.id) ?? 0,
       SatisAdedi: salesQty.get(p.id) ?? 0,
       Bakiye: bakiye,
+      /*
+       * En sagdaki sutun BILEREK BOS iner. Kullanici buraya yeni gelen
+       * adedi yazar; ice aktarimda mevcut stoga EKLENIR (Bakiye gibi
+       * uzerine yazmaz). Boylece "20 adet geldi" demek icin mevcut stogu
+       * bilip toplamak gerekmez.
+       */
+      GelenAdet: '',
     };
   });
 
@@ -579,6 +618,10 @@ export async function importProductsExcel(
     barcodeRaw: string | null;
     hasBarcodeColumn: boolean;
     merkezQty: number;
+    /** Excel'de GelenAdet sutunu doldurulmus mu */
+    hasGelenAdet: boolean;
+    /** Mevcut stoga eklenecek adet */
+    gelenAdet: number;
     cinIadeQty: number;
     hasCinIadeColumn: boolean;
   };
@@ -658,6 +701,8 @@ export async function importProductsExcel(
       hasBarcodeColumn: hasCell(record, 'Barkod'),
       /** Bakiye = MERKEZ_DEPO stok adedi */
       merkezQty: asNumber(cell(record, 'Bakiye', 'MerkezDepo'), 0),
+      hasGelenAdet: asNumber(cell(record, 'GelenAdet', 'GelenAdedi'), 0) !== 0,
+      gelenAdet: asNumber(cell(record, 'GelenAdet', 'GelenAdedi'), 0),
       cinIadeQty: asNumber(cell(record, 'CinIadeDepo'), 0),
       hasCinIadeColumn: hasCell(record, 'CinIadeDepo'),
     });
@@ -674,30 +719,60 @@ export async function importProductsExcel(
    *   · Id yoksa → yeni ürün, yeni kod.
    */
   let autoSkuAssigned = 0;
-  const blankSkuRows = parsedRows.filter((row) => !row.sku);
 
-  if (blankSkuRows.length > 0) {
-    const candidateIds = blankSkuRows
-      .map((row) => row.excelId)
-      .filter((id) => Number.isInteger(id) && id > 0);
-    const existing =
-      candidateIds.length > 0
-        ? await prisma.product.findMany({
-            where: { id: { in: candidateIds } },
-            select: { id: true, sku: true },
-          })
-        : [];
-    const skuById = new Map(existing.map((product) => [product.id, product.sku]));
+  /*
+   * EŞLEŞTİRME SIRASI — Excel'deki `Id` sütunu BİRİNCİL anahtardır.
+   *
+   *   1. Id sütunu doluysa ve o kayıt varsa  -> o ürün güncellenir
+   *   2. Id yoksa/eşleşmiyorsa               -> StokKodu ile eşleştirilir
+   *   3. İkisi de tutmuyorsa                 -> yeni ürün
+   *
+   * Neden Id önce: stok kodları yeniden üretilebiliyor. Kod eşleştirmesi
+   * birincil olsaydı, kodlar değiştikten sonra elindeki eski Excel dosyaları
+   * kullanılamaz hâle gelir, sistem 5278 ürünün hepsini "yeni ürün" sanıp
+   * ikinci kez eklerdi. Id hiç değişmediği için eski dosyalar çalışmaya
+   * devam eder.
+   *
+   * Id ile eşleşen satırda Excel'deki StokKodu YOK SAYILIR; veritabanındaki
+   * kod geçerli kalır. Kodları artık sistem üretiyor, Excel değil.
+   */
+  const idCandidates = [
+    ...new Set(
+      parsedRows
+        .map((row) => row.excelId)
+        .filter((id) => Number.isInteger(id) && id > 0)
+    ),
+  ];
+  const existingById =
+    idCandidates.length > 0
+      ? await prisma.product.findMany({
+          where: { id: { in: idCandidates } },
+          select: { id: true, sku: true },
+        })
+      : [];
+  const skuById = new Map(existingById.map((product) => [product.id, product.sku]));
 
-    for (const row of blankSkuRows) {
-      const currentSku = skuById.get(row.excelId)?.trim();
-      if (currentSku) {
-        row.sku = currentSku;
-        continue;
+  for (const row of parsedRows) {
+    const dbSku = skuById.get(row.excelId)?.trim();
+
+    if (skuById.has(row.excelId)) {
+      // Id ile eşleşti: veritabanındaki kod geçerli
+      row.forcedExistingId = row.excelId;
+      if (dbSku) {
+        row.sku = dbSku;
+      } else {
+        // Kaydın kodu boşmuş — şimdi doldurulur
+        row.sku = generateSku();
+        row.autoSku = true;
+        autoSkuAssigned += 1;
       }
+      continue;
+    }
+
+    // Id tutmadı: StokKodu ile eşleşecek. Kod da boşsa yeni kod üretilir.
+    if (!row.sku) {
       row.sku = generateSku();
       row.autoSku = true;
-      row.forcedExistingId = skuById.has(row.excelId) ? row.excelId : null;
       autoSkuAssigned += 1;
     }
   }
@@ -803,7 +878,15 @@ export async function importProductsExcel(
         });
 
     existingBySku.set(item.sku, product.id);
-    await upsertStock(tx, product.id, merkezId, item.merkezQty);
+    /*
+     * GelenAdet sutunu doluysa Bakiye YOK SAYILIR ve adet mevcut stoga
+     * EKLENIR. Bos ise eski davranis surer: Bakiye stok adedini belirler.
+     */
+    if (item.hasGelenAdet) {
+      await addToStock(tx, product.id, merkezId, item.gelenAdet);
+    } else {
+      await upsertStock(tx, product.id, merkezId, item.merkezQty);
+    }
     if (item.hasCinIadeColumn) {
       await upsertStock(tx, product.id, cinIadeId, item.cinIadeQty);
     }
@@ -867,52 +950,20 @@ export async function importProductsExcel(
     );
   }
 
-  // Excel'de olmayan urunleri kaldir (tam senkron)
-  let deleted = 0;
-  let stockZeroed = 0;
-
-  if (parsedRows.length === 0) {
-    errors.push('Excel bos veya gecerli satir yok. Silme yapilmadi.');
-  } else {
-    const excelSkus = [...new Set(parsedRows.map((row) => row.sku))];
-    const obsolete = await prisma.product.findMany({
-      where: { sku: { notIn: excelSkus } },
-      select: { id: true, sku: true },
-    });
-
-    if (obsolete.length > 0) {
-      const obsoleteIds = obsolete.map((product) => product.id);
-      const usedRows = await prisma.invoiceItem.findMany({
-        where: { productId: { in: obsoleteIds } },
-        select: { productId: true },
-        distinct: ['productId'],
-      });
-      const usedIds = new Set(usedRows.map((row) => row.productId));
-
-      const toDelete = obsoleteIds.filter((id) => !usedIds.has(id));
-      const toZero = obsoleteIds.filter((id) => usedIds.has(id));
-
-      const DELETE_BATCH = 200;
-      for (let offset = 0; offset < toDelete.length; offset += DELETE_BATCH) {
-        const batchIds = toDelete.slice(offset, offset + DELETE_BATCH);
-        const result = await prisma.product.deleteMany({
-          where: { id: { in: batchIds } },
-        });
-        deleted += result.count;
-      }
-
-      if (toZero.length > 0) {
-        await prisma.productStock.updateMany({
-          where: { productId: { in: toZero } },
-          data: { quantity: 0 },
-        });
-        stockZeroed = toZero.length;
-        errors.push(
-          `${stockZeroed} urun fatura gecmisinde oldugu icin silinemedi; stoklari 0 yapildi.`
-        );
-      }
-    }
-  }
+  /*
+   * SILME YOK.
+   *
+   * Eskiden "tam senkron" calisiyordu: Excel'de olmayan urunler faturasi
+   * yoksa siliniyor, faturasi varsa stogu sifirlaniyordu. Musteri Excel'i
+   * bosaltip yalnizca yeni gelenleri yazdiginda eski urunler kayboluyordu.
+   *
+   * Artik Excel yalnizca EKLER ve GUNCELLER. Bir urunu gercekten silmek
+   * icin stok listesinden tek tek silinir — kasitsiz toplu silme olmaz.
+   *
+   * Sayaclar geriye donuk uyumluluk icin durur, her zaman 0'dir.
+   */
+  const deleted = 0;
+  const stockZeroed = 0;
 
   // Urun alanlarindan tanim listesini senkronize et
   const synced = await syncBrandModelsFromProducts(prisma);

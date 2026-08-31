@@ -447,7 +447,7 @@ export default function StockList({
             importTimeoutMs={600_000}
             onImported={() => loadProducts(search, page)}
             onNotify={notify}
-            hint="Tam senkron: Excel'deki ürünler güncellenir, Excel'de olmayanlar silinir (fatura geçmişi olanların stoğu 0 olur). Bakiye = stok adedi."
+            hint="Excel yalnızca EKLER ve GÜNCELLER — Excel'de olmayan ürünler silinmez. Eşleşme Id sütununa göre yapılır. Bakiye = stok adedi (üzerine yazar). En sağdaki Gelen Adet sütununa yazarsanız mevcut stoğa EKLENİR. Ürün silmek için satırdaki çöp kutusu simgesini kullanın."
           />
         </div>
       </div>

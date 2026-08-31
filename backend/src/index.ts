@@ -22,7 +22,7 @@ import {
   getIstanbulYear,
   roundMoney,
 } from './utils/datetime.js';
-import { resolveSku } from './utils/sku.js';
+import { nextSkuForCategory, resolveSku } from './utils/sku.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const APP_VERSION = process.env.APP_VERSION ?? 'dev';
@@ -4166,7 +4166,24 @@ app.post<{
     });
   }
 
-  const resolvedSku = resolveSku(sku);
+  /*
+   * Stok kodu boş bırakılırsa kategoriye göre kısa kod üretilir (TEL00001).
+   * Kullanıcı elle kod yazmışsa ona dokunulmaz — eski kayıtlarla ve dış
+   * sistemlerle uyum için bu kapı açık kalıyor.
+   */
+  let resolvedSku = sku?.trim() ?? '';
+  if (!resolvedSku) {
+    const categoryName =
+      categoryId && categoryId > 0
+        ? (
+            await prisma.category.findUnique({
+              where: { id: categoryId },
+              select: { name: true },
+            })
+          )?.name
+        : null;
+    resolvedSku = await nextSkuForCategory(prisma, categoryName);
+  }
   const resolvedPriceUsd = priceUsd != null && priceUsd >= 0 ? priceUsd : 0;
   // Satış 2 boşsa Satış 1 ile aynı
   const resolvedPriceUsd2 =
