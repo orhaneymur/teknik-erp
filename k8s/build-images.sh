@@ -32,7 +32,8 @@ docker build -t "$BACKEND" ./backend
 echo "==> Frontend derleniyor: ${FRONTEND}"
 # VITE_API_BASE bilerek bos: tarayici /api'ye ayni origin'den gider,
 # nginx kendi namespace'indeki backend'e iletir.
-docker build -t "$FRONTEND" ./frontend
+# VITE_APP_VERSION: arayuzde gorunen surum yazisi imaj etiketinden gelir.
+docker build -t "$FRONTEND" --build-arg "VITE_APP_VERSION=${TAG}" ./frontend
 
 echo "==> Docker Hub'a gonderiliyor..."
 docker push "$BACKEND"

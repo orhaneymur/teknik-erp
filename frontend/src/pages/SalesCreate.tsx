@@ -7,6 +7,7 @@ import InvoiceTrashButton from '../components/InvoiceTrashButton';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList, {
   resolveSalesUnitPriceUsd,
+  type SalesPriceTier,
 } from '../components/F2ProductList';
 import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
@@ -180,6 +181,13 @@ export default function SalesCreate({
   const [shouldPrint, setShouldPrint] = useState(false);
   const [printParty, setPrintParty] = useState<ReceiptParty | null>(null);
   const [processedBy, setProcessedBy] = useState('');
+  /**
+   * Fiyat kademesi. Varsayilan PERAKENDE (Satis 1) — toptan fiyat herkese
+   * gecerli olmasin diye bilerek secilmesi gerekiyor. Musterinin daha once
+   * aldigi fiyat varsa o her zaman onceliklidir; kademe yalnizca ilk kez
+   * satilan urunlerde devreye girer.
+   */
+  const [priceTier, setPriceTier] = useState<SalesPriceTier>('perakende');
   const [f2Modal, setF2Modal] = useState(false);
   const [historyProduct, setHistoryProduct] = useState<{
     id: number;
@@ -490,12 +498,13 @@ export default function SalesCreate({
     (product: F2Product | Product) => {
       const unitPriceUsd = resolveSalesUnitPriceUsd(
         product as F2Product,
-        Boolean(selectedCustomer)
+        Boolean(selectedCustomer),
+        priceTier
       );
       const costUsd = productCostUsd(product);
       return { unitPriceUsd, costUsd };
     },
-    [selectedCustomer]
+    [selectedCustomer, priceTier]
   );
 
   const addProductToCart = useCallback(
@@ -648,7 +657,9 @@ export default function SalesCreate({
           customerId: customer.id,
           paymentMethod: method,
           paymentType,
-          processedBy: processedBy || null,
+          // processedBy BILEREK gonderilmiyor: backend alan gelmediginde
+          // mevcut degeri koruyor. Boylece satisi yapan kisi duzenleme
+          // sirasinda degismez.
           orderNotes: orderNotes || undefined,
           deliveryType,
           dueDate: dueDate || null,
@@ -1085,6 +1096,42 @@ export default function SalesCreate({
               )}
             </div>
           </div>
+
+          {/* Fiyat kademesi — müşteri seçiliyken görünür.
+              Toptan fiyat herkese geçerli olmasın diye varsayılan perakendedir,
+              toptan bilerek seçilir. Müşterinin daha önce aldığı fiyat varsa o
+              her zaman önceliklidir; kademe yalnızca ilk kez satılan ürünlerde
+              devreye girer. */}
+          {selectedCustomer && !isEditMode && (
+            <div className="print:hidden">
+              <label className={labelClass}>Fiyat Kademesi</label>
+              <div className="inline-flex rounded-lg border border-slate-300 bg-slate-50 p-0.5">
+                {(
+                  [
+                    { key: 'perakende', label: 'Satış 1 · Perakende' },
+                    { key: 'toptan', label: 'Satış 2 · Toptan' },
+                  ] as const
+                ).map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setPriceTier(option.key)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+                      priceTier === option.key
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-slate-600 hover:bg-white'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-slate-500">
+                Bundan sonra eklenecek ürünlere uygulanır. Müşterinin daha önce
+                aldığı ürünlerde son satış fiyatı geçerli kalır.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Kutu 3 — Ödeme */}
@@ -1411,10 +1458,19 @@ export default function SalesCreate({
 
           <div className="print:hidden">
             <label className={labelClass}>İşlemi Yapan</label>
+            {/* Düzenleme modunda satışı yapan kişi değiştirilemez: fatura kime
+                aitse öyle kalmalı, yoksa prim ve personel ciro raporları
+                geçmişe dönük bozulur. */}
             <select
               value={processedBy}
               onChange={(e) => setProcessedBy(e.target.value)}
-              className={inputClass}
+              disabled={isEditMode}
+              title={
+                isEditMode
+                  ? 'Satışı yapan kişi sonradan değiştirilemez.'
+                  : undefined
+              }
+              className={`${inputClass}${isEditMode ? ' bg-slate-100 text-slate-500 cursor-not-allowed' : ''}`}
             >
               <option value="">Seçiniz</option>
               {initData.personnels.map((person) => (
@@ -1423,6 +1479,11 @@ export default function SalesCreate({
                 </option>
               ))}
             </select>
+            {isEditMode && (
+              <p className="mt-1 text-[11px] text-slate-500">
+                İlk satışta kim yaptıysa öyle kalır.
+              </p>
+            )}
           </div>
 
           {isEditMode && isPreOrder && (

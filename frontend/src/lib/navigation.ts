@@ -60,8 +60,8 @@ export type NavigateOptions = {
 export type NavigateFn = (page: PageId, options?: NavigateOptions) => void;
 
 export type MenuCategoryId =
+  // 'purchase' kaldırıldı: alış faturası artık 'sales' başlığının altında
   | 'sales'
-  | 'purchase'
   | 'stock'
   | 'customer'
   | 'reports'
@@ -82,21 +82,22 @@ export type MenuCategory = {
 };
 
 export const menuCategories: MenuCategory[] = [
+  /*
+   * Satış ve alış tek başlıkta toplandı. İkisi de günlük fiş işlemleri;
+   * ayrı iki kategori olunca menü uzuyor ve "alış faturası neredeydi?"
+   * diye aranıyordu. Sıra iş akışını izler: önce satış, sonra iade,
+   * sonra alış.
+   */
   {
     id: 'sales',
-    label: 'Satış İşlemleri',
+    label: 'Satış ve Alış',
     icon: ShoppingCart,
     items: [
       { id: 'sales', label: 'Satış Yap', badge: 'F2' },
       { id: 'sales-return', label: 'Satış İade' },
+      { id: 'invoice-purchase', label: 'Alış Faturası' },
       { id: 'pre-orders', label: 'Ön Siparişler' },
     ],
-  },
-  {
-    id: 'purchase',
-    label: 'Alış İşlemleri',
-    icon: FileInput,
-    items: [{ id: 'invoice-purchase', label: 'Alış Faturası' }],
   },
   {
     id: 'stock',

@@ -14,6 +14,11 @@ COPY . .
 ARG VITE_API_BASE=
 ENV VITE_API_BASE=$VITE_API_BASE
 
+# Arayuzde gorunen surum yazisi. build-images.sh imaj etiketini buraya gecer,
+# boylece ekrandaki surum ile calisan imaj hicbir zaman ayrisamaz.
+ARG VITE_APP_VERSION=dev
+ENV VITE_APP_VERSION=$VITE_APP_VERSION
+
 RUN npm run build
 
 # ── Nginx ile statik dosya sunumu ───────────────────────────────────────────

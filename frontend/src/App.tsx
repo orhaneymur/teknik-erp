@@ -61,7 +61,15 @@ const initialOpenMenus = menuCategories.reduce(
   {} as Record<MenuCategoryId, boolean>
 );
 
-const FRONTEND_VERSION = 'v1.8.61';
+/**
+ * Arayuzde gorunen surum. Derleme sirasinda imaj etiketinden gelir
+ * (frontend/Dockerfile -> VITE_APP_VERSION), yerelde calisirken 'dev'.
+ *
+ * Onceden burada sabit bir yazi vardi ve surum cikarken guncellenmeyi
+ * unutuluyordu: v1.9.2 calisirken ekranda v1.8.61 yaziyordu.
+ */
+const FRONTEND_VERSION =
+  (import.meta.env.VITE_APP_VERSION as string | undefined)?.trim() || 'dev';
 
 function App() {
   const initialUrl = parsePageFromUrl();

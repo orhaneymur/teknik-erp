@@ -148,11 +148,14 @@ export default function Invoices({
     [notify, openEditor]
   );
 
+  /**
+   * Kaydettikten sonra düzenleme ekranında KALINIR — bkz. Dashboard.handleSaved.
+   * Arkadaki liste yine de tazelenir ki çıkıldığında güncel görünsün.
+   */
   const handleSaved = useCallback(() => {
-    closeEditor();
     loadInvoices();
     onDataChange?.();
-  }, [closeEditor, loadInvoices, onDataChange]);
+  }, [loadInvoices, onDataChange]);
 
   const handleTrash = useCallback(
     async (inv: Invoice) => {

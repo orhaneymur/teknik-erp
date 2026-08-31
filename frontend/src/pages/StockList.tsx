@@ -104,6 +104,22 @@ export default function StockList({
     [onNotify]
   );
 
+  /**
+   * Excel indirmede kullanılacak parametreler — listedeki filtrenin aynısı.
+   * Sayfalama (page/limit) bilerek dışarıda: Excel filtrenin TAMAMINI
+   * indirmeli, yalnızca görünen sayfayı değil.
+   */
+  const excelExportQuery = useMemo(() => {
+    const params: Record<string, string> = {};
+    if (search.trim()) params.search = search.trim();
+    if (filters.categoryId !== '') params.categoryId = String(filters.categoryId);
+    if (filters.brand) params.brand = filters.brand;
+    if (filters.model) params.model = filters.model;
+    if (filters.color) params.color = filters.color;
+    if (filters.appearance) params.appearance = filters.appearance;
+    return params;
+  }, [search, filters]);
+
   const loadProducts = useCallback(
     async (
       query: string,
@@ -425,6 +441,9 @@ export default function StockList({
             exportPath="/api/products/export/excel"
             importPath="/api/products/import/excel"
             exportFilename="stoklar.xlsx"
+            /* Ekranda ne filtrelendiyse Excel'de o iner. Aynı parametreler
+               listeyi çeken sorguda da kullanılıyor. */
+            exportQuery={excelExportQuery}
             importTimeoutMs={600_000}
             onImported={() => loadProducts(search, page)}
             onNotify={notify}

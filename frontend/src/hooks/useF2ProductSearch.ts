@@ -25,6 +25,8 @@ export type F2Product = {
   costUsd?: number;
   priceTl: number;
   priceUsd: number;
+  /** Satis 2 (toptan). Backend tanimsizsa Satis 1 degerini doldurur. */
+  priceUsd2?: number | null;
   lastPartyPriceTl?: number | null;
   lastPartyPriceUsd?: number | null;
   lastSoldPrice?: number | null;

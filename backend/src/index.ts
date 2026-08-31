@@ -730,6 +730,8 @@ const PRODUCT_SEARCH_SELECT = {
   costPrice: true,
   priceTl: true,
   priceUsd: true,
+  // Satis 2 (toptan) — satis ekraninda fiyat kademesi secilebilsin diye doner
+  priceUsd2: true,
   stocks: {
     where: { branch: { name: DEPOT_NAMES.MERKEZ } },
     select: {
@@ -752,6 +754,7 @@ type ProductSearchRow = {
   costPrice: number;
   priceTl: number;
   priceUsd: number;
+  priceUsd2: number;
   stocks: Array<{
     quantity: unknown;
     branch: { id: number; name: string };
@@ -791,6 +794,9 @@ function mapProductSearchExtras(
     costUsd,
     priceTl: priceUsd,
     priceUsd,
+    // Satış 2 (toptan). Tanımlı değilse Satış 1 ile aynı kabul edilir.
+    priceUsd2:
+      toFloat(product.priceUsd2) > 0 ? toFloat(product.priceUsd2) : priceUsd,
     lastPartyPriceTl,
     lastPartyPriceUsd,
     lastSoldPrice,
@@ -1151,6 +1157,45 @@ function buildProductWordFilter(
  * Tek parça `contains` kullanılan eski sürümde bu tür kayıtlar hiç listelenmiyordu.
  */
 const MAX_SEARCH_WORDS = 5;
+
+/**
+ * Stok listesi filtrelerini tek yerden kurar.
+ *
+ * Hem ekrandaki liste (`GET /api/products`) hem de Excel çıktısı
+ * (`GET /api/products/export/excel`) bu fonksiyonu kullanır. Amaç: kullanıcı
+ * ekranda ne filtrelediyse Excel'de birebir onu indirsin. İki yerde ayrı ayrı
+ * yazılsaydı zamanla ayrışır ve "ekranda 40 ürün var ama Excel'de 5000 satır
+ * indi" durumu oluşurdu.
+ *
+ * Serbest metin araması ile kolon filtreleri birlikte (AND) çalışır. Filtre
+ * değerleri açılır listeden geldiği için tam eşleşme aranır; MySQL varsayılan
+ * collation'ı büyük/küçük harfe duyarsızdır.
+ */
+function buildProductListWhere(query: {
+  search?: string;
+  categoryId?: string | number;
+  brand?: string;
+  model?: string;
+  color?: string;
+  appearance?: string;
+}): Prisma.ProductWhereInput {
+  const filters: Prisma.ProductWhereInput[] = [];
+
+  if (query.search?.trim()) filters.push(buildProductSearchWhere(query.search));
+
+  const categoryIdNum = Number(query.categoryId);
+  if (Number.isFinite(categoryIdNum) && categoryIdNum > 0) {
+    filters.push({ categoryId: categoryIdNum });
+  }
+  if (query.brand?.trim()) filters.push({ brand: query.brand.trim() });
+  if (query.model?.trim()) filters.push({ model: query.model.trim() });
+  if (query.color?.trim()) filters.push({ color: query.color.trim() });
+  if (query.appearance?.trim()) {
+    filters.push({ appearance: query.appearance.trim() });
+  }
+
+  return filters.length > 0 ? { AND: filters } : {};
+}
 
 function buildProductSearchWhere(search: string): Prisma.ProductWhereInput {
   const trimmed = search.trim();
@@ -1853,7 +1898,9 @@ app.get('/api/sales/dashboard', async () => {
       where: ACTIVE_INVOICE_FILTER,
       orderBy: { createdAt: 'desc' },
       include: {
-        customer: { select: { id: true, code: true, name: true } },
+        // city: ana sayfada müşteri adının yanında şehir gösterilir —
+        // aynı isimli müşterileri ayırt etmeyi kolaylaştırıyor
+        customer: { select: { id: true, code: true, name: true, city: true } },
       },
     }),
     prisma.transaction.findMany({
@@ -1861,7 +1908,7 @@ app.get('/api/sales/dashboard', async () => {
       orderBy: { createdAt: 'desc' },
       include: {
         safe: { select: { id: true, name: true, currency: true } },
-        customer: { select: { id: true, code: true, name: true } },
+        customer: { select: { id: true, code: true, name: true, city: true } },
       },
     }),
     buildAnalyticsReport(),
@@ -4231,24 +4278,14 @@ app.get<{
       request.query;
     const pagination = parseListPageQuery({ page, limit, take, skip });
 
-    /*
-     * Serbest metin araması ile kolon filtreleri birlikte çalışır (AND).
-     * Filtre değerleri açılır listeden geldiği için tam eşleşme aranır;
-     * MySQL varsayılan collation büyük/küçük harfe duyarsızdır.
-     */
-    const filters: Prisma.ProductWhereInput[] = [];
-    if (search?.trim()) filters.push(buildProductSearchWhere(search));
-
-    const categoryIdNum = Number(categoryId);
-    if (Number.isFinite(categoryIdNum) && categoryIdNum > 0) {
-      filters.push({ categoryId: categoryIdNum });
-    }
-    if (brand?.trim()) filters.push({ brand: brand.trim() });
-    if (model?.trim()) filters.push({ model: model.trim() });
-    if (color?.trim()) filters.push({ color: color.trim() });
-    if (appearance?.trim()) filters.push({ appearance: appearance.trim() });
-
-    const where: Prisma.ProductWhereInput = filters.length > 0 ? { AND: filters } : {};
+    const where = buildProductListWhere({
+      search,
+      categoryId,
+      brand,
+      model,
+      color,
+      appearance,
+    });
 
     const [products, totalCount] = await Promise.all([
       prisma.product.findMany({
@@ -4282,8 +4319,19 @@ app.get<{
   }
 );
 
-app.get('/api/products/export/excel', async (_request, reply) => {
-  const buffer = await exportProductsExcel(prisma);
+app.get<{
+  Querystring: {
+    search?: string;
+    categoryId?: string;
+    brand?: string;
+    model?: string;
+    color?: string;
+    appearance?: string;
+  };
+}>('/api/products/export/excel', async (request, reply) => {
+  // Ekrandaki filtrenin aynısı uygulanır; filtre yoksa tüm liste iner.
+  const where = buildProductListWhere(request.query);
+  const buffer = await exportProductsExcel(prisma, where);
   reply.header(
     'Content-Type',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

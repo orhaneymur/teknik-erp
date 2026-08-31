@@ -434,10 +434,25 @@ function stripLegacyColor(description: string | null): string {
   return description.slice(0, at).replace(/[\s|]+$/, '').trim();
 }
 
-export async function exportProductsExcel(prisma: PrismaClient): Promise<Buffer> {
+/**
+ * Stok listesini Excel'e aktarır.
+ *
+ * @param where  Ekrandaki filtrenin aynısı. Verilmezse tüm ürünler iner.
+ *               Kullanıcı listede filtre uygulamışsa Excel de aynı satırları
+ *               içermeli — aksi halde "40 ürün görüyorum ama 5000 satır indi"
+ *               durumu oluşuyordu.
+ *
+ * Sıralama stok koduna göre değil ADA göre yapılır: Excel'i açan kişi ürünü
+ * adıyla arıyor, kodla değil.
+ */
+export async function exportProductsExcel(
+  prisma: PrismaClient,
+  where: Prisma.ProductWhereInput = {}
+): Promise<Buffer> {
   const [products, purchaseQtyRows, salesQtyRows] = await Promise.all([
     prisma.product.findMany({
-      orderBy: { sku: 'asc' },
+      where,
+      orderBy: { name: 'asc' },
       include: {
         category: { select: { name: true } },
         stocks: { include: { branch: { select: { name: true } } } },

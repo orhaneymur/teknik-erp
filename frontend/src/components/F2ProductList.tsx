@@ -141,9 +141,30 @@ function resolvePartyPriceUsd(product: F2Product, partySelected: boolean) {
   return null;
 }
 
-export function resolveSalesUnitPriceUsd(product: F2Product, partySelected: boolean) {
+/**
+ * Satis fiyati kademesi.
+ *   'perakende' -> Satis 1 (priceUsd)   — varsayilan
+ *   'toptan'    -> Satis 2 (priceUsd2)  — bilerek secilir
+ */
+export type SalesPriceTier = 'perakende' | 'toptan';
+
+/**
+ * Satis satirinin birim fiyatini belirler.
+ *
+ * Oncelik sirasi degismedi: musterinin bu urunu EN SON aldigi fiyat her zaman
+ * once gelir. Kademe yalnizca musterinin daha once almadigi urunlerde devreye
+ * girer — istenen davranis buydu.
+ */
+export function resolveSalesUnitPriceUsd(
+  product: F2Product,
+  partySelected: boolean,
+  tier: SalesPriceTier = 'perakende'
+) {
   const partyUsd = resolvePartyPriceUsd(product, partySelected);
   if (partyUsd != null) return partyUsd;
+  if (tier === 'toptan' && product.priceUsd2 != null && product.priceUsd2 > 0) {
+    return roundPrice(product.priceUsd2);
+  }
   return roundPrice(product.priceUsd);
 }
 

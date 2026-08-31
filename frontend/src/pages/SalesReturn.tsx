@@ -19,6 +19,7 @@ import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import { useAppNavigationOptional } from '../context/AppNavigationContext';
 import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
+import { useQuantityFocus } from '../hooks/useQuantityFocus';
 import { useHoldKeyReveal } from '../hooks/useHoldKeyReveal';
 import { depotLabel } from '../lib/depots';
 import {
@@ -188,6 +189,8 @@ export default function SalesReturn({
   const handlePrint = useCallback(() => {
     printDocument();
   }, []);
+
+  const { setQuantityRef, focusQuantity } = useQuantityFocus();
 
   const f2 = useF2ProductSearch({
     open: searchModal,
@@ -480,10 +483,11 @@ export default function SalesReturn({
         recordF2ProductSelection('return', product.id, selectedCustomer.id);
       }
       const unitPriceTl = roundPrice(product.priceUsd);
+      const rowId = newRowId('manual', product.id);
       setCart((prev) => [
         ...prev,
         {
-          rowId: newRowId('manual', product.id),
+          rowId,
           productId: product.id,
           productName: productDisplayName(product),
           productSku: product.sku,
@@ -500,24 +504,27 @@ export default function SalesReturn({
       ]);
       notify('success', `${productDisplayName(product)} sepete eklendi — fiyatı satırda düzenleyebilirsiniz.`);
       setWarning(null);
+      focusQuantity(rowId);
     },
-    [notify, selectedCustomer]
+    [notify, selectedCustomer, focusQuantity]
   );
 
   const duplicateReturnLine = useCallback(
     (line: ReturnCartLine) => {
+      const rowId = newRowId('dup', line.productId);
       setCart((prev) => [
         ...prev,
         {
           ...line,
-          rowId: newRowId('dup', line.productId),
+          rowId,
           returnQty: 1,
           isChinaReturn: false,
         },
       ]);
       notify('success', 'Ayrı kalem eklendi — Çin iade tikini satır satır işaretleyin.');
+      focusQuantity(rowId);
     },
-    [notify]
+    [notify, focusQuantity]
   );
 
   const pickProductForReturn = useCallback(
@@ -551,10 +558,11 @@ export default function SalesReturn({
 
         recordF2ProductSelection('return', product.id, selectedCustomer.id);
 
+        const rowId = newRowId('ret', data.product.id);
         setCart((prev) => [
           ...prev,
           {
-            rowId: newRowId('ret', data.product.id),
+            rowId,
             productId: data.product.id,
             productName: productDisplayName(data.product),
             productSku: data.product.sku,
@@ -577,6 +585,7 @@ export default function SalesReturn({
             roundPrice(data.unitPrice / data.exchangeRate)
           )} · ${data.invoiceNo}`
         );
+        focusQuantity(rowId);
       } catch (error) {
         const message =
           axios.isAxiosError(error) && error.response?.data?.message
@@ -587,7 +596,7 @@ export default function SalesReturn({
         setPickingProduct(false);
       }
     },
-    [selectedCustomer, closeSearchModal, notify]
+    [selectedCustomer, closeSearchModal, notify, focusQuantity]
   );
 
   const handleSearchKeyDown = useF2KeyboardNav({
@@ -1590,6 +1599,7 @@ export default function SalesReturn({
                           </td>
                           <td className="px-4 py-3 text-right">
                             <input
+                              ref={setQuantityRef(line.rowId)}
                               type="number"
                               min="0"
                               step="1"

@@ -4,8 +4,10 @@ import './index.css'
 import App from './App.tsx'
 import { setupAuthInterceptor } from './lib/api'
 import { loadTenantConfig } from './lib/tenantConfig'
+import { guardNumberInputsFromWheel } from './lib/numberInputGuard'
 
 setupAuthInterceptor()
+guardNumberInputsFromWheel()
 
 // Firma bilgisi ConfigMap'ten gelir — arayüz çizilmeden önce yüklenmeli ki
 // giriş ekranında bir an yanlış/varsayılan marka görünmesin.

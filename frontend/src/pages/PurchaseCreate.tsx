@@ -10,6 +10,7 @@ import F2ProductList, {
 } from '../components/F2ProductList';
 import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
+import { useQuantityFocus } from '../hooks/useQuantityFocus';
 import {
   API_BASE,
   ensureArray,
@@ -147,6 +148,7 @@ export default function PurchaseCreate({
   );
 
   const supplierSearchRef = useRef<HTMLInputElement>(null);
+  const { setQuantityRef, focusQuantity } = useQuantityFocus();
 
   const f2 = useF2ProductSearch({
     open: searchModal,
@@ -384,6 +386,14 @@ export default function PurchaseCreate({
       product as F2Product,
       Boolean(selectedSupplier)
     );
+
+    // Odaklanacak satırı önceden belirle: ürün sepette varsa onun satırı,
+    // yoksa şimdi üretilen yeni satır. rowId'yi setCart dışında üretiyoruz ki
+    // güncelleyici iki kez çağrılsa bile aynı kimlik kullanılsın.
+    const existingRow = cart.find((item) => item.product.id === product.id);
+    const newRowId = `row-${product.id}-${Date.now()}`;
+    const targetRowId = existingRow ? existingRow.rowId : newRowId;
+
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
@@ -396,7 +406,7 @@ export default function PurchaseCreate({
       return [
         ...prev,
         {
-          rowId: `row-${product.id}-${Date.now()}`,
+          rowId: newRowId,
           product: product as Product,
           quantity: 1,
           unitPriceUsd,
@@ -404,6 +414,8 @@ export default function PurchaseCreate({
       ];
     });
     closeSearchModal();
+    // Adet kutusu odaklı ve seçili gelsin — kullanıcı doğrudan sayı tuşlasın
+    focusQuantity(targetRowId);
   };
 
   const handleModalKeyDown = useF2KeyboardNav({
@@ -1015,6 +1027,7 @@ export default function PurchaseCreate({
                       </td>
                       <td className="px-3 py-2 text-right">
                         <input
+                          ref={setQuantityRef(item.rowId)}
                           type="number"
                           min="1"
                           step="1"

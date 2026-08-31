@@ -51,7 +51,7 @@ type RecentInvoice = {
   totalAmountUsd?: number;
   exchangeRate?: number;
   createdAt: string;
-  customer: { id: number; code: string; name: string };
+  customer: { id: number; code: string; name: string; city?: string | null };
 };
 
 type DashboardProps = {
@@ -72,7 +72,7 @@ type RecentPayment = {
   receiptNo?: string | null;
   createdAt: string;
   safe: { id: number; name: string; currency: string };
-  customer: { id: number; code: string; name: string } | null;
+  customer: { id: number; code: string; name: string; city?: string | null } | null;
 };
 
 type DashboardInsights = {
@@ -209,10 +209,17 @@ export default function Dashboard({
     [notify, openEditor]
   );
 
+  /**
+   * Kaydettikten sonra düzenleme ekranında KALINIR.
+   *
+   * Önceden closeEditor() çağrılıyordu; o da geri gidip kullanıcıyı ana
+   * sayfaya düşürüyordu. Fişi kaydeden kişi genellikle sonucu görmek ya da
+   * küçük bir düzeltme daha yapmak istiyor. Ekrandan çıkmak isteyen geri
+   * tuşunu kullanır.
+   */
   const handleSaved = useCallback(() => {
-    closeEditor();
     onDataChange?.();
-  }, [closeEditor, onDataChange]);
+  }, [onDataChange]);
 
   const openPaymentEdit = useCallback((payment: RecentPayment) => {
     if (!payment.customer) {
@@ -620,6 +627,8 @@ export default function Dashboard({
                     >
                       {inv.customer.name}
                     </CustomerNameLink>
+                    {/* Şehir: aynı isimli müşterileri ayırt etmeyi kolaylaştırır */}
+                    {inv.customer.city ? ` · ${inv.customer.city}` : ''}
                     {' · '}
                     {formatDate(inv.createdAt)}
                   </p>
@@ -695,6 +704,12 @@ export default function Dashboard({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-slate-800">
                         {payment.customer ? payment.customer.name : 'Müşterisiz hareket'}
+                        {payment.customer?.city ? (
+                          <span className="font-normal text-slate-400">
+                            {' · '}
+                            {payment.customer.city}
+                          </span>
+                        ) : null}
                       </p>
                       <p className="truncate text-xs text-slate-500">
                         {payment.customer ? (
