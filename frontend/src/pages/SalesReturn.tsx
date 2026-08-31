@@ -915,7 +915,18 @@ export default function SalesReturn({
         </div>
 
         <div className="receipt-slip hidden">
-          <p className="receipt-slip-title">{displayInvoiceNo || 'İade Fişi'}</p>
+          {/* Firma bilgisi EN USTTE — fis duzeninde once kimin kestigi,
+            sonra fis numarasi gelir. */}
+        {receiptPartyLines.length > 0 && (
+          <div className="pdf-party">
+            {receiptPartyLines.map((line) => (
+              <p key={line} className="pdf-party-line">
+                {line}
+              </p>
+            ))}
+          </div>
+        )}
+        <p className="receipt-slip-title">{displayInvoiceNo || 'İade Fişi'}</p>
           {receiptPartyLines.length > 0 ? (
             <div className="receipt-slip-party">
               {receiptPartyLines.map((line) => (
@@ -1187,15 +1198,6 @@ export default function SalesReturn({
     <div className="space-y-4 print:space-y-0">
       <div className="print-pdf-doc hidden">
         <h1>{displayInvoiceNo || 'İade Fişi'}</h1>
-        {receiptPartyLines.length > 0 && (
-          <div className="pdf-party">
-            {receiptPartyLines.map((line) => (
-              <p key={line} className="pdf-party-line">
-                {line}
-              </p>
-            ))}
-          </div>
-        )}
         <p className="pdf-meta">Satış iade · {settlementLabel}</p>
         {orderNotes.trim() && (
           <div className="pdf-notes">

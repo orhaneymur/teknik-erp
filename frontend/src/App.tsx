@@ -42,6 +42,7 @@ import CashFlowReport from './pages/CashFlowReport';
 import CustomerStatement from './pages/CustomerStatement';
 import CustomerDetail from './pages/CustomerDetail';
 import AnalyticsReport from './pages/AnalyticsReport';
+import SalesBreakdownReport from './pages/SalesBreakdownReport';
 import Login from './pages/Login';
 import { AppNavigationContext } from './context/AppNavigationContext';
 
@@ -478,6 +479,8 @@ function App() {
         return <CustomerBalances />;
       case 'report-sales':
         return <ProfitReport />;
+      case 'report-sales-breakdown':
+        return <SalesBreakdownReport onNotify={showNotification} />;
       case 'report-analytics':
         return <AnalyticsReport />;
       case 'report-stock-value':

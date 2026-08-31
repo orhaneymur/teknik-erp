@@ -4868,6 +4868,192 @@ app.get('/api/reports/balances', async () => {
   };
 });
 
+/**
+ * SATIS KIRILIM RAPORU — kategori, musteri, iade ve Cin iade tek yerde.
+ *
+ * Tarih araligi verilmezse icinde bulunulan ay alinir. Tutarlar USD.
+ *
+ * Gelir hesabinda satir toplami (`totalPrice`) tercih edilir; iskonto
+ * uygulanmis gercek tutar odur. Eski kayitlarda bos olabilecegi icin
+ * miktar x birim fiyat yedegi durur.
+ */
+app.get<{ Querystring: { from?: string; to?: string } }>(
+  '/api/reports/sales-breakdown',
+  async (request) => {
+    const now = new Date();
+    const parseDate = (value: string | undefined, fallback: Date) => {
+      if (!value) return fallback;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+    };
+
+    const from = parseDate(
+      request.query.from,
+      new Date(now.getFullYear(), now.getMonth(), 1)
+    );
+    const to = parseDate(request.query.to, now);
+    const toEnd = new Date(
+      to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999
+    );
+
+    const lineTotal = (item: {
+      totalPrice: number | null;
+      quantity: number;
+      unitPrice: number;
+    }) =>
+      item.totalPrice && item.totalPrice > 0
+        ? item.totalPrice
+        : item.quantity * item.unitPrice;
+
+    const items = await prisma.invoiceItem.findMany({
+      where: {
+        invoice: {
+          type: { in: ['SATIS', 'IADE'] },
+          createdAt: { gte: from, lte: toEnd },
+          ...ACTIVE_INVOICE_FILTER,
+        },
+      },
+      select: {
+        quantity: true,
+        unitPrice: true,
+        totalPrice: true,
+        isChinaReturn: true,
+        product: {
+          select: {
+            id: true,
+            costPrice: true,
+            categoryId: true,
+            category: { select: { id: true, name: true } },
+          },
+        },
+        invoice: {
+          select: {
+            id: true,
+            type: true,
+            customer: { select: { id: true, code: true, name: true, city: true } },
+          },
+        },
+      },
+    });
+
+    type Kirilim = {
+      id: number;
+      ad: string;
+      ek: string | null;
+      adet: number;
+      ciro: number;
+      maliyet: number;
+      kar: number;
+      faturaSayisi: number;
+    };
+
+    const kategoriler = new Map<number, Kirilim>();
+    const musteriler = new Map<number, Kirilim>();
+    const iadeler = new Map<number, Kirilim>();
+    const faturaKumeleri = new Map<number, Set<number>>();
+
+    let toplamCiro = 0;
+    let toplamMaliyet = 0;
+    let toplamIade = 0;
+    let cinIadeToplam = 0;
+    let cinIadeAdet = 0;
+
+    const ekle = (
+      harita: Map<number, Kirilim>,
+      id: number,
+      ad: string,
+      ek: string | null,
+      adet: number,
+      ciro: number,
+      maliyet: number
+    ): Kirilim => {
+      const mevcut = harita.get(id);
+      if (mevcut) {
+        mevcut.adet += adet;
+        mevcut.ciro += ciro;
+        mevcut.maliyet += maliyet;
+        mevcut.kar = mevcut.ciro - mevcut.maliyet;
+        return mevcut;
+      }
+      const yeni: Kirilim = {
+        id, ad, ek, adet, ciro, maliyet,
+        kar: ciro - maliyet,
+        faturaSayisi: 0,
+      };
+      harita.set(id, yeni);
+      return yeni;
+    };
+
+    for (const item of items) {
+      const tutar = lineTotal(item);
+      const maliyet = (item.product?.costPrice ?? 0) * item.quantity;
+
+      if (item.invoice.type === 'SATIS') {
+        toplamCiro += tutar;
+        toplamMaliyet += maliyet;
+
+        ekle(
+          kategoriler,
+          item.product?.categoryId ?? 0,
+          item.product?.category?.name ?? 'Kategorisiz',
+          null,
+          item.quantity, tutar, maliyet
+        );
+
+        const musteri = item.invoice.customer;
+        if (musteri) {
+          const kayit = ekle(
+            musteriler, musteri.id, musteri.name, musteri.city,
+            item.quantity, tutar, maliyet
+          );
+          const kume = faturaKumeleri.get(musteri.id) ?? new Set<number>();
+          kume.add(item.invoice.id);
+          faturaKumeleri.set(musteri.id, kume);
+          kayit.faturaSayisi = kume.size;
+        }
+      } else {
+        toplamIade += tutar;
+        const musteri = item.invoice.customer;
+        if (musteri) {
+          ekle(
+            iadeler, musteri.id, musteri.name, musteri.city,
+            item.quantity, tutar, maliyet
+          );
+        }
+        if (item.isChinaReturn) {
+          cinIadeToplam += tutar;
+          cinIadeAdet += item.quantity;
+        }
+      }
+    }
+
+    const sirala = (harita: Map<number, Kirilim>) =>
+      [...harita.values()].sort((a, b) => b.ciro - a.ciro);
+
+    const kar = toplamCiro - toplamMaliyet;
+
+    return {
+      success: true,
+      data: {
+        aralik: { from: from.toISOString(), to: toEnd.toISOString() },
+        toplam: {
+          ciro: toplamCiro,
+          maliyet: toplamMaliyet,
+          kar,
+          marjYuzde: toplamCiro > 0 ? (kar / toplamCiro) * 100 : 0,
+          iade: toplamIade,
+          netCiro: toplamCiro - toplamIade,
+        },
+        cinIade: { tutar: cinIadeToplam, adet: cinIadeAdet },
+        kategoriler: sirala(kategoriler),
+        musteriler: sirala(musteriler),
+        iadeler: sirala(iadeler),
+      },
+      message: 'Sales breakdown retrieved successfully.',
+    };
+  }
+);
+
 app.get('/api/reports/profit', async () => {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);

@@ -871,9 +871,8 @@ export default function SalesCreate({
 
       {/* Termal fiş (72.1mm) — yalnızca fiş yazıcısı */}
       <div className="receipt-slip hidden">
-        <p className="receipt-slip-title">
-          {displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}
-        </p>
+        {/* Firma bilgisi EN USTTE — fis duzeninde once kimin kestigi,
+            sonra fis numarasi gelir. */}
         {receiptPartyLines.length > 0 && (
           <div className="receipt-slip-party">
             {receiptPartyLines.map((line) => (
@@ -883,6 +882,9 @@ export default function SalesCreate({
             ))}
           </div>
         )}
+        <p className="receipt-slip-title">
+          {displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}
+        </p>
         <p className="receipt-slip-meta">
           {invoiceDate}
           {processedBy ? ` · ${processedBy}` : ''}

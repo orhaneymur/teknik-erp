@@ -548,9 +548,8 @@ export default function CustomerStatement({
       </div>
 
       <div className="receipt-slip hidden">
-        <p className="receipt-slip-title">
-          {printLines.length > 1 ? 'Toplu Fiş' : 'Fiş'}
-        </p>
+        {/* Firma bilgisi EN USTTE — fis duzeninde once kimin kestigi,
+            sonra fis numarasi gelir. */}
         {receiptPartyLines.length > 0 && (
           <div className="receipt-slip-party">
             {receiptPartyLines.map((line) => (
@@ -560,6 +559,9 @@ export default function CustomerStatement({
             ))}
           </div>
         )}
+        <p className="receipt-slip-title">
+          {printLines.length > 1 ? 'Toplu Fiş' : 'Fiş'}
+        </p>
         <p className="receipt-slip-meta">
           {printLines.length} hareket · {new Date().toLocaleDateString('tr-TR')}
         </p>

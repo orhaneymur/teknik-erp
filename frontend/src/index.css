@@ -410,14 +410,14 @@
       padding: 0;
       color: #000;
       font-family: "Consolas", "Courier New", ui-monospace, monospace;
-      font-size: 9px;
+      font-size: 11px;
       line-height: 1.2;
     }
 
     .receipt-slip-title {
       margin: 0 0 2px;
       text-align: center;
-      font-size: 11px;
+      font-size: 14px;
       font-weight: 700;
       letter-spacing: 0.02em;
     }
@@ -425,7 +425,7 @@
     .receipt-slip-customer {
       margin: 0 0 1px;
       text-align: center;
-      font-size: 9px;
+      font-size: 11px;
       font-weight: 600;
       white-space: normal;
       overflow: visible;
@@ -440,7 +440,7 @@
     .receipt-slip-party-line {
       margin: 0;
       text-align: center;
-      font-size: 8px;
+      font-size: 10px;
       font-weight: 600;
       white-space: normal;
       word-break: break-word;
@@ -448,14 +448,14 @@
     }
 
     .receipt-slip-party-line:first-child {
-      font-size: 9px;
+      font-size: 12px;
       font-weight: 700;
     }
 
     .receipt-slip-meta {
       margin: 0;
       text-align: center;
-      font-size: 8px;
+      font-size: 10px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -464,13 +464,13 @@
     .receipt-slip-preorder {
       margin: 2px 0 0;
       text-align: center;
-      font-size: 8px;
+      font-size: 10px;
       font-weight: 700;
     }
 
     .receipt-slip-notes {
       margin: 3px 0 0;
-      font-size: 8px;
+      font-size: 10px;
       white-space: pre-wrap;
       word-break: break-word;
     }
@@ -483,7 +483,7 @@
     .receipt-slip-disclaimer {
       margin: 6px 0 0;
       text-align: center;
-      font-size: 7px;
+      font-size: 9px;
       font-weight: 600;
       line-height: 1.3;
       white-space: normal;
@@ -495,12 +495,12 @@
       align-items: baseline;
       gap: 3px;
       width: 100%;
-      font-size: 9px;
+      font-size: 11px;
       line-height: 1.25;
     }
 
     .receipt-item-head {
-      font-size: 8px;
+      font-size: 10px;
       font-weight: 700;
       text-transform: uppercase;
       white-space: nowrap;

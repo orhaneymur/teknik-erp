@@ -33,6 +33,7 @@ export type PageId =
   | 'customer-balance'
   | 'report-sales'
   | 'report-analytics'
+  | 'report-sales-breakdown'
   | 'report-stock-value'
   | 'report-cash-flow'
   | 'report-customer-statement'
@@ -129,6 +130,7 @@ export const menuCategories: MenuCategory[] = [
     icon: BarChart3,
     items: [
       { id: 'report-analytics', label: 'İşletme Özeti' },
+      { id: 'report-sales-breakdown', label: 'Satış Kırılımı' },
       { id: 'report-sales', label: 'Kâr-Zarar Raporu' },
       { id: 'report-stock-value', label: 'Stok Değeri' },
       { id: 'report-cash-flow', label: 'Kasa Raporu' },
