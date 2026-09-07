@@ -190,12 +190,12 @@ export default function SalesCreate({
   const [printParty, setPrintParty] = useState<ReceiptParty | null>(null);
   const [processedBy, setProcessedBy] = useState('');
   /**
-   * Fiyat kademesi. Varsayilan PERAKENDE (Satis 1) — toptan fiyat herkese
-   * gecerli olmasin diye bilerek secilmesi gerekiyor. Musterinin daha once
-   * aldigi fiyat varsa o her zaman onceliklidir; kademe yalnizca ilk kez
-   * satilan urunlerde devreye girer.
+   * Fiyat kademesi. Varsayilan TOPTAN (Satis 1) — is modeli toptanci
+   * oldugu icin musterilerin cogunlugu bayidir. Perakende fiyat (Satis 2)
+   * bilerek secilir. Musterinin daha once aldigi fiyat varsa o her zaman
+   * onceliklidir; kademe yalnizca ilk kez satilan urunlerde devreye girer.
    */
-  const [priceTier, setPriceTier] = useState<SalesPriceTier>('perakende');
+  const [priceTier, setPriceTier] = useState<SalesPriceTier>('toptan');
   const [f2Modal, setF2Modal] = useState(false);
   const [historyProduct, setHistoryProduct] = useState<{
     id: number;
@@ -1224,9 +1224,9 @@ export default function SalesCreate({
           </div>
 
           {/* Fiyat kademesi — müşteri seçiliyken görünür.
-              Toptan fiyat herkese geçerli olmasın diye varsayılan perakendedir,
-              toptan bilerek seçilir. Müşterinin daha önce aldığı fiyat varsa o
-              her zaman önceliklidir; kademe yalnızca ilk kez satılan ürünlerde
+              Varsayılan toptandır (Satış 1); perakende bilerek seçilir.
+              Müşterinin daha önce aldığı fiyat varsa o her zaman
+              önceliklidir; kademe yalnızca ilk kez satılan ürünlerde
               devreye girer. */}
           {selectedCustomer && !isEditMode && (
             <div className="print:hidden">
@@ -1234,8 +1234,8 @@ export default function SalesCreate({
               <div className="inline-flex rounded-lg border border-slate-300 bg-slate-50 p-0.5">
                 {(
                   [
-                    { key: 'perakende', label: 'Satış 1 · Perakende' },
-                    { key: 'toptan', label: 'Satış 2 · Toptan' },
+                    { key: 'toptan', label: 'Satış 1 · Toptan' },
+                    { key: 'perakende', label: 'Satış 2 · Perakende' },
                   ] as const
                 ).map((option) => (
                   <button

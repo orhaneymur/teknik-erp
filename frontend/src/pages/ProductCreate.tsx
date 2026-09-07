@@ -522,7 +522,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
             </div>
 
             <div>
-              <label className={labelClass}>Satış 1 — Perakende (USD) *</label>
+              <label className={labelClass}>Satış 1 — Toptan (USD) *</label>
               <input
                 type="number"
                 min="0"
@@ -541,7 +541,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
             </div>
 
             <div>
-              <label className={labelClass}>Satış 2 — Toptan (USD)</label>
+              <label className={labelClass}>Satış 2 — Perakende (USD)</label>
               <input
                 type="number"
                 min="0"

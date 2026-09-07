@@ -229,9 +229,9 @@ type ProductExcelRow = {
   AlisFiyati?: string | number;
   /** Eski tek fiyatlı şablonlar — yalnızca içeri aktarmada okunur, dışa verilmez */
   SatisFiyati?: string | number;
-  /** Satış 1 (Perakende) — yoksa SatisFiyati kullanılır */
+  /** Satış 1 (Toptan) — yoksa SatisFiyati kullanılır */
   Satis1?: string | number;
-  /** Satış 2 (Toptan) — yoksa Satış 1 kopyalanır */
+  /** Satış 2 (Perakende) — yoksa Satış 1 kopyalanır */
   Satis2?: string | number;
   /** Muadil model adları — virgülle ayrılmış serbest metin */
   Uyumlu?: string;
@@ -535,7 +535,7 @@ export async function exportProductsExcel(
       Aciklama: description,
       Rmb: p.rbmPrice,
       AlisFiyati: p.costPrice,
-      /* Fiyat yalnızca Satis1 (perakende) ve Satis2 (toptan) olarak dışa verilir;
+      /* Fiyat yalnızca Satis1 (toptan) ve Satis2 (perakende) olarak dışa verilir;
          eski tek sütunlu SatisFiyati içeri aktarmada hâlâ okunur. */
       Satis1: p.priceUsd > 0 ? p.priceUsd : p.priceTl,
       Satis2: p.priceUsd2 > 0 ? p.priceUsd2 : p.priceUsd > 0 ? p.priceUsd : p.priceTl,

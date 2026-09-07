@@ -11,7 +11,7 @@ type StockValueRow = {
   costPrice: number;
   priceUsd: number;
   stockValue: number;
-  retailValue: number;
+  saleValue: number;
 };
 
 type ReportData = {
@@ -19,7 +19,7 @@ type ReportData = {
   totals: {
     totalQuantity: number;
     totalCostValue: number;
-    totalRetailValue: number;
+    totalSaleValue: number;
   };
 };
 
@@ -97,9 +97,9 @@ export default function StockValueReport() {
           </p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="text-xs text-slate-500">Perakende Değeri ($)</p>
+          <p className="text-xs text-slate-500">Toptan Değeri ($)</p>
           <p className="text-2xl font-bold text-indigo-700">
-            {formatMoney(data.totals.totalRetailValue)}
+            {formatMoney(data.totals.totalSaleValue)}
           </p>
         </div>
       </div>

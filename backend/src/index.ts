@@ -738,7 +738,7 @@ const PRODUCT_SEARCH_SELECT = {
   costPrice: true,
   priceTl: true,
   priceUsd: true,
-  // Satis 2 (toptan) — satis ekraninda fiyat kademesi secilebilsin diye doner
+  // Satis 2 (perakende) — satis ekraninda fiyat kademesi secilebilsin diye doner
   priceUsd2: true,
   stocks: {
     where: { branch: { name: DEPOT_NAMES.MERKEZ } },
@@ -802,7 +802,7 @@ function mapProductSearchExtras(
     costUsd,
     priceTl: priceUsd,
     priceUsd,
-    // Satış 2 (toptan). Tanımlı değilse Satış 1 ile aynı kabul edilir.
+    // Satış 2 (perakende). Tanımlı değilse Satış 1 ile aynı kabul edilir.
     priceUsd2:
       toFloat(product.priceUsd2) > 0 ? toFloat(product.priceUsd2) : priceUsd,
     lastPartyPriceTl,
@@ -5968,23 +5968,28 @@ app.get('/api/reports/stock-value', async (request, reply) => {
     costPrice: row.product.costPrice,
     priceUsd: row.product.priceUsd,
     stockValue: row.quantity * row.product.costPrice,
-    retailValue: row.quantity * row.product.priceUsd,
+    /*
+     * Satis degeri Satis 1 (priceUsd) uzerinden hesaplanir; Satis 1 TOPTAN
+     * fiyattir. Alan adi eskiden retailValue idi ve "Perakende Degeri" diye
+     * gosteriliyordu — ikisi de yanlisti, hesap hep toptan uzerindendi.
+     */
+    saleValue: row.quantity * row.product.priceUsd,
   }));
 
   const totals = rows.reduce(
     (acc, row) => ({
       totalQuantity: acc.totalQuantity + row.quantity,
       totalCostValue: acc.totalCostValue + row.stockValue,
-      totalRetailValue: acc.totalRetailValue + row.retailValue,
+      totalSaleValue: acc.totalSaleValue + row.saleValue,
     }),
-    { totalQuantity: 0, totalCostValue: 0, totalRetailValue: 0 }
+    { totalQuantity: 0, totalCostValue: 0, totalSaleValue: 0 }
   );
 
   if (request.headers.accept?.includes('text/csv')) {
-    const header = 'SKU;Ürün;Adet;Maliyet;Stok Değeri;Perakende Değeri';
+    const header = 'SKU;Ürün;Adet;Maliyet;Stok Değeri;Toptan Değeri';
     const lines = rows.map(
       (r) =>
-        `${r.sku};${r.name};${r.quantity};${r.costPrice};${r.stockValue.toFixed(2)};${r.retailValue.toFixed(2)}`
+        `${r.sku};${r.name};${r.quantity};${r.costPrice};${r.stockValue.toFixed(2)};${r.saleValue.toFixed(2)}`
     );
     reply.header('Content-Type', 'text/csv; charset=utf-8');
     reply.header(

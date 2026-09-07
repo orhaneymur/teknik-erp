@@ -142,10 +142,6 @@ Kararlar ve adımlar için ayrıntı: bu belgenin 8. bölümü.
       31 Ağustos'ta denendi, kesinti yarattı — bkz. aşağıdaki uyarı
 - [ ] **Firma bazlı özellik bayrakları** — altyapı hazır (`config.json`),
       ilk özel istek geldiğinde eklenecek
-- [ ] **Şema yorumu yanlış** — `schema.prisma` "Satış 1 (Toptan)" diyor,
-      arayüz ve Excel "Satış 1 (Perakende)" diyor. Davranışı etkilemiyor
-      (yalnızca yorum), ama fiyat sitesi bu ayrımı müşteriye göstereceği
-      için önce doğrusu teyit edilmeli.
 
 ---
 
@@ -250,7 +246,9 @@ sitedir.
 2. **Kategori boşluğu.** Sitenin ağacı parça tipi ister (Ekran, Batarya).
    ERP'de kategori tek: "iPhone Yedek Parça"; parça tipi yalnızca ürün
    adının içinde geçiyor. Bu çözülmeden ERP verisi siteyi besleyemez.
-3. **Satış 1 / Satış 2 hangisi toptan?** Şema yorumu ile arayüz çelişiyor.
+3. ~~Satış 1 / Satış 2 hangisi toptan?~~ **KARARLAŞTI (7 Eylül):**
+   Satış 1 = TOPTAN, Satış 2 = PERAKENDE. Tüm ekran etiketleri, Excel
+   yorumları ve satış ekranındaki varsayılan kademe buna göre düzeltildi.
 4. **Para birimi.** ERP tamamen USD; site TRY/USD/EUR destekliyor.
    Müşteriye hangisi gösterilecek, TL ise kur nereden?
 5. **Site herkese açık mı?** Toptan fiyat ticari sırdır.

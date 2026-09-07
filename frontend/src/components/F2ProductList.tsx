@@ -143,10 +143,14 @@ function resolvePartyPriceUsd(product: F2Product, partySelected: boolean) {
 
 /**
  * Satis fiyati kademesi.
- *   'perakende' -> Satis 1 (priceUsd)   — varsayilan
- *   'toptan'    -> Satis 2 (priceUsd2)  — bilerek secilir
+ *   'toptan'    -> Satis 1 (priceUsd)   — varsayilan
+ *   'perakende' -> Satis 2 (priceUsd2)  — bilerek secilir
+ *
+ * Satis 1 TOPTAN fiyattir ve satista varsayilan olarak o kullanilir; is
+ * modeli toptanci oldugu icin musterilerin cogunlugu bayidir. Perakende
+ * fiyat bilerek secilir.
  */
-export type SalesPriceTier = 'perakende' | 'toptan';
+export type SalesPriceTier = 'toptan' | 'perakende';
 
 /**
  * Satis satirinin birim fiyatini belirler.
@@ -158,11 +162,11 @@ export type SalesPriceTier = 'perakende' | 'toptan';
 export function resolveSalesUnitPriceUsd(
   product: F2Product,
   partySelected: boolean,
-  tier: SalesPriceTier = 'perakende'
+  tier: SalesPriceTier = 'toptan'
 ) {
   const partyUsd = resolvePartyPriceUsd(product, partySelected);
   if (partyUsd != null) return partyUsd;
-  if (tier === 'toptan' && product.priceUsd2 != null && product.priceUsd2 > 0) {
+  if (tier === 'perakende' && product.priceUsd2 != null && product.priceUsd2 > 0) {
     return roundPrice(product.priceUsd2);
   }
   return roundPrice(product.priceUsd);
