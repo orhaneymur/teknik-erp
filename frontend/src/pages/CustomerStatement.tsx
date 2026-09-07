@@ -25,6 +25,7 @@ import { useAppNavigationOptional } from '../context/AppNavigationContext';
 import { buildReceiptPartyLines, RECEIPT_DISCLAIMER } from '../lib/receiptParty';
 import {
   API_BASE,
+  authFetch,
   balanceStyles,
   formatDate,
   formatMoney,
@@ -389,7 +390,7 @@ export default function CustomerStatement({
 
   const downloadCsv = () => {
     if (customerId === '') return;
-    fetch(`${API_BASE}/api/reports/customer-statement?customerId=${customerId}`, {
+    authFetch(`${API_BASE}/api/reports/customer-statement?customerId=${customerId}`, {
       headers: { Accept: 'text/csv' },
     })
       .then((r) => r.blob())

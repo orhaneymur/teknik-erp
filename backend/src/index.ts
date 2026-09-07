@@ -1712,6 +1712,64 @@ if (!JWT_SECRET) {
 
 app.register(jwt, { secret: JWT_SECRET || 'teknikerp-dev-secret-degistirin' });
 app.register(rateLimit, { global: false });
+
+/**
+ * Kimlik dogrulamasi GEREKTIRMEYEN uclar.
+ *
+ * Bu listenin disindaki her /api ucu gecerli bir jeton ister. Liste
+ * bilerek kisa: her yeni acik uc, disaridan okunabilen bir veri demek.
+ *
+ *   /api/health   Kubernetes canlilik/hazirlik yoklamasi buraya gider.
+ *                 Kilitlenirse pod'lar saglıksiz sayilir ve surekli
+ *                 yeniden baslar — yani KESINTI olur.
+ *   /api/version  Dagitim betigi (k8s/deploy-production.sh) surumun
+ *                 gectigini bununla dogruluyor. Yalnizca surum metni
+ *                 doner, veri sizdirmaz.
+ *   /api/auth/*   Giris ucu ile oturum kontrolu; ikisi de kendi
+ *                 yanitini kendi uretir.
+ */
+const KIMLIKSIZ_UCLAR = new Set([
+  'GET /api/health',
+  'GET /api/version',
+  'POST /api/auth/login',
+  'GET /api/auth/me',
+]);
+
+/**
+ * TUM /api uclarini jetonla korur.
+ *
+ * Neden gerekti: 7 Eylul 2026'da fark edildi ki 62 ucun HICBIRINDE
+ * kimlik kontrolu yoktu. Giris ekrani yalnizca ARAYUZU kilitliyordu;
+ * tarayici /api'ye ayni adresten gittigi icin nginx istekleri dogrudan
+ * backend'e iletiyordu. Yani adresi bilen herkes
+ * https://<musteri>/api/customers ile 181 musterinin adini, adresini,
+ * telefonunu ve vergi numarasini indirebiliyordu. Fatura ve stok uclari
+ * da ayni sekilde aciktı.
+ *
+ * Kanca kok seviyesindedir; hangi sirayla tanimlandigina bakmaksizin
+ * butun uclara uygulanir. Yeni bir uc eklendiginde ek bir is gerekmez —
+ * varsayilan KAPALI'dir.
+ */
+app.addHook('onRequest', async (request, reply) => {
+  // Yalnizca API korunur; baska yol backend tarafindan sunulmuyor
+  const yol = request.url.split('?')[0];
+  if (!yol.startsWith('/api/')) return;
+
+  // Tarayicinin CORS on istegi jeton tasimaz
+  if (request.method === 'OPTIONS') return;
+
+  if (KIMLIKSIZ_UCLAR.has(`${request.method} ${yol}`)) return;
+
+  try {
+    await request.jwtVerify();
+  } catch {
+    return reply.status(401).send({
+      success: false,
+      message: 'Oturum gerekli. Lütfen tekrar giriş yapın.',
+      errors: null,
+    });
+  }
+});
 app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 
 // Yönetici girişi de müşteri başına farklı. ADMIN_PASSWORD_HASH tercih edilir

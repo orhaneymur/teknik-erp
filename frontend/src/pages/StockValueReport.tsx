@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Download, Package } from 'lucide-react';
-import { API_BASE, formatMoney } from '../lib/api';
+import { API_BASE, authFetch, formatMoney } from '../lib/api';
 
 type StockValueRow = {
   productId: number;
@@ -37,7 +37,7 @@ export default function StockValueReport() {
   }, []);
 
   const downloadCsv = () => {
-    fetch(`${API_BASE}/api/reports/stock-value`, {
+    authFetch(`${API_BASE}/api/reports/stock-value`, {
       headers: { Accept: 'text/csv' },
     })
       .then((r) => r.blob())

@@ -58,6 +58,49 @@ export function setupAuthInterceptor() {
     }
     return config;
   });
+
+  /*
+   * Jeton suresi dolunca (7 gun) sunucu 401 doner. Eskiden bu durumda
+   * ekranlar sessizce bos kaliyordu; kullanici "veri gelmiyor" diyordu.
+   * Artik oturum temizlenir ve giris ekranina donulur.
+   *
+   * Giris denemesinin kendisi haric: yanlis sifrede de 401 gelir, orada
+   * kullanici zaten giris ekranindadir.
+   */
+  axios.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      const status = error?.response?.status;
+      const url = String(error?.config?.url ?? '');
+      const oturumVardi = localStorage.getItem(AUTH_TOKEN_KEY) != null;
+
+      if (status === 401 && oturumVardi && !url.includes('/api/auth/login')) {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        window.location.reload();
+      }
+      return Promise.reject(error);
+    }
+  );
+}
+
+/**
+ * Jetonu ekleyen `fetch`.
+ *
+ * CSV indirmeleri axios yerine dogrudan `fetch` kullaniyordu; axios'un
+ * araya girip jetonu eklemesi de boylece atlaniyordu. Uclar kimlik
+ * istemedigi surece bu fark edilmiyordu — kapatilinca uc rapor indirmesi
+ * birden calismaz olurdu.
+ */
+export function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  return fetch(url, {
+    ...init,
+    headers: {
+      ...(init.headers ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
 }
 
 export type PaginatedListResponse<T> = {

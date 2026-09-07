@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Download, Wallet } from 'lucide-react';
-import { API_BASE, formatDate, formatMoney } from '../lib/api';
+import { API_BASE, authFetch, formatDate, formatMoney } from '../lib/api';
 
 type Transaction = {
   id: number;
@@ -43,7 +43,7 @@ export default function CashFlowReport() {
   }, [from, to]);
 
   const downloadCsv = () => {
-    fetch(`${API_BASE}/api/reports/cash-flow?from=${from}&to=${to}`, {
+    authFetch(`${API_BASE}/api/reports/cash-flow?from=${from}&to=${to}`, {
       headers: { Accept: 'text/csv' },
     })
       .then((r) => r.blob())
