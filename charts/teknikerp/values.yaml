@@ -13,6 +13,10 @@ tenant:
   # Fiş altına basılan iletişim satırı (isteğe bağlı).
   contact: ""
   currency: "TRY"
+  # İndirilen Excel dosyalarının başındaki kısaltma — ör. "SM".
+  # Boş bırakılırsa firma adından türetilir ("Shenzhen Market" -> "SM").
+  # Prova ve canlı ortamı ayırmak için buraya farklı bir etiket verilebilir.
+  fileTag: ""
 
 # ── Alan adı ───────────────────────────────────────────────────────────────
 domain:

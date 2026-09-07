@@ -18,5 +18,6 @@ data:
       "companyName": {{ required "tenant.companyName zorunludur" .Values.tenant.companyName | quote }},
       "documentTitle": {{ .Values.tenant.companyName | quote }},
       "companyContact": {{ .Values.tenant.contact | quote }},
-      "currency": {{ .Values.tenant.currency | quote }}
+      "currency": {{ .Values.tenant.currency | quote }},
+      "fileTag": {{ .Values.tenant.fileTag | default "" | quote }}
     }

@@ -20,6 +20,11 @@ export type TenantConfig = {
   companyContact: string;
   /** Varsayılan para birimi kodu */
   currency: string;
+  /**
+   * İndirilen dosya adlarındaki firma kısaltması — ör. "SM".
+   * Boş bırakılırsa firma adından türetilir (bkz. lib/exportFilename.ts).
+   */
+  fileTag: string;
 };
 
 const FALLBACK: TenantConfig = {
@@ -28,6 +33,7 @@ const FALLBACK: TenantConfig = {
   documentTitle: 'TeknikERP',
   companyContact: '',
   currency: 'TRY',
+  fileTag: '',
 };
 
 let current: TenantConfig = FALLBACK;
@@ -50,6 +56,7 @@ export async function loadTenantConfig(): Promise<TenantConfig> {
       documentTitle: raw.documentTitle?.trim() || `${companyName} ERP`,
       companyContact: raw.companyContact?.trim() || '',
       currency: raw.currency?.trim() || FALLBACK.currency,
+      fileTag: raw.fileTag?.trim() || '',
     };
   } catch {
     console.warn('config.json okunamadi — varsayilan marka kullaniliyor.');

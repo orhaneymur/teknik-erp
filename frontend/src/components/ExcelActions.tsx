@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import axios from 'axios';
 import { Download, Upload } from 'lucide-react';
 import { API_BASE } from '../lib/api';
+import { buildExportFilename } from '../lib/exportFilename';
 
 type ImportResult = {
   created: number;
@@ -13,6 +14,11 @@ type ImportResult = {
 type ExcelActionsProps = {
   exportPath: string;
   importPath: string;
+  /**
+   * Dosyanın taban adı — ör. "stoklar.xlsx". İndirilirken başına firma
+   * kısaltması, sonuna tarih-saat damgası eklenir:
+   * `SM-stoklar-20260907-1432.xlsx` (bkz. lib/exportFilename.ts).
+   */
   exportFilename: string;
   exportQuery?: Record<string, string>;
   importTimeoutMs?: number;
@@ -48,7 +54,7 @@ export default function ExcelActions({
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = exportFilename;
+      link.download = buildExportFilename(exportFilename);
       link.click();
       window.URL.revokeObjectURL(url);
       onNotify?.('success', 'Excel dosyası indirildi.');
