@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **31 Ağustos 2026**
+Son güncelleme: **7 Eylül 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -12,7 +12,7 @@ oturuma başlarken önce buraya bak.
 | Adres | Ortam | Sürüm | Ne için |
 |---|---|---|---|
 | `teknik.shenzhenmarket.com.tr` | **CANLI MÜŞTERİ** | **v1.9.2** | Shenzhen Market — gerçek kullanım |
-| `test.shenzhenmarket.com.tr` | Prova | v1.13.2 | Güncellemeler önce burada denenir |
+| `test.shenzhenmarket.com.tr` | Prova | v1.14.0 | Güncellemeler önce burada denenir |
 | `demo-erp.derneklab.com` | Vitrin | v1.9.2 | Müşteriye ürün gösterme |
 
 Üçü de ayrı namespace, ayrı veritabanı, ayrı disk, ayrı şifre.
@@ -87,17 +87,45 @@ c0f5638  v1.13.2  kod yenileme yalnizca eski otomatik kodlara,
 
 ## 4. BEKLEYEN İŞLER
 
+### Sırada — kod yazıldı, imaja girmedi
+
+v1.14.0 imajı çıktıktan SONRA yazıldı; bir sonraki sürümde (v1.14.1)
+provaya gidecek:
+
+- [ ] **Excel dosya adı** — indirilen dosya `SM-stoklar-20260907-1432.xlsx`
+      biçiminde iner (firma kısaltması + tarih-saat)
+- [ ] **İade faturasına kalem ekleme** — müşteri ekstresinden açılan iade
+      faturasına artık ürün eklenebiliyor
+- [ ] **Çin iade deposu düzeltmesi** — fatura düzenleme ucu satır bazlı
+      "Çin iade" tikini görmüyordu, her değişikliği MERKEZ_DEPO'ya
+      yazıyordu
+
 ### Öncelikli
 
-- [ ] **Prova ortamını gözden geçir** — 25 özelliğin hiçbiri henüz insan
-      gözüyle görülmedi. `test.shenzhenmarket.com.tr`
+- [ ] **Provada v1.14.0'ı gözden geçir** — klavye akışı, virgüllü fiyat,
+      yeşil kayıt şeridi, muadil önerisi. `test.shenzhenmarket.com.tr`
+- [ ] **Prova ortamına ayrı `fileTag`** — prova ile canlı aynı firma adını
+      taşıdığı için indirilen dosyalar da aynı adla iniyor. Provaya
+      `tenant.fileTag: "SMT"` verilirse karışma riski kalkar.
 - [ ] **Canlı geçiş** — onaydan sonra. Sırası:
       1. Canlı DB yedeği al ve doğrula
-      2. `update-all-tenants.sh v1.13.2 shenzhen`
+      2. `update-all-tenants.sh <surum> shenzhen`
       3. Veri sayılarını doğrula, site 200 mü
       4. **Ayrı adım:** `renumberSkus --uygula`, çıktıyı SAKLA
 - [ ] **Yedekleri sunucu dışına çıkar** — kalan tek gerçek veri riski.
       Gecelik yedek çalışıyor ama aynı diskte duruyor.
+- [ ] **Geçmiş Çin iade faturalarını denetle** — düzenlenmiş iadelerde
+      stok yanlış depoya işlemiş olabilir (yukarıdaki düzeltmeden önce).
+      `CIN_IADE_DEPO` bakiyesi ile iade kayıtlarını karşılaştıran bir
+      kontrol sorgusu yazılacak; düzeltme elle yapılacak.
+
+### Fiyat Listesi sitesi — YENİ PROJE
+
+Her müşteriye ERP'nin yanında ikinci bir site: müşterinin kendi
+müşterilerine göndereceği fiyat listesi. Kaynak `~/Desktop/Fiyat Liste`
+(Next.js 16, Cursor ile yazıldı, temiz derleniyor).
+
+Kararlar ve adımlar için ayrıntı: bu belgenin 8. bölümü.
 
 ### Bekleyen malzeme
 
@@ -114,6 +142,10 @@ c0f5638  v1.13.2  kod yenileme yalnizca eski otomatik kodlara,
       31 Ağustos'ta denendi, kesinti yarattı — bkz. aşağıdaki uyarı
 - [ ] **Firma bazlı özellik bayrakları** — altyapı hazır (`config.json`),
       ilk özel istek geldiğinde eklenecek
+- [ ] **Şema yorumu yanlış** — `schema.prisma` "Satış 1 (Toptan)" diyor,
+      arayüz ve Excel "Satış 1 (Perakende)" diyor. Davranışı etkilemiyor
+      (yalnızca yorum), ama fiyat sitesi bu ayrımı müşteriye göstereceği
+      için önce doğrusu teyit edilmeli.
 
 ---
 
@@ -188,3 +220,63 @@ Sunucu   7.8 GB RAM  |  ~2.5 GB bos  |  musteri basina ~600-800 MB
 Yaklaşık 3-4 müşteri daha sığar. Rancher kaldırılırsa bir tane daha.
 Ondan sonra RAM yükseltmek veya ikinci sunucu gerekir — satış yaparken
 bilinmesi gereken sınır.
+
+---
+
+## 8. Fiyat Listesi sitesi — açık kararlar ve plan
+
+Hedef: müşteriyle anlaşınca **iki site birden** kurulur — ERP ve fiyat
+listesi. Fiyat listesi, müşterinin kendi müşterilerine link olarak
+gönderdiği, kategori altında Satış 1 / Satış 2 fiyatlarını gösteren
+sitedir.
+
+### Elimizdeki uygulama
+
+`~/Desktop/Fiyat Liste` — Next.js 16 / React 19 / Tailwind 4, TypeScript.
+`next build` temiz geçiyor. Şu anki hâli:
+
+- Veri **tek bir JSON dosyasında** (`veri/fiyatlar.json`), veritabanı yok
+- Excel yükleyerek doldurulur; şablon indirme ve dışa aktarma var
+- Gezinme: Marka → Kategori → Model → fiyat tablosu, ayrıca arama
+- Yönetim paneli tek şifreyle (`ADMIN_SIFRE`, **varsayılanı `admin123`**)
+- Ayarlar: firma adı, telefon, WhatsApp, KDV, kur, hangi fiyat görünsün
+- Örnek veri: 2520 satır, 13 marka, 9 kategori, hepsi TRY
+
+### Karar bekleyen konular
+
+1. **Veri kaynağı.** Site ERP veritabanından mı beslensin (otomatik),
+   ERP'den indirilen Excel elle mi yüklensin, yoksa ERP'ye "fiyat
+   sitesine gönder" düğmesi mi konsun?
+2. **Kategori boşluğu.** Sitenin ağacı parça tipi ister (Ekran, Batarya).
+   ERP'de kategori tek: "iPhone Yedek Parça"; parça tipi yalnızca ürün
+   adının içinde geçiyor. Bu çözülmeden ERP verisi siteyi besleyemez.
+3. **Satış 1 / Satış 2 hangisi toptan?** Şema yorumu ile arayüz çelişiyor.
+4. **Para birimi.** ERP tamamen USD; site TRY/USD/EUR destekliyor.
+   Müşteriye hangisi gösterilecek, TL ise kur nereden?
+5. **Site herkese açık mı?** Toptan fiyat ticari sırdır.
+6. **Stok görünsün mü?** Rakam mı, "Var/Sınırlı/Yok" mu, hiç mi?
+7. **Hangi ürünler yayınlanacak?** Hepsi mi, yoksa bir "yayınla" bayrağı
+   mı gerekir?
+
+### Yapılacaklar (kararlardan sonra)
+
+- [ ] Klasörü sürüm kontrolüne al (ayrı repo mu, teknik-erp içinde mi)
+- [ ] `veri/fiyatlar.json` repoya girsin mi — içinde müşteri fiyatı var
+- [ ] `output: 'standalone'` ekle + çok aşamalı Dockerfile yaz
+- [ ] DockerHub'a it (`since1907/teknikfiyat-*`)
+- [ ] Helm chart'a ikinci deployment + service + ingress + kalıcı disk
+- [ ] `ADMIN_SIFRE` ve `OTURUM_ANAHTARI` Secret'a taşınsın —
+      **`admin123` asla canlıya gitmemeli**
+- [ ] Firma adı/iletişim ConfigMap'ten gelsin (ERP'deki `config.json`
+      kalıbının aynısı), her müşteri kendi ayarını taşısın
+- [ ] `new-tenant.sh` iki siteyi birden kursun
+- [ ] Adres kalıbı: tek seviye olmak zorunda (Cloudflare sertifikası) —
+      `<ad>-fiyat.derneklab.com`
+- [ ] ERP → site veri akışı (1. karara göre)
+- [ ] Kategori çözümü (2. karara göre)
+
+### Kapasite etkisi
+
+Sunucuda ~2.5 GB boş. Next.js sunucusu müşteri başına ~150-250 MB ekler.
+Tek siteyle 3-4 müşteri sığıyordu; **ikişer siteyle 2-3'e düşer.** Satış
+yaparken bilinmesi gereken yeni sınır budur.
