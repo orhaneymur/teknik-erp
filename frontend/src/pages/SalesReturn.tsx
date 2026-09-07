@@ -140,12 +140,15 @@ type SalesReturnProps = {
 
 type EditReturnLine = {
   rowId: string;
-  invoiceItemId: number;
+  /** Kayitli kalemin id'si. null ise bu satir duzenleme sirasinda EKLENDI. */
+  invoiceItemId: number | null;
   productId: number;
   productName: string;
   productSku: string;
   quantity: number;
   unitPriceTl: number;
+  /** true ise stok CIN_IADE_DEPO'ya isler */
+  isChinaReturn: boolean;
 };
 
 export default function SalesReturn({
@@ -209,8 +212,11 @@ export default function SalesReturn({
   } = useCartGridKeyboardNav(getCartRowIds, RETURN_GRID_FIELDS);
 
   const getEditRowIds = useCallback(() => editLines.map((line) => line.rowId), [editLines]);
-  const { setRef: setEditInputRef, onKeyDown: onEditFieldKeyDown } =
-    useCartGridKeyboardNav(getEditRowIds, EDIT_GRID_FIELDS);
+  const {
+    setRef: setEditInputRef,
+    focusFieldSoon: focusEditFieldSoon,
+    onKeyDown: onEditFieldKeyDown,
+  } = useCartGridKeyboardNav(getEditRowIds, EDIT_GRID_FIELDS);
 
   /**
    * Kayıttan sonra sayfada kalınır; yeşil şerit onayı ekranın üstünde
@@ -366,6 +372,8 @@ export default function SalesReturn({
               id: number;
               quantity: number;
               unitPrice: number;
+              /** Satir CIN_IADE_DEPO'ya mi islendi */
+              isChinaReturn?: boolean;
               product: {
                 id: number;
                 sku: string;
@@ -421,6 +429,7 @@ export default function SalesReturn({
               productSku: line.product.sku,
               quantity: toIntegerQty(line.quantity, 1),
               unitPriceTl: roundPrice(line.unitPrice / rate),
+              isChinaReturn: Boolean(line.isChinaReturn),
             };
           })
         );
@@ -645,13 +654,60 @@ export default function SalesReturn({
   const removeEditLine = (rowId: string) => {
     setSavedNotice(null);
     const row = editLines.find((line) => line.rowId === rowId);
-    if (row) {
+    // Yalnizca KAYITLI kalemler sunucuya "sil" diye bildirilir; duzenleme
+    // sirasinda eklenip yine burada silinen satir hic gonderilmemis olur.
+    if (row?.invoiceItemId != null) {
+      const itemId = row.invoiceItemId;
       setRemovedItemIds((prev) =>
-        prev.includes(row.invoiceItemId) ? prev : [...prev, row.invoiceItemId]
+        prev.includes(itemId) ? prev : [...prev, itemId]
       );
     }
     setEditLines((prev) => prev.filter((line) => line.rowId !== rowId));
   };
+
+  /**
+   * Duzenlenen iade faturasina yeni kalem ekler.
+   *
+   * Satis faturasi duzenlemesiyle ayni davranis: urun dogrudan eklenir,
+   * "bu musteri bunu almis miydi" kontrolu yapilmaz. Duzenleme zaten
+   * kayitli bir iadeyi duzeltmek icindir; kontrol yeni iade olustururken
+   * yapiliyor.
+   */
+  const addProductToEditLines = useCallback(
+    (product: F2Product) => {
+      const rowId = newRowId('new', product.id);
+      setSavedNotice(null);
+      setEditLines((prev) => [
+        ...prev,
+        {
+          rowId,
+          invoiceItemId: null,
+          productId: product.id,
+          productName: productDisplayName(product),
+          productSku: product.sku,
+          quantity: 1,
+          unitPriceTl: roundPrice(
+            product.priceUsd > 0 ? product.priceUsd : product.priceTl
+          ),
+          isChinaReturn: false,
+        },
+      ]);
+      recordF2ProductSelection('return', product.id, editCustomerId || null);
+      closeSearchModal();
+      notify('success', `${productDisplayName(product)} eklendi — adet ve fiyatı satırda düzenleyin.`);
+      focusEditFieldSoon(rowId, 'quantity');
+    },
+    [closeSearchModal, notify, editCustomerId, focusEditFieldSoon]
+  );
+
+  const handleEditSearchKeyDown = useF2KeyboardNav({
+    open: searchModal,
+    results: f2.results,
+    focusedIndex: f2.focusedIndex,
+    navigateFocus: f2.navigateFocus,
+    onSelect: addProductToEditLines,
+    onClose: closeSearchModal,
+  });
 
   const handleEditSave = async () => {
     if (!editInvoiceId || editCustomerId === '') return;
@@ -670,10 +726,15 @@ export default function SalesReturn({
         exchangeRate: EXCHANGE_RATE,
         ...(removedItemIds.length > 0 ? { removeItemIds: removedItemIds } : {}),
         items: editLines.map((line) => ({
-          id: line.invoiceItemId,
+          // Kayitli kalem id ile, duzenlemede eklenen kalem productId ile
+          // gonderilir — sunucu ikisini bu alana gore ayirir.
+          ...(line.invoiceItemId != null
+            ? { id: line.invoiceItemId }
+            : { productId: line.productId }),
           quantity: toIntegerQty(line.quantity, 1),
           unitPrice: line.unitPriceTl,
           discountPercent: 0,
+          isChinaReturn: line.isChinaReturn,
         })),
       });
       setSavedNotice(`Fatura kaydedildi · ${displayInvoiceNo}`);
@@ -1087,6 +1148,17 @@ export default function SalesReturn({
         </div>
 
         <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm print:hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+            <p className="text-sm font-semibold text-slate-700">Fatura Kalemleri</p>
+            <button
+              type="button"
+              onClick={() => setSearchModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              <Search className="h-4 w-4" />
+              Ürün Ekle (F2)
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-100 text-sm">
               <thead className="bg-slate-50">
@@ -1103,6 +1175,9 @@ export default function SalesReturn({
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
                     Birim ($)
                   </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-slate-500">
+                    Çin İade
+                  </th>
                   <th className="w-12 px-4 py-3" />
                 </tr>
               </thead>
@@ -1110,7 +1185,14 @@ export default function SalesReturn({
                 {editLines.map((line) => (
                   <tr key={line.rowId} className="hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-mono font-semibold">{line.productSku}</td>
-                    <td className="px-4 py-3">{line.productName}</td>
+                    <td className="px-4 py-3">
+                      {line.productName}
+                      {line.invoiceItemId == null && (
+                        <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-caption font-semibold text-emerald-700">
+                          yeni
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <NumericInput
                         ref={setEditInputRef(line.rowId, 'quantity')}
@@ -1153,6 +1235,35 @@ export default function SalesReturn({
                         className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
                       />
                     </td>
+                    {/*
+                      * Cin iade tiki: isaretli satirin stogu MERKEZ_DEPO
+                      * yerine CIN_IADE_DEPO'ya isler. Duzenlemede tik
+                      * degistirilirse sunucu miktari iki depo arasinda
+                      * tasir.
+                      */}
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="checkbox"
+                        checked={line.isChinaReturn}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSavedNotice(null);
+                          setEditLines((prev) =>
+                            prev.map((row) =>
+                              row.rowId === line.rowId
+                                ? { ...row, isChinaReturn: checked }
+                                : row
+                            )
+                          );
+                        }}
+                        title={
+                          line.isChinaReturn
+                            ? depotLabel('CIN_IADE_DEPO')
+                            : depotLabel('MERKEZ_DEPO')
+                        }
+                        className="h-4 w-4 rounded border-slate-300 text-orange-600"
+                      />
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         type="button"
@@ -1166,7 +1277,7 @@ export default function SalesReturn({
                 ))}
                 {editLines.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
+                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
                       Kalem yok
                     </td>
                   </tr>
@@ -1207,6 +1318,46 @@ export default function SalesReturn({
           trashing={trashing}
           disabled={submitting}
         />
+
+        {/*
+          * Duzenleme ekraninin kendi urun arama penceresi. Yeni iade
+          * olustururken kullanilan pencereyle ayni arama durumunu paylasir,
+          * ama secim baska yere gider: burada dogrudan fatura kalemine.
+          */}
+        <ProductSearchPopover
+          open={searchModal}
+          onClose={closeSearchModal}
+          title="Faturaya Ürün Ekle"
+          hint="↑↓ · Enter · Esc"
+          headerClassName="bg-amber-600"
+          searchQuery={f2.searchQuery}
+          onSearchChange={f2.setSearchQuery}
+          searchInputRef={f2.searchInputRef}
+          listRef={f2.listRef}
+          onListScroll={f2.handleListScroll}
+          onKeyDown={handleEditSearchKeyDown}
+          searchLoading={f2.loading}
+          loadingMore={f2.loadingMore}
+          footer={`${f2.results.length.toLocaleString('tr-TR')} / ${f2.totalCount.toLocaleString('tr-TR')} ürün`}
+          showEmpty={!f2.loading && f2.results.length === 0}
+          emptyHint={
+            f2.searchQuery.trim()
+              ? 'Sonuç bulunamadı.'
+              : 'Aramak için yazmaya başlayın...'
+          }
+        >
+          {!f2.loading && f2.results.length > 0 && (
+            <F2ProductList
+              products={f2.results}
+              focusedIndex={f2.focusedIndex}
+              onFocusIndex={f2.setFocusedIndex}
+              onSelect={addProductToEditLines}
+              partySelected={false}
+              accentClass="amber"
+              showCost={showCosts}
+            />
+          )}
+        </ProductSearchPopover>
       </div>
     );
   }

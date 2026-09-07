@@ -2268,6 +2268,8 @@ app.put<{
       quantity?: number;
       unitPrice?: number;
       discountPercent?: number;
+      /** Yalnizca IADE: satir CIN_IADE_DEPO'ya mi girsin */
+      isChinaReturn?: boolean;
     }>;
   };
 }>('/api/sales/invoices/:id', async (request, reply) => {
@@ -2297,7 +2299,24 @@ app.put<{
       }
 
       const merkezDepoId = await getDepotBranchId(tx, 'MERKEZ');
+      // Yalnizca iade faturasinda gerekir; satis/alis duzenlemesi bu
+      // sorguyu bosuna atmasin.
+      const cinIadeDepoId =
+        existing.type === 'IADE'
+          ? await getDepotBranchId(tx, 'CIN_IADE')
+          : merkezDepoId;
       const returnedMap = await getReturnedQtyMap(existing.items.map((item) => item.id));
+
+      /*
+       * Iade satiri hangi depoya isler?
+       *
+       * Iade olustururken satir bazli "Cin iade" tiki CIN_IADE_DEPO'yu
+       * seciyordu (bkz. /api/sales/return). Duzenleme ise bunu gormuyor,
+       * her degisikligi MERKEZ_DEPO'ya yaziyordu: arizali bir parcanin
+       * adedini degistirmek onu satilabilir stoga ekliyordu.
+       */
+      const depotForReturnItem = (isChinaReturn: boolean) =>
+        existing.type === 'IADE' && isChinaReturn ? cinIadeDepoId : merkezDepoId;
 
       const nextIsPreOrder =
         body.isPreOrder !== undefined ? body.isPreOrder : existing.isPreOrder;
@@ -2362,7 +2381,7 @@ app.put<{
               existing.type,
               nextIsPreOrder,
               current.productId,
-              merkezDepoId,
+              depotForReturnItem(current.isChinaReturn),
               -current.quantity
             );
 
@@ -2402,15 +2421,40 @@ app.put<{
             );
           }
 
-          const qtyDelta = nextQty - current.quantity;
-          await applyInvoiceStockDelta(
-            tx,
-            existing.type,
-            nextIsPreOrder,
-            current.productId,
-            merkezDepoId,
-            qtyDelta
-          );
+          const nextChinaReturn =
+            patch.isChinaReturn !== undefined
+              ? Boolean(patch.isChinaReturn)
+              : current.isChinaReturn;
+
+          if (existing.type === 'IADE' && nextChinaReturn !== current.isChinaReturn) {
+            /*
+             * Depo degisti: eski depodan TUM eski miktar geri alinir, yeni
+             * depoya YENI miktar konur. Fark hesabiyla yapilamaz, cunku iki
+             * ayri depo soz konusu.
+             */
+            await adjustStockQuantity(
+              tx,
+              current.productId,
+              depotForReturnItem(current.isChinaReturn),
+              -current.quantity
+            );
+            await adjustStockQuantity(
+              tx,
+              current.productId,
+              depotForReturnItem(nextChinaReturn),
+              nextQty
+            );
+          } else {
+            const qtyDelta = nextQty - current.quantity;
+            await applyInvoiceStockDelta(
+              tx,
+              existing.type,
+              nextIsPreOrder,
+              current.productId,
+              depotForReturnItem(nextChinaReturn),
+              qtyDelta
+            );
+          }
 
           const lineTotal = roundMoney(
             calcLineTotalTl({
@@ -2428,6 +2472,7 @@ app.put<{
               unitPrice: roundMoney(nextUnitPrice),
               discountPercent: nextDiscount,
               totalPrice: lineTotal,
+              ...(existing.type === 'IADE' ? { isChinaReturn: nextChinaReturn } : {}),
             },
           });
 
@@ -2476,6 +2521,9 @@ app.put<{
             })
           );
 
+          const newChinaReturn =
+            existing.type === 'IADE' ? Boolean(patch.isChinaReturn) : false;
+
           await tx.invoiceItem.create({
             data: {
               invoiceId: id,
@@ -2484,6 +2532,7 @@ app.put<{
               unitPrice: roundMoney(nextUnitPrice),
               discountPercent: nextDiscount,
               totalPrice: lineTotal,
+              isChinaReturn: newChinaReturn,
             },
           });
 
@@ -2492,7 +2541,7 @@ app.put<{
             existing.type,
             nextIsPreOrder,
             productId,
-            merkezDepoId,
+            depotForReturnItem(newChinaReturn),
             nextQty
           );
         }
