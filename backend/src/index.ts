@@ -17,6 +17,14 @@ import {
   syncBrandModelsFromProducts,
 } from './utils/excelExchange.js';
 import {
+  compatWords,
+  isCompatibleMatch,
+  normalizeCompatibleList,
+  parseCompatibleList,
+  sharedWordCount,
+} from './utils/compatibility.js';
+import { foldSearchText } from './utils/textSearch.js';
+import {
   buildInvoiceCreatedAt,
   formatTimestampInvoiceNo,
   getIstanbulYear,
@@ -804,30 +812,6 @@ function mapProductSearchExtras(
     stocks,
     merkezDepoQuantity: stocks[0]?.quantity ?? 0,
   };
-}
-
-/**
- * Türkçe duyarlı arama katlaması.
- * `toLocaleLowerCase('tr-TR')` "INFİNİX" → "ınfinix" (noktasız ı) ürettiği için
- * kullanıcının yazdığı "infinix" ile eşleşmiyordu. Burada hem büyük/küçük hem de
- * aksan farkı ASCII tabanına indirgenir: İ/I/ı → i, Ş/ş → s, Ğ/ğ → g ...
- */
-const TR_FOLD_MAP: Record<string, string> = {
-  İ: 'i', I: 'i', ı: 'i',
-  Ş: 's', ş: 's',
-  Ğ: 'g', ğ: 'g',
-  Ü: 'u', ü: 'u',
-  Ö: 'o', ö: 'o',
-  Ç: 'c', ç: 'c',
-};
-
-function foldSearchText(value: string | null | undefined): string {
-  if (!value) return '';
-  let out = '';
-  for (const char of value) {
-    out += TR_FOLD_MAP[char] ?? char;
-  }
-  return out.toLowerCase();
 }
 
 type ProductRankRow = {
@@ -4122,6 +4106,7 @@ app.post<{
     appearance?: string;
     quality?: string;
     rbmPrice?: number;
+    compatibleWith?: string | null;
     description?: string;
   };
 }>('/api/products', async (request, reply) => {
@@ -4143,6 +4128,7 @@ app.post<{
     quality,
     rbmPrice,
     description,
+    compatibleWith,
   } = request.body;
 
   if (!name?.trim() || costPrice == null || priceUsd == null) {
@@ -4238,6 +4224,7 @@ app.post<{
           quality: quality?.trim() || null,
           rbmPrice: rbmPrice ?? 0,
           description: description?.trim() || null,
+          compatibleWith: normalizeCompatibleList(compatibleWith),
         },
       });
 
@@ -4434,6 +4421,186 @@ app.get<{ Params: { id: string } }>('/api/products/:id', async (request, reply) 
   };
 });
 
+/**
+ * Bir urunun MUADILLERI — stokta olani.
+ *
+ * Neden var: mobil parca sektorunde ayni parca birden cok modele uyar.
+ * Musteri "iPhone 16 Pro ekrani" isteyip stok bitmisse, satisi kaybetmek
+ * yerine "iPhone 17 ekrani ayni, onu verebilirim" denebilmeli.
+ *
+ * Eslesme SIMETRIKTIR ve iki yoldan kurulur:
+ *
+ *   ILERI   Kaynak kartin Uyumlu alaninda yazan ad, adayin Model alaninda
+ *           ya da adinda geciyorsa.
+ *   GERI    Adayin Uyumlu alaninda kaynagin Model adi geciyorsa.
+ *
+ * Boylece kullanicinin tek satira yazmasi yeterlidir; iki tarafi da
+ * doldurmak zorunda degildir. GERI yonun calismasi icin kaynagin Model
+ * alani dolu olmalidir — bos ise yalnizca ILERI yon uretir.
+ *
+ * SIRALAMA parca tipine gore yapilir. Veride parca tipini tutan bir alan
+ * yok (kategori tek: "iPhone Yedek Parca"), tip urun adinin icinde geciyor:
+ * "... ARKA KAMERA", "... LCD". Bu yuzden aday, kaynakla ortak kelime
+ * sayisina gore siralanir: iki tarafta da "EKRAN" geciyorsa uste cikar.
+ * Eslesmeyenler GIZLENMEZ, altta kalir — yanlis oneriyi gormezden gelmek
+ * bir bakis, dogru oneriyi saklamak bir satis kaybidir.
+ *
+ * Zincirleme YOK: A~B ve B~C yazilmissa A ile C muadil sayilmaz. Tek bir
+ * hatali kaydin tum agi kirletmesini onler.
+ */
+const ALTERNATIVES_LIMIT = 20;
+
+app.get<{ Params: { id: string } }>(
+  '/api/products/:id/alternatives',
+  async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return reply.status(400).send({
+        success: false,
+        message: 'Geçersiz ürün id.',
+        errors: null,
+      });
+    }
+
+    const source = await prisma.product.findUnique({
+      where: { id },
+      select: { id: true, name: true, model: true, compatibleWith: true },
+    });
+
+    if (!source) {
+      return reply.status(404).send({
+        success: false,
+        message: 'Ürün bulunamadı.',
+        errors: null,
+      });
+    }
+
+    const sourceNames = parseCompatibleList(source.compatibleWith);
+    const sourceModel = source.model?.trim() ?? '';
+    const sourceModelFolded = foldSearchText(sourceModel);
+
+    // Ne yazilmis ne de modeli var — aranacak bir sey yok
+    if (sourceNames.length === 0 && !sourceModel) {
+      return { success: true, data: [], message: 'Muadil tanımlı değil.' };
+    }
+
+    /*
+     * On eleme SQL'de. Turkce harf katlamasi burada yapilamadigi icin
+     * buyuk/kucuk varyantlari denenir (buildProductWordFilter ile ayni
+     * yaklasim); kesin karar isCompatibleMatch'te verilir.
+     */
+    const orFilters: Prisma.ProductWhereInput[] = [];
+    for (const rawName of sourceNames) {
+      for (const variant of new Set([
+        rawName,
+        rawName.toLocaleLowerCase('tr-TR'),
+        rawName.toLocaleUpperCase('tr-TR'),
+      ])) {
+        orFilters.push({ model: { contains: variant } });
+        orFilters.push({ name: { contains: variant } });
+      }
+    }
+    if (sourceModel) {
+      for (const variant of new Set([
+        sourceModel,
+        sourceModel.toLocaleLowerCase('tr-TR'),
+        sourceModel.toLocaleUpperCase('tr-TR'),
+      ])) {
+        orFilters.push({ compatibleWith: { contains: variant } });
+      }
+    }
+
+    if (orFilters.length === 0) {
+      return { success: true, data: [], message: 'Muadil tanımlı değil.' };
+    }
+
+    const candidates = await prisma.product.findMany({
+      where: {
+        AND: [
+          { id: { not: source.id } },
+          { OR: orFilters },
+          // Yalnizca stokta olan onerilir — amac "yok" dememek
+          {
+            stocks: {
+              some: {
+                branch: { name: DEPOT_NAMES.MERKEZ },
+                quantity: { gt: 0 },
+              },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        brand: true,
+        model: true,
+        color: true,
+        appearance: true,
+        quality: true,
+        compatibleWith: true,
+        costPrice: true,
+        priceTl: true,
+        priceUsd: true,
+        priceUsd2: true,
+        stocks: {
+          where: { branch: { name: DEPOT_NAMES.MERKEZ } },
+          select: { quantity: true },
+        },
+      },
+      // Kaba on eleme genis olabilir; siralama JS tarafinda kesinlesir
+      take: ALTERNATIVES_LIMIT * 10,
+    });
+
+    const sourceWords = new Set(compatWords(source.name));
+
+    const matched = candidates
+      .filter((candidate) =>
+        isCompatibleMatch(sourceNames, sourceModelFolded, candidate)
+      )
+      .map((candidate) => {
+        const quantity = toFloat(candidate.stocks[0]?.quantity);
+        const priceUsd =
+          toFloat(candidate.priceUsd) > 0
+            ? toFloat(candidate.priceUsd)
+            : toFloat(candidate.priceTl);
+        return {
+          id: candidate.id,
+          sku: candidate.sku,
+          name: candidate.name,
+          brand: candidate.brand,
+          model: candidate.model,
+          color: candidate.color,
+          appearance: candidate.appearance,
+          quality: candidate.quality,
+          costPrice: toFloat(candidate.costPrice),
+          costUsd: toFloat(candidate.costPrice),
+          priceTl: priceUsd,
+          priceUsd,
+          priceUsd2:
+            toFloat(candidate.priceUsd2) > 0 ? toFloat(candidate.priceUsd2) : priceUsd,
+          merkezDepoQuantity: quantity,
+          /** Kaynakla ortak kelime sayisi — ayni parca tipi olma gostergesi */
+          relevance: sharedWordCount(sourceWords, candidate.name),
+        };
+      })
+      .sort(
+        (a, b) =>
+          b.relevance - a.relevance ||
+          b.merkezDepoQuantity - a.merkezDepoQuantity ||
+          a.name.localeCompare(b.name, 'tr')
+      )
+      .slice(0, ALTERNATIVES_LIMIT);
+
+    return {
+      success: true,
+      data: matched,
+      message: `${matched.length} muadil bulundu.`,
+    };
+  }
+);
+
 app.put<{
   Params: { id: string };
   Body: {
@@ -4451,6 +4618,7 @@ app.put<{
     appearance?: string | null;
     quality?: string | null;
     rbmPrice?: number;
+    compatibleWith?: string | null;
     description?: string | null;
   };
 }>('/api/products/:id', async (request, reply) => {
@@ -4488,6 +4656,7 @@ app.put<{
     quality,
     rbmPrice,
     description,
+    compatibleWith,
   } = request.body ?? {};
 
   if (name !== undefined && !name.trim()) {
@@ -4533,6 +4702,9 @@ app.put<{
         ...(quality !== undefined ? { quality: quality?.trim() || null } : {}),
         ...(rbmPrice !== undefined ? { rbmPrice } : {}),
         ...(description !== undefined ? { description: description?.trim() || null } : {}),
+        ...(compatibleWith !== undefined
+          ? { compatibleWith: normalizeCompatibleList(compatibleWith) }
+          : {}),
       },
       include: {
         category: { select: { id: true, name: true } },

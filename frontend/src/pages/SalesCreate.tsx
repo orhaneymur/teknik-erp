@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { ArrowLeft, CheckCircle, FileText, Printer, Save, Search, ShoppingCart, X } from 'lucide-react';
+import NumericInput from '../components/NumericInput';
+import SavedBanner from '../components/SavedBanner';
+import AlternativeSuggestions, {
+  type AlternativeProduct,
+} from '../components/AlternativeSuggestions';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import InvoiceTrashButton from '../components/InvoiceTrashButton';
@@ -126,6 +131,9 @@ function isSaleBelowCost(item: Pick<CartItem, 'unitPriceUsd' | 'discountPercent'
 
 const EXCHANGE_RATE = 1;
 
+/** Sepet ızgarasında sol→sağ hücre sırası (klavyeyle dolaşma) */
+const CART_GRID_FIELDS = ['discountPercent', 'quantity', 'unitPriceUsd'] as const;
+
 function productCostUsd(product: Product) {
   if (product.costUsd != null && product.costUsd > 0) {
     return roundPrice(product.costUsd);
@@ -203,6 +211,21 @@ export default function SalesCreate({
     before: number;
     after: number;
   } | null>(null);
+  /**
+   * Kayıttan sonra sayfada kalınır; bu yeşil şerit "kaydedildi mi?"
+   * sorusunu ekranın üstünde açıkça yanıtlar. Fişte bir şey değiştiği
+   * anda kaybolur ki eski kayda ait onay taze görünmesin.
+   */
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
+  /**
+   * Stokta bulunmayan bir ürün sepete eklendiğinde gösterilen muadil önerisi.
+   * `rowId` sepetteki hangi satırın değiştirileceğini tutar.
+   */
+  const [alternatives, setAlternatives] = useState<{
+    rowId: string;
+    sourceName: string;
+    items: AlternativeProduct[];
+  } | null>(null);
   const showCosts = useHoldKeyReveal('F8');
 
   const handlePrint = useCallback(() => {
@@ -214,7 +237,7 @@ export default function SalesCreate({
 
   const getCartRowIds = useCallback(() => cart.map((item) => item.rowId), [cart]);
   const { setRef: setCartInputRef, focusField: focusCartField, onKeyDown: onCartFieldKeyDown } =
-    useCartGridKeyboardNav(getCartRowIds);
+    useCartGridKeyboardNav(getCartRowIds, CART_GRID_FIELDS);
 
   const f2 = useF2ProductSearch({
     open: f2Modal,
@@ -507,12 +530,83 @@ export default function SalesCreate({
     [selectedCustomer, priceTier]
   );
 
+  /**
+   * Muadilleri getirir. Sessiz basarisizlik bilincli: muadil onerisi bir
+   * kolaylik, satisi engellememelidir.
+   */
+  const loadAlternatives = useCallback(
+    async (productId: number, sourceName: string, rowId: string) => {
+      try {
+        const response = await axios.get(
+          `${API_BASE}/api/products/${productId}/alternatives`
+        );
+        const items = ensureArray<AlternativeProduct>(response.data?.data);
+        if (items.length > 0) {
+          setAlternatives({ rowId, sourceName, items });
+        } else {
+          setAlternatives(null);
+        }
+      } catch {
+        setAlternatives(null);
+      }
+    },
+    []
+  );
+
+  /** Sepetteki satırı muadille değiştirir — adet korunur, fiyat yenilenir */
+  const replaceWithAlternative = useCallback(
+    (rowId: string, alternative: AlternativeProduct) => {
+      const asF2 = alternative as unknown as F2Product;
+      const unitPriceUsd = resolveSalesUnitPriceUsd(
+        asF2,
+        Boolean(selectedCustomer),
+        priceTier
+      );
+      setSavedNotice(null);
+      setCart((prev) =>
+        prev.map((item) =>
+          item.rowId === rowId
+            ? {
+                ...item,
+                product: {
+                  id: alternative.id,
+                  sku: alternative.sku,
+                  barcode: null,
+                  name: alternative.name,
+                  brand: alternative.brand ?? null,
+                  model: alternative.model ?? null,
+                  costPrice: alternative.costPrice,
+                  costUsd: alternative.costUsd,
+                  priceTl: alternative.priceTl,
+                  priceUsd: alternative.priceUsd,
+                },
+                unitPriceUsd,
+                costUsd: productCostUsd({
+                  id: alternative.id,
+                  sku: alternative.sku,
+                  barcode: null,
+                  name: alternative.name,
+                  costPrice: alternative.costPrice,
+                  costUsd: alternative.costUsd,
+                  priceTl: alternative.priceTl,
+                  priceUsd: alternative.priceUsd,
+                }),
+              }
+            : item
+        )
+      );
+      setAlternatives(null);
+    },
+    [selectedCustomer, priceTier]
+  );
+
   const addProductToCart = useCallback(
     (product: F2Product | Product) => {
       recordF2ProductSelection('sales', product.id, selectedCustomer?.id ?? null);
       const { unitPriceUsd, costUsd } = resolveProductUsd(product);
       const rowId = `row-${product.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       lastAddedRowId.current = rowId;
+      setSavedNotice(null);
 
       setCart((prev) => [
         ...prev,
@@ -526,9 +620,20 @@ export default function SalesCreate({
         },
       ]);
 
+      /*
+       * Stokta yoksa muadilini sor. Ürün her hâlükârda sepete girdi —
+       * bu istek akışı beklemez, cevabı gelince şerit belirir.
+       */
+      const stock = (product as F2Product).merkezDepoQuantity;
+      if (typeof stock === 'number' && stock <= 0) {
+        void loadAlternatives(product.id, productDisplayName(product), rowId);
+      } else {
+        setAlternatives(null);
+      }
+
       closeF2Modal();
     },
-    [closeF2Modal, resolveProductUsd, selectedCustomer]
+    [closeF2Modal, loadAlternatives, resolveProductUsd, selectedCustomer]
   );
 
   const handleModalKeyDown = useF2KeyboardNav({
@@ -549,6 +654,7 @@ export default function SalesCreate({
       field === 'quantity'
         ? Math.max(1, toIntegerQty(value, 1))
         : roundPrice(value);
+    setSavedNotice(null);
     setCart((prev) =>
       prev.map((item) =>
         item.rowId === rowId ? { ...item, [field]: normalized } : item
@@ -572,6 +678,8 @@ export default function SalesCreate({
           : [...prev, row.sourceInvoiceItemId!]
       );
     }
+    setSavedNotice(null);
+    setAlternatives((prev) => (prev?.rowId === rowId ? null : prev));
     setCart((prev) => prev.filter((item) => item.rowId !== rowId));
   };
 
@@ -596,6 +704,7 @@ export default function SalesCreate({
   };
 
   const selectCustomer = (customer: Customer) => {
+    setSavedNotice(null);
     setSelectedCustomer(customer);
     setCustomerSearch(`${customer.code} — ${customer.name}`);
     setPrintBalance(null);
@@ -680,6 +789,7 @@ export default function SalesCreate({
           }),
         });
 
+        setSavedNotice(`Fatura kaydedildi · ${displayInvoiceNo}`);
         notify('success', `Fatura güncellendi: ${displayInvoiceNo}`);
         onDataChange?.();
         onSaved?.();
@@ -748,6 +858,11 @@ export default function SalesCreate({
         if (savedInvoiceNo) {
           setDisplayInvoiceNo(savedInvoiceNo);
         }
+        setSavedNotice(
+          `${isPreOrder ? 'Ön sipariş' : 'Fatura'} kaydedildi${
+            savedInvoiceNo ? ` · ${savedInvoiceNo}` : ''
+          } · ${formatUsd(totalUsd)}`
+        );
 
         setPrintParty(customer);
 
@@ -804,6 +919,15 @@ export default function SalesCreate({
 
   return (
     <div className="space-y-4 print:space-y-0">
+      <SavedBanner message={savedNotice} />
+      {alternatives && (
+        <AlternativeSuggestions
+          sourceName={alternatives.sourceName}
+          items={alternatives.items}
+          onReplace={(item) => replaceWithAlternative(alternatives.rowId, item)}
+          onDismiss={() => setAlternatives(null)}
+        />
+      )}
       {/* PDF / A4 — geniş düzen */}
       <div className="print-pdf-doc hidden">
         <h1>{displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}</h1>
@@ -1304,19 +1428,13 @@ export default function SalesCreate({
                         </button>
                       </td>
                       <td className="px-3 py-2 text-right print:hidden">
-                        <input
+                        <NumericInput
                           ref={setCartInputRef(item.rowId, 'discountPercent')}
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.1"
+                          min={0}
+                          max={100}
                           value={item.discountPercent}
-                          onChange={(e) =>
-                            updateCartItem(
-                              item.rowId,
-                              'discountPercent',
-                              Number(e.target.value)
-                            )
+                          onValueChange={(value) =>
+                            updateCartItem(item.rowId, 'discountPercent', value)
                           }
                           onKeyDown={(e) =>
                             onCartFieldKeyDown(e, item.rowId, 'discountPercent')
@@ -1325,18 +1443,13 @@ export default function SalesCreate({
                         />
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <input
+                        <NumericInput
                           ref={setCartInputRef(item.rowId, 'quantity')}
-                          type="number"
-                          min="1"
-                          step="1"
+                          decimal={false}
+                          min={1}
                           value={item.quantity}
-                          onChange={(e) =>
-                            updateCartItem(
-                              item.rowId,
-                              'quantity',
-                              Number(e.target.value)
-                            )
+                          onValueChange={(value) =>
+                            updateCartItem(item.rowId, 'quantity', value)
                           }
                           onKeyDown={(e) => onCartFieldKeyDown(e, item.rowId, 'quantity')}
                           className="w-16 text-right rounded border-slate-300 text-sm px-1.5 py-1 border focus:border-indigo-500 focus:ring-indigo-500 print:w-auto print:min-w-0 print:p-0 print:text-[9px]"
@@ -1348,18 +1461,12 @@ export default function SalesCreate({
                         </td>
                       )}
                       <td className="px-3 py-2 text-right">
-                        <input
+                        <NumericInput
                           ref={setCartInputRef(item.rowId, 'unitPriceUsd')}
-                          type="number"
-                          min="0"
-                          step="0.01"
+                          min={0}
                           value={item.unitPriceUsd}
-                          onChange={(e) =>
-                            updateCartItem(
-                              item.rowId,
-                              'unitPriceUsd',
-                              Number(e.target.value)
-                            )
+                          onValueChange={(value) =>
+                            updateCartItem(item.rowId, 'unitPriceUsd', value)
                           }
                           onKeyDown={(e) =>
                             onCartFieldKeyDown(e, item.rowId, 'unitPriceUsd')

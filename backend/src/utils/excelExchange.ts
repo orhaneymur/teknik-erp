@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { normalizeCompatibleList } from './compatibility.js';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { generateSku } from './sku.js';
 
@@ -232,6 +233,8 @@ type ProductExcelRow = {
   Satis1?: string | number;
   /** Satış 2 (Toptan) — yoksa Satış 1 kopyalanır */
   Satis2?: string | number;
+  /** Muadil model adları — virgülle ayrılmış serbest metin */
+  Uyumlu?: string;
   AlisAdedi?: string | number;
   SatisAdedi?: string | number;
   Bakiye?: string | number;
@@ -540,6 +543,15 @@ export async function exportProductsExcel(
       SatisAdedi: salesQty.get(p.id) ?? 0,
       Bakiye: bakiye,
       /*
+       * Muadil model adlari. Kullanici buraya "iPhone 17" yazinca, bu kartin
+       * urunu stokta yokken iPhone 17'nin ayni parcasi onerilir. Eslesme
+       * SIMETRIK: tek tarafa yazmak yeter.
+       *
+       * Yeri GelenAdet'in HEMEN SOLU: GelenAdet en sagda kalmali (bkz.
+       * asagidaki not), Uyumlu ise elle doldurulan son sutun.
+       */
+      Uyumlu: p.compatibleWith ?? '',
+      /*
        * En sagdaki sutun BILEREK BOS iner. Kullanici buraya yeni gelen
        * adedi yazar; ice aktarimda mevcut stoga EKLENIR (Bakiye gibi
        * uzerine yazmaz). Boylece "20 adet geldi" demek icin mevcut stogu
@@ -609,6 +621,8 @@ export async function importProductsExcel(
     hasColor: boolean;
     description: string | null;
     hasDescriptionUpdate: boolean;
+    compatibleWith: string | null;
+    hasCompatibleWith: boolean;
     rbmPrice: number | null;
     hasRmb: boolean;
     costPrice: number;
@@ -662,6 +676,11 @@ export async function importProductsExcel(
       cell(record, 'Aciklama', 'Aciklam')
     );
 
+    const hasUyumlu = hasCell(record, 'Uyumlu', 'UyumluModel', 'Muadil');
+    const compatibleWith = normalizeCompatibleList(
+      optionalString(cell(record, 'Uyumlu', 'UyumluModel', 'Muadil'))
+    );
+
     const hasBrand = hasCell(record, 'Marka');
     const hasModel = hasCell(record, 'Model');
     const hasCategory = hasCell(record, 'Kategori');
@@ -689,6 +708,8 @@ export async function importProductsExcel(
       hasColor: hasRenk,
       description,
       hasDescriptionUpdate,
+      compatibleWith,
+      hasCompatibleWith: hasUyumlu,
       rbmPrice: hasCell(record, 'Rmb', 'Rm', 'RMB')
         ? asNumber(cell(record, 'Rmb', 'Rm', 'RMB'), 0)
         : null,
@@ -840,6 +861,12 @@ export async function importProductsExcel(
       ...(item.hasDescriptionUpdate
         ? { description: item.description || null }
         : {}),
+      /*
+       * Marka/Model ile ayni kural: sutun dosyada varsa hucre bos olsa bile
+       * yazilir. Yani Uyumlu hucresini bosaltip yuklemek mevcut muadilligi
+       * SILER; sutunu tamamen kaldirmak ise dokunmaz.
+       */
+      ...(item.hasCompatibleWith ? { compatibleWith: item.compatibleWith } : {}),
       ...(item.hasRmb ? { rbmPrice: item.rbmPrice ?? 0 } : {}),
     };
 

@@ -78,6 +78,10 @@ model Product {
   quality      String?
   rbmPrice     Float          @default(0.0)
   description  String?        @db.Text
+  /// Muadil model adlari — Excel'deki "Uyumlu" sutunu. Virgulle ayrilmis
+  /// serbest metin; eslesme model adi / urun adi uzerinden yapilir.
+  /// Iliski simetriktir: A muadili B yazmak B muadili A demektir.
+  compatibleWith String?      @db.Text
   costPrice    Float          @default(0.0)
   priceTl      Float          @default(0.0)
   /// Satış 1 (Toptan) — satışta varsayılan fiyat

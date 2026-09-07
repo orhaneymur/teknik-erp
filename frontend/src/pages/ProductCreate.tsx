@@ -49,6 +49,8 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
   const [priceUsd, setPriceUsd] = useState('');
   const [priceUsd2, setPriceUsd2] = useState('');
   const [description, setDescription] = useState('');
+  /** Muadil model adları — Excel'deki "Uyumlu" sütununun karşılığı */
+  const [compatibleWith, setCompatibleWith] = useState('');
   const [barcode, setBarcode] = useState('');
   const [initialQuantity, setInitialQuantity] = useState('0');
   const [submitting, setSubmitting] = useState(false);
@@ -236,6 +238,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
     setPriceUsd('');
     setPriceUsd2('');
     setDescription('');
+    setCompatibleWith('');
     setBarcode('');
     setInitialQuantity('0');
   };
@@ -293,6 +296,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         quality: quality || undefined,
         rbmPrice: parsedRbm,
         description: description.trim() || undefined,
+        compatibleWith: compatibleWith.trim() || undefined,
       });
 
       if (response.data.success) {
@@ -558,6 +562,22 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
                 </span>
               </div>
             )}
+
+            <div>
+              <label className={labelClass}>Uyumlu (muadil modeller)</label>
+              <input
+                type="text"
+                value={compatibleWith}
+                onChange={(e) => setCompatibleWith(e.target.value)}
+                className={fieldClass}
+                placeholder="iPhone 17, iPhone 17 Plus"
+              />
+              <p className="mt-1 text-caption text-slate-500">
+                Bu parçanın uyduğu diğer modeller — virgülle ayırın. Satışta
+                bu ürün stokta yoksa buradaki modellerin aynı parçası önerilir.
+                Eşleşme çift yönlüdür: tek tarafa yazmak yeter.
+              </p>
+            </div>
 
             <div>
               <label className={labelClass}>Açıklama</label>

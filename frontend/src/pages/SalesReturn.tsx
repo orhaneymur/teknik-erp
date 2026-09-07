@@ -12,6 +12,8 @@ import {
   ShoppingCart,
   X,
 } from 'lucide-react';
+import NumericInput from '../components/NumericInput';
+import SavedBanner from '../components/SavedBanner';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList from '../components/F2ProductList';
@@ -19,7 +21,7 @@ import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import { useAppNavigationOptional } from '../context/AppNavigationContext';
 import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
-import { useQuantityFocus } from '../hooks/useQuantityFocus';
+import { useCartGridKeyboardNav } from '../hooks/useCartGridKeyboardNav';
 import { useHoldKeyReveal } from '../hooks/useHoldKeyReveal';
 import { depotLabel } from '../lib/depots';
 import {
@@ -47,6 +49,15 @@ import { useTrashInvoice } from '../hooks/useTrashInvoice';
 import SalesCreate from './SalesCreate';
 
 const EXCHANGE_RATE = 1;
+
+/**
+ * İade ızgarasında sol→sağ hücre sırası. Birim fiyat kutusu yalnızca elle
+ * girilen (kayıt dışı) satırlarda çizilir; gezinme olmayan hücreyi atlar.
+ */
+const RETURN_GRID_FIELDS = ['returnQty', 'unitPriceUsd'] as const;
+
+/** Kayıtlı iadeyi düzenleme ızgarasının hücre sırası */
+const EDIT_GRID_FIELDS = ['quantity', 'unitPriceTl'] as const;
 
 type Branch = { id: number; name: string; type: string };
 type Safe = {
@@ -190,7 +201,22 @@ export default function SalesReturn({
     printDocument();
   }, []);
 
-  const { setQuantityRef, focusQuantity } = useQuantityFocus();
+  const getCartRowIds = useCallback(() => cart.map((line) => line.rowId), [cart]);
+  const {
+    setRef: setCartInputRef,
+    focusFieldSoon: focusCartFieldSoon,
+    onKeyDown: onCartFieldKeyDown,
+  } = useCartGridKeyboardNav(getCartRowIds, RETURN_GRID_FIELDS);
+
+  const getEditRowIds = useCallback(() => editLines.map((line) => line.rowId), [editLines]);
+  const { setRef: setEditInputRef, onKeyDown: onEditFieldKeyDown } =
+    useCartGridKeyboardNav(getEditRowIds, EDIT_GRID_FIELDS);
+
+  /**
+   * Kayıttan sonra sayfada kalınır; yeşil şerit onayı ekranın üstünde
+   * tutar, fişte bir şey değişince kaybolur.
+   */
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   const f2 = useF2ProductSearch({
     open: searchModal,
@@ -423,6 +449,7 @@ export default function SalesReturn({
   }, [selectedCustomer?.id]);
 
   const selectCustomer = useCallback((customer: Customer) => {
+    setSavedNotice(null);
     setSelectedCustomer(customer);
     setCustomerSearch(`${customer.code} — ${customer.name}`);
     // Genel müşteri (120) → Kapalı; diğerleri → Açık
@@ -504,9 +531,10 @@ export default function SalesReturn({
       ]);
       notify('success', `${productDisplayName(product)} sepete eklendi — fiyatı satırda düzenleyebilirsiniz.`);
       setWarning(null);
-      focusQuantity(rowId);
+      focusCartFieldSoon(rowId, 'returnQty');
+      setSavedNotice(null);
     },
-    [notify, selectedCustomer, focusQuantity]
+    [notify, selectedCustomer, focusCartFieldSoon]
   );
 
   const duplicateReturnLine = useCallback(
@@ -522,9 +550,10 @@ export default function SalesReturn({
         },
       ]);
       notify('success', 'Ayrı kalem eklendi — Çin iade tikini satır satır işaretleyin.');
-      focusQuantity(rowId);
+      focusCartFieldSoon(rowId, 'returnQty');
+      setSavedNotice(null);
     },
-    [notify, focusQuantity]
+    [notify, focusCartFieldSoon]
   );
 
   const pickProductForReturn = useCallback(
@@ -585,7 +614,8 @@ export default function SalesReturn({
             roundPrice(data.unitPrice / data.exchangeRate)
           )} · ${data.invoiceNo}`
         );
-        focusQuantity(rowId);
+        focusCartFieldSoon(rowId, 'returnQty');
+      setSavedNotice(null);
       } catch (error) {
         const message =
           axios.isAxiosError(error) && error.response?.data?.message
@@ -596,7 +626,7 @@ export default function SalesReturn({
         setPickingProduct(false);
       }
     },
-    [selectedCustomer, closeSearchModal, notify, focusQuantity]
+    [selectedCustomer, closeSearchModal, notify, focusCartFieldSoon]
   );
 
   const handleSearchKeyDown = useF2KeyboardNav({
@@ -613,6 +643,7 @@ export default function SalesReturn({
   };
 
   const removeEditLine = (rowId: string) => {
+    setSavedNotice(null);
     const row = editLines.find((line) => line.rowId === rowId);
     if (row) {
       setRemovedItemIds((prev) =>
@@ -645,6 +676,7 @@ export default function SalesReturn({
           discountPercent: 0,
         })),
       });
+      setSavedNotice(`Fatura kaydedildi · ${displayInvoiceNo}`);
       notify('success', `İade faturası güncellendi: ${displayInvoiceNo}`);
       onDataChange?.();
       onSaved?.();
@@ -778,6 +810,9 @@ export default function SalesReturn({
         setOrderNotes(notesForPrint);
       }
 
+      setSavedNotice(
+        `Fatura kaydedildi${invoiceLabel ? ` · ${invoiceLabel}` : ''}`
+      );
       notify(
         'success',
         `İade kaydedildi · ${parts.join(' · ')} · ${invoiceLabel}`
@@ -854,6 +889,7 @@ export default function SalesReturn({
 
     return (
       <div className="space-y-4 print:space-y-0">
+        <SavedBanner message={savedNotice} />
         <div className="print-pdf-doc hidden">
           <h1>{displayInvoiceNo || 'İade Fişi'}</h1>
           {receiptPartyLines.length > 0 ? (
@@ -1076,13 +1112,13 @@ export default function SalesReturn({
                     <td className="px-4 py-3 font-mono font-semibold">{line.productSku}</td>
                     <td className="px-4 py-3">{line.productName}</td>
                     <td className="px-4 py-3 text-right">
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
+                      <NumericInput
+                        ref={setEditInputRef(line.rowId, 'quantity')}
+                        decimal={false}
+                        min={1}
                         value={line.quantity}
-                        onChange={(e) => {
-                          const qty = toIntegerQty(e.target.value, line.quantity);
+                        onValueChange={(qty) => {
+                          setSavedNotice(null);
                           setEditLines((prev) =>
                             prev.map((row) =>
                               row.rowId === line.rowId
@@ -1091,17 +1127,17 @@ export default function SalesReturn({
                             )
                           );
                         }}
+                        onKeyDown={(e) => onEditFieldKeyDown(e, line.rowId, 'quantity')}
                         className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
                       />
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                      <NumericInput
+                        ref={setEditInputRef(line.rowId, 'unitPriceTl')}
+                        min={0}
                         value={line.unitPriceTl}
-                        onChange={(e) => {
-                          const price = Number(e.target.value);
+                        onValueChange={(price) => {
+                          setSavedNotice(null);
                           setEditLines((prev) =>
                             prev.map((row) =>
                               row.rowId === line.rowId
@@ -1113,6 +1149,7 @@ export default function SalesReturn({
                             )
                           );
                         }}
+                        onKeyDown={(e) => onEditFieldKeyDown(e, line.rowId, 'unitPriceTl')}
                         className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
                       />
                     </td>
@@ -1196,6 +1233,7 @@ export default function SalesReturn({
 
   return (
     <div className="space-y-4 print:space-y-0">
+      <SavedBanner message={savedNotice} />
       <div className="print-pdf-doc hidden">
         <h1>{displayInvoiceNo || 'İade Fişi'}</h1>
         <p className="pdf-meta">Satış iade · {settlementLabel}</p>
@@ -1600,14 +1638,14 @@ export default function SalesReturn({
                             )}
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <input
-                              ref={setQuantityRef(line.rowId)}
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={line.returnQty || ''}
-                              onChange={(e) => {
-                                const val = toIntegerQty(e.target.value, 0);
+                            <NumericInput
+                              ref={setCartInputRef(line.rowId, 'returnQty')}
+                              decimal={false}
+                              min={0}
+                              emptyWhenZero
+                              value={line.returnQty}
+                              onValueChange={(val) => {
+                                setSavedNotice(null);
                                 setCart((prev) =>
                                   prev.map((row) =>
                                     row.rowId === line.rowId
@@ -1619,6 +1657,9 @@ export default function SalesReturn({
                                   )
                                 );
                               }}
+                              onKeyDown={(e) =>
+                                onCartFieldKeyDown(e, line.rowId, 'returnQty')
+                              }
                               className="w-20 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
                             />
                           </td>
@@ -1651,13 +1692,13 @@ export default function SalesReturn({
                           )}
                           <td className="px-4 py-3 text-right text-sm">
                             {line.manualOverride ? (
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={roundPrice(line.unitPriceTl / line.exchangeRate) || ''}
-                                onChange={(e) => {
-                                  const usd = Number(e.target.value);
+                              <NumericInput
+                                ref={setCartInputRef(line.rowId, 'unitPriceUsd')}
+                                min={0}
+                                emptyWhenZero
+                                value={roundPrice(line.unitPriceTl / line.exchangeRate)}
+                                onValueChange={(usd) => {
+                                  setSavedNotice(null);
                                   setCart((prev) =>
                                     prev.map((row) =>
                                       row.rowId === line.rowId
@@ -1671,6 +1712,9 @@ export default function SalesReturn({
                                     )
                                   );
                                 }}
+                                onKeyDown={(e) =>
+                                  onCartFieldKeyDown(e, line.rowId, 'unitPriceUsd')
+                                }
                                 className="w-20 rounded-md border border-violet-200 px-2 py-1 text-right text-sm"
                                 title="Birim fiyat USD"
                               />

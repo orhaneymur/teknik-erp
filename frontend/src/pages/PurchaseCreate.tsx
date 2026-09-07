@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Printer, Save, Search, ShoppingCart, X, ArrowLeft, FileText } from 'lucide-react';
+import NumericInput from '../components/NumericInput';
+import SavedBanner from '../components/SavedBanner';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import InvoiceTrashButton from '../components/InvoiceTrashButton';
@@ -10,7 +12,7 @@ import F2ProductList, {
 } from '../components/F2ProductList';
 import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
-import { useQuantityFocus } from '../hooks/useQuantityFocus';
+import { useCartGridKeyboardNav } from '../hooks/useCartGridKeyboardNav';
 import {
   API_BASE,
   ensureArray,
@@ -32,6 +34,9 @@ import { buildPageUrl } from '../lib/navigation';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
 const EXCHANGE_RATE = 1;
+
+/** Sepet ızgarasında sol→sağ hücre sırası (klavyeyle dolaşma) */
+const CART_GRID_FIELDS = ['quantity', 'unitPriceUsd'] as const;
 
 type Branch = { id: number; name: string; type: string };
 type Safe = {
@@ -148,7 +153,18 @@ export default function PurchaseCreate({
   );
 
   const supplierSearchRef = useRef<HTMLInputElement>(null);
-  const { setQuantityRef, focusQuantity } = useQuantityFocus();
+  const getCartRowIds = useCallback(() => cart.map((item) => item.rowId), [cart]);
+  const {
+    setRef: setCartInputRef,
+    focusFieldSoon: focusCartFieldSoon,
+    onKeyDown: onCartFieldKeyDown,
+  } = useCartGridKeyboardNav(getCartRowIds, CART_GRID_FIELDS);
+
+  /**
+   * Kayıttan sonra sayfada kalınır; yeşil şerit onayı ekranın üstünde
+   * tutar, fişte bir şey değişince kaybolur.
+   */
+  const [savedNotice, setSavedNotice] = useState<string | null>(null);
 
   const f2 = useF2ProductSearch({
     open: searchModal,
@@ -371,6 +387,7 @@ export default function PurchaseCreate({
   }, [selectedBranch, initData.safes]);
 
   const selectSupplier = (customer: Customer) => {
+    setSavedNotice(null);
     setSelectedSupplier(customer);
     setSupplierSearch(`${customer.code} — ${customer.name}`);
     setSettlementType(defaultSettlementForParty(customer));
@@ -415,7 +432,8 @@ export default function PurchaseCreate({
     });
     closeSearchModal();
     // Adet kutusu odaklı ve seçili gelsin — kullanıcı doğrudan sayı tuşlasın
-    focusQuantity(targetRowId);
+    focusCartFieldSoon(targetRowId, 'quantity');
+    setSavedNotice(null);
   };
 
   const handleModalKeyDown = useF2KeyboardNav({
@@ -434,6 +452,7 @@ export default function PurchaseCreate({
         prev.includes(row.sourceInvoiceItemId!) ? prev : [...prev, row.sourceInvoiceItemId!]
       );
     }
+    setSavedNotice(null);
     setCart((prev) => prev.filter((item) => item.rowId !== rowId));
   };
 
@@ -497,6 +516,7 @@ export default function PurchaseCreate({
           }),
         });
 
+        setSavedNotice(`Fatura kaydedildi · ${displayInvoiceNo}`);
         notify('success', `Alış faturası güncellendi: ${displayInvoiceNo}`);
         onDataChange?.();
         onSaved?.();
@@ -544,6 +564,9 @@ export default function PurchaseCreate({
           setPrintBalance({ before: balanceBefore, after: balanceAfter });
         }
 
+        setSavedNotice(
+          `Fatura kaydedildi${savedInvoiceNo ? ` · ${savedInvoiceNo}` : ''} · ${formatUsd(totalUsd)}`
+        );
         notify(
           'success',
           `Alış faturası kaydedildi! ${savedInvoiceNo} · MERKEZ_DEPO stok güncellendi`
@@ -601,6 +624,7 @@ export default function PurchaseCreate({
 
   return (
     <div className="space-y-4 print:space-y-0">
+      <SavedBanner message={savedNotice} />
       <div className="print-pdf-doc hidden">
         <h1>{displayInvoiceNo || initData.nextInvoiceNo || 'Alış Fişi'}</h1>
         {receiptPartyLines.length > 0 && (
@@ -1028,14 +1052,13 @@ export default function PurchaseCreate({
                         </button>
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <input
-                          ref={setQuantityRef(item.rowId)}
-                          type="number"
-                          min="1"
-                          step="1"
+                        <NumericInput
+                          ref={setCartInputRef(item.rowId, 'quantity')}
+                          decimal={false}
+                          min={1}
                           value={item.quantity}
-                          onChange={(e) => {
-                            const qty = toIntegerQty(e.target.value, item.quantity);
+                          onValueChange={(qty) => {
+                            setSavedNotice(null);
                             setCart((prev) =>
                               prev.map((row) =>
                                 row.rowId === item.rowId
@@ -1044,17 +1067,17 @@ export default function PurchaseCreate({
                               )
                             );
                           }}
+                          onKeyDown={(e) => onCartFieldKeyDown(e, item.rowId, 'quantity')}
                           className="w-16 text-right rounded border-slate-300 text-sm px-1.5 py-1 border focus:border-indigo-500 focus:ring-indigo-500"
                         />
                       </td>
                       <td className="px-3 py-2 text-right">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <NumericInput
+                          ref={setCartInputRef(item.rowId, 'unitPriceUsd')}
+                          min={0}
                           value={item.unitPriceUsd}
-                          onChange={(e) => {
-                            const price = Number(e.target.value);
+                          onValueChange={(price) => {
+                            setSavedNotice(null);
                             setCart((prev) =>
                               prev.map((row) =>
                                 row.rowId === item.rowId
@@ -1067,6 +1090,9 @@ export default function PurchaseCreate({
                               )
                             );
                           }}
+                          onKeyDown={(e) =>
+                            onCartFieldKeyDown(e, item.rowId, 'unitPriceUsd')
+                          }
                           className="w-20 text-right rounded border-slate-300 text-sm px-1.5 py-1 border tabular-nums focus:border-indigo-500 focus:ring-indigo-500"
                         />
                       </td>

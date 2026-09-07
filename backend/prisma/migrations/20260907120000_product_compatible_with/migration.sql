@@ -1,0 +1,15 @@
+-- Muadil (uyumlu) urun bilgisi.
+--
+-- Mobil parca sektorunde ayni parca birden fazla modele uyar: iPhone 16 Pro
+-- ekrani iPhone 17'ye de takilabilir. Stokta olmayan urun icin "yok" demek
+-- yerine muadilini onerebilmek gerekiyordu.
+--
+-- Serbest metin secildi cunku kullanici bunu Excel'de model ADIYLA yaziyor
+-- ("iPhone 17"), stok koduyla degil. Bir stok kartinin birden cok muadili
+-- olabilecegi icin degerler virgulle ayrilir.
+--
+-- Iliski SIMETRIK yorumlanir: A'ya "B" yazmak B secildiginde de A'nin
+-- onerilmesi icin yeterlidir; iki satiri birden doldurmak gerekmez.
+--
+-- Mevcut kayitlar etkilenmez: kolon NULL kabul eder, varsayilani yok.
+ALTER TABLE `Product` ADD COLUMN `compatibleWith` TEXT NULL;

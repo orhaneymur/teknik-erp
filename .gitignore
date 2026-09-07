@@ -29,3 +29,8 @@ backend/prisma/*.db-journal
 # Veritabanı dökümleri — canlı müşteri verisi ASLA repoya girmez
 *.sql
 *.sql.gz
+
+# ...ama Prisma migration'ları şemanın tarihidir, repoda DURMAK ZORUNDA.
+# Yukarıdaki *.sql kuralı bunları da yutuyordu: yeni bir migration sessizce
+# commit'e girmiyor, sunucu git pull sonrası eski şemayla kalıyordu.
+!backend/prisma/migrations/**/*.sql

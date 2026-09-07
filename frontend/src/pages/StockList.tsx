@@ -88,6 +88,7 @@ export default function StockList({
     color: '',
     appearance: '',
     description: '',
+    compatibleWith: '',
     costPrice: '',
     priceUsd: '',
     priceUsd2: '',
@@ -328,6 +329,7 @@ export default function StockList({
       color: product.color ?? '',
       appearance: product.appearance ?? '',
       description: product.description ?? '',
+      compatibleWith: product.compatibleWith ?? '',
       costPrice: String(product.costPrice),
       priceUsd: String(product.priceUsd),
       priceUsd2: String(
@@ -364,6 +366,7 @@ export default function StockList({
         color: form.color.trim() || null,
         appearance: form.appearance.trim() || null,
         description: form.description.trim() || null,
+        compatibleWith: form.compatibleWith.trim() || null,
         costPrice: Number(form.costPrice),
         priceUsd: Number(form.priceUsd),
         priceUsd2: Number(form.priceUsd2 || form.priceUsd),
@@ -634,6 +637,9 @@ export default function StockList({
                   Toplam Stok
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">
+                  Uyumlu
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">
                   Şube / Depo
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">
@@ -645,7 +651,7 @@ export default function StockList({
               {loading && (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-4 py-12 text-center text-slate-400 text-sm"
                   >
                     Yükleniyor...
@@ -724,6 +730,30 @@ export default function StockList({
                             {stockTotal} adet
                           </span>
                         </td>
+                        {/*
+                         * Muadil modeller. Excel'deki "Uyumlu" sutununun
+                         * karsiligi ve ayni sirada: Bakiye'den sonra, elle
+                         * doldurulan son tanim alani.
+                         *
+                         * Bos olan urunler burada goze carpsin diye tire
+                         * yerine soluk bir uyari yazisi basilir: hangi
+                         * kartlara muadil girilmedigi listeye bakarak
+                         * gorulebilsin.
+                         */}
+                        <td className="px-4 py-3 max-w-[200px]">
+                          {product.compatibleWith?.trim() ? (
+                            <span
+                              className="block truncate text-sm text-slate-700"
+                              title={product.compatibleWith}
+                            >
+                              {product.compatibleWith}
+                            </span>
+                          ) : (
+                            <span className="text-caption text-slate-300">
+                              girilmedi
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-wrap gap-1.5">
                             {stocks.length === 0 && (
@@ -773,7 +803,7 @@ export default function StockList({
                       </tr>
                       {isExpanded && stocks.length > 0 && (
                         <tr className="bg-slate-50/50">
-                          <td colSpan={9} className="px-6 py-4">
+                          <td colSpan={10} className="px-6 py-4">
                             <p className="text-xs font-semibold text-slate-500 uppercase mb-2">
                               Tüm Şube Stokları — {product.name}
                             </p>
@@ -805,7 +835,7 @@ export default function StockList({
               {!loading && products.length === 0 && (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-4 py-12 text-center text-slate-400 text-sm"
                   >
                     Aramanıza uygun ürün bulunamadı.
@@ -998,6 +1028,24 @@ export default function StockList({
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600">
+                  Uyumlu (muadil modeller)
+                </label>
+                <input
+                  type="text"
+                  value={form.compatibleWith}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, compatibleWith: e.target.value }))
+                  }
+                  placeholder="iPhone 17, iPhone 17 Plus"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+                <p className="mt-1 text-caption text-slate-500">
+                  Bu parçanın uyduğu diğer modeller — virgülle ayırın. Eşleşme
+                  çift yönlüdür.
+                </p>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-600">Açıklama</label>

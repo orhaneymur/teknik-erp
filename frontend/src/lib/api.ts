@@ -218,6 +218,8 @@ export type Product = {
   appearance?: string | null;
   quality?: string | null;
   description?: string | null;
+  /** Muadil model adları — Excel'deki "Uyumlu" sütunu, virgülle ayrık */
+  compatibleWith?: string | null;
   categoryId?: number | null;
   category?: { id: number; name: string } | null;
   costPrice: number;
