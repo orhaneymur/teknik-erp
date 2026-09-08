@@ -11,15 +11,19 @@ oturuma başlarken önce buraya bak.
 
 | Adres | Ortam | Sürüm | Ne için |
 |---|---|---|---|
-| `teknik.shenzhenmarket.com.tr` | **CANLI MÜŞTERİ** | **v1.9.2** | Shenzhen Market — gerçek kullanım |
-| `test.shenzhenmarket.com.tr` | Prova | v1.14.1 | Güncellemeler önce burada denenir |
+| `teknik.shenzhenmarket.com.tr` | **CANLI MÜŞTERİ** | **v1.15.0** | Shenzhen Market — gerçek kullanım |
+| `liste.shenzhenmarket.com.tr` | **CANLI** | fiyat v1.3.0 | Müşterinin kendi müşterilerine gönderdiği açık fiyat listesi |
+| `test.shenzhenmarket.com.tr` | Prova | v1.15.0 | Güncellemeler önce burada denenir |
+| `shenzhen-test-liste.derneklab.com` | Prova | fiyat v1.3.0 | Fiyat listesi provası |
 | `demo-erp.derneklab.com` | Vitrin | v1.9.2 | Müşteriye ürün gösterme |
 
-Üçü de ayrı namespace, ayrı veritabanı, ayrı disk, ayrı şifre.
-Aynı iki Docker imajını çalıştırırlar; fark yalnızca ayardadır.
+Namespace'ler ayrı: ayrı veritabanı, ayrı disk, ayrı şifre. ERP ve fiyat
+listesi aynı namespace'te yaşar ama **ayrı helm release**, ayrı imaj,
+ayrı sürümdür.
 
-**Canlı sistem v1.9.2'de.** 31 Ağustos'ta yazılan v1.10–v1.13
-güncellemeleri henüz canlıya alınmadı (bilinçli erteleme).
+**Canlı 8 Eylül'de v1.9.2'den v1.15.0'a çıkarıldı** — arada altı sürüm ve
+bir şema değişikliği (v1.12.0) vardı, sorunsuz geçti. Müşterinin isteğiyle
+yedek adımı atlandı; gecelik yedek zaten çalışıyordu.
 
 ---
 
@@ -27,20 +31,20 @@ güncellemeleri henüz canlıya alınmadı (bilinçli erteleme).
 
 ```
 GitHub    : orhaneymur/teknik-erp   ERP (tek dal: main)
-            <fiyat listesi deposu>  HENÜZ İTİLMEDİ — yerelde
+            orhaneymur/liste-erp    Fiyat listesi (ayrı ürün, ayrı sürüm)
             orhaneymur/akgunnew     ARŞİV
             orhaneymur/akgunteknik  ARŞİV (Laravel, terk edilmiş)
             orhaneymur/caritakip    ARŞİV
 
-DockerHub : since1907/teknikerp-backend    v1.9.0 … v1.14.1
-            since1907/teknikerp-frontend   v1.9.0 … v1.14.1
-            since1907/teknikfiyat          HENÜZ İTİLMEDİ
+DockerHub : since1907/teknikerp-backend    v1.9.0 … v1.15.0
+            since1907/teknikerp-frontend   v1.9.0 … v1.15.0
+            since1907/teknikfiyat          v1.0.0 … v1.3.0
             (bestpool-*, fourseason başka projeler — dokunma)
 
 Sunucu    : 213.238.168.227  port 23422  kullanıcı root
             k3s
             /root/teknikerp    ERP chart'ı
-            /root/teknikfiyat  fiyat listesi chart'ı (henüz yok)
+            /root/teknikfiyat  fiyat listesi chart'ı
 ```
 
 ### Çalışma klasörü
@@ -105,14 +109,12 @@ firma adı ileride değişirse etiket kaymasın diye sabitlendi.
 
 ### Öncelikli
 
-- [ ] **Provada v1.14.1'i gözden geçir** — klavye akışı, virgüllü fiyat,
-      yeşil kayıt şeridi, muadil önerisi, giriş yapmadan sayfa açılmıyor
-      mu. `test.shenzhenmarket.com.tr`
-- [ ] **Canlı geçiş** — onaydan sonra. Sırası:
-      1. Canlı DB yedeği al ve doğrula
-      2. `update-all-tenants.sh <surum> shenzhen`
-      3. Veri sayılarını doğrula, site 200 mü
-      4. **Ayrı adım:** `renumberSkus --uygula`, çıktıyı SAKLA
+- [ ] **`renumberSkus --uygula`** — canlı geçişte atlandı, hâlâ
+      yapılmadı. Çalıştırınca çıktıyı SAKLA.
+- [ ] **Sunucu 8 Eylül'de ~2 saat düştü** — sebebi bilinmiyor. Ping ve
+      tüm portlar kapalıydı, k3s değil makine seviyesindeydi; kendi
+      kendine geri geldi. `uptime`, `df -h`, `dmesg` bakılmadı.
+      Tekrarlarsa Hostixo'ya (sağlayıcı, Bursa) açılacak.
 - [ ] **Yedekleri sunucu dışına çıkar** — kalan tek gerçek veri riski.
       Gecelik yedek çalışıyor ama aynı diskte duruyor.
 - [ ] **Geçmiş Çin iade faturalarını denetle** — düzenlenmiş iadelerde
@@ -120,11 +122,11 @@ firma adı ileride değişirse etiket kaymasın diye sabitlendi.
       `CIN_IADE_DEPO` bakiyesi ile iade kayıtlarını karşılaştıran bir
       kontrol sorgusu yazılacak; düzeltme elle yapılacak.
 
-### Fiyat Listesi sitesi — kod hazır, yayına alınmadı
+### Fiyat Listesi sitesi — YAYINDA, geliştirme beklemede
 
-Kararlar verildi ve kod yazıldı; ayrıntı için bu belgenin 8. bölümü.
-Kalan: iki depoyu GitHub'a itmek, imajı Docker Hub'a atmak, provaya
-kurup denemek.
+`liste.shenzhenmarket.com.tr` canlıda çalışıyor (fiyat v1.3.0).
+8 Eylül'de müşteri kararıyla **beklemeye alındı**; ERP işlerine dönüldü.
+Ayrıntı ve kalan işler: bu belgenin 8. bölümü.
 
 ### Bekleyen malzeme
 
@@ -248,11 +250,17 @@ sunucu gerekir — satış yaparken bilinmesi gereken sınır.
 
 ---
 
-## 8. Fiyat Listesi sitesi
+## 8. Fiyat Listesi sitesi — YAYINDA, beklemede
+
+`liste.shenzhenmarket.com.tr` · fiyat **v1.3.0** · depo
+`orhaneymur/liste-erp` · imaj `since1907/teknikfiyat`
 
 Müşterinin **kendi müşterilerine** link olarak gönderdiği açık fiyat
-sitesi. ERP alan her firmaya **ücretsiz ve varsayılan** olarak kurulur;
+sitesi. ERP alan her firmaya ücretsiz ve varsayılan olarak kurulur;
 ERP'siz satılmaz.
+
+**8 Eylül'de müşteri kararıyla beklemeye alındı.** Çalışıyor; geliştirme
+sonra sürecek.
 
 ### Kararlar (8 Eylül 2026)
 
@@ -260,11 +268,14 @@ ERP'siz satılmaz.
 |---|---|
 | Veri kaynağı | ERP veritabanı, otomatik. Excel yok, panel yok |
 | Kod | **Ayrı depo, ayrı imaj, ayrı sürüm** — ERP'nin içinde değil |
-| Adres | `liste.<müşteri alan adı>` — ör. `liste.shenzhenmarket.com.tr` |
+| Adres | `liste.<müşteri alan adı>`; yoksa `<ad>-liste.derneklab.com` |
 | Erişim | Herkese açık, giriş yok. Bayi platformu ileride ayrı iş |
 | Para birimi | USD (ERP'deki gibi), çevrim yok |
 | Gösterilen | Toptan + perakende |
-| Stok | **Var / Yok** — iki durum, "sınırlı" yok, adet gösterilmez |
+| Stok | **Var / Yok** — iki durum, adet gösterilmez |
+| Stokta yoksa | **Fiyatı gizlenir**, satır listenin sonuna düşer |
+| Model listesi | Fiyat gösterilmez, yalnız model adı |
+| Tema | Koyu — müşteri açık temayı beğenmedi |
 | Kurulum | `new-tenant.sh` iki siteyi birden kurar |
 
 ### Nasıl çalışıyor
@@ -274,7 +285,7 @@ ERP veritabanı
       ↓
 teknikerp-backend :  GET /api/public/fiyat-listesi   (kimliksiz, salt okuma)
       ↓                     ↑ aynı namespace, küme içi
-teknikfiyat pod   :  Next.js, 60 sn'de bir tazeler, hiçbir veri saklamaz
+teknikfiyat pod   :  Next.js, listeyi indeksleyip 60 sn önbellekler
       ↓
 liste.shenzhenmarket.com.tr
 ```
@@ -287,31 +298,42 @@ Maliyet (`costPrice`), RMB fiyatı, stok adedi, açıklama, müşteri ve
 fatura verisi sorgunun içinde hiç yok. Stok yalnızca `MERKEZ_DEPO`'dan
 sayılır — `CIN_IADE_DEPO`'daki mal Çin'e geri gidecek arızalı maldır.
 
-### Yapıldı
+### Sürüm geçmişi
 
-- ERP'ye `GET /api/public/fiyat-listesi` ucu (`teknik-erp` deposu)
-- `new-tenant.sh` fiyat listesini de kuruyor (depo yoksa atlıyor)
-- Fiyat listesi ERP'den beslenir hale getirildi: panel, giriş, Excel,
-  yedek ve kalıcı disk kaldırıldı — **4034 satır silindi, 357 eklendi**
-- Kendi Helm chart'ı + `build-images.sh`, `kur.sh`, `tum-musteriler.sh`
-- Gerçek imaj, ERP ucunu taklit eden sunucuya bağlanıp denendi:
-  dört sayfa 200, tablo doğru bastı (renkler ayrı satır, stok Var/Yok)
+```
+v1.0.0  ilk yayın — ERP'den beslenen liste, Excel ve panel kaldırıldı
+v1.0.1  hız: 1,4 sn -> ~20 ms (önbellekli indeks, force-dynamic kalktı)
+v1.1.0  açık tema denemesi — MÜŞTERİ BEĞENMEDİ
+v1.2.0  koyu temaya dönüş, rafine edildi; ikonlar büyütüldü
+v1.2.1  arama bozuktu (await unutulmuş), düzeltildi
+v1.3.0  stokta olmayanın fiyatı gizli, model listesinden fiyat kalktı
+```
 
-### Kalan
+### Öğrenilenler
 
-- [ ] Fiyat listesi deposunu GitHub'a it
-- [ ] `bash k8s/build-images.sh v1.0.0` → `since1907/teknikfiyat`
-- [ ] Cloudflare A kaydı: `liste` → `213.238.168.227` (Proxied)
-- [ ] Sunucuya `git clone ... /root/teknikfiyat`
-- [ ] Provaya kur ve dene:
-      `bash k8s/kur.sh shenzhen-test "Shenzhen Market (TEST)"`
-- [ ] Canlıya kur: `bash k8s/kur.sh shenzhen "Shenzhen Market" liste.shenzhenmarket.com.tr`
-- [ ] Chart'lar yerelde `helm template` ile doğrulanamadı (helm kurulu
-      değil) — provada ilk kurulumda dikkatli bak
+**Hız neredeydi.** Sayfa başına dokuz veri çağrısı ve her çağrıda 5152
+ürünün baştan taranması. Çözüm: listeyi bir kez çekip önbellekli bir
+indekse çevirmek. `layout.tsx`'teki `force-dynamic` de Excel
+döneminden kalmıştı, her isteği sıfırdan ürettiriyordu.
 
-### Bilinmesi gereken
+**`await` unutmak TypeScript'e yakalanmıyor.** `NextResponse.json` her
+türü kabul ettiği için `{ sonuclar: modelAra(q) }` derlenip geçti ve
+arama v1.0.1'den v1.2.1'e kadar canlıda bozuk kaldı.
 
-Marka adlarındaki `-ALKINDUS` eki ve `YEDEK PARÇA` kovası fiyat
-listesinde doğrudan görünür (bkz. 4. bölüm, "Bekleyen malzeme").
-Veri temizliği yapılana kadar müşteri "SAMSUNG" ve "SAMSUNG-ALKINDUS"
-diye iki ayrı marka kutusu görecek.
+**Tasarım turu.** İlk koyu tema "yapay zeka gibi" bulundu; tamamen sade
+açık tema ise "bembeyaz, aşırı sade". Kabul edilen yol: **koyu temayı
+koruyup rafine etmek** — gradyanı üç noktaya toplamak, yüzeylere üst
+kenar ışığı vermek, rakamları mono yapmak, giriş animasyonlarını atmak.
+Yeni bir görsel yön denemeden önce önizleme çıkarmak zaman kazandırdı.
+
+### Kalan işler (beklemede)
+
+- [ ] Müşterinin tasarım geri bildirimi — ikon boyutları, tablo düzeni
+- [ ] Toptan ve perakende çoğu üründe AYNI (ERP'de Satış 2 girilmemiş,
+      Satış 1 kopyalanmış). Aynı rakam iki sütunda duruyor; perakendeyi
+      kapatmak (`--set tenant.perakendeGoster=false`) daha temiz olabilir
+- [ ] Marka adlarındaki `-ALKINDUS` eki ve `YEDEK PARÇA` kovası
+      listede doğrudan görünüyor (bkz. 4. bölüm)
+- [ ] Demo tenant'ına da kurulsun mu (vitrin için)
+- [ ] Prova ortamı `shenzhen-test-liste.derneklab.com` ayakta; canlıya
+      çıkmadan önce sürümler burada denenmeli
