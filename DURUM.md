@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **7 Eylül 2026**
+Son güncelleme: **8 Eylül 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -12,7 +12,7 @@ oturuma başlarken önce buraya bak.
 | Adres | Ortam | Sürüm | Ne için |
 |---|---|---|---|
 | `teknik.shenzhenmarket.com.tr` | **CANLI MÜŞTERİ** | **v1.9.2** | Shenzhen Market — gerçek kullanım |
-| `test.shenzhenmarket.com.tr` | Prova | v1.14.0 | Güncellemeler önce burada denenir |
+| `test.shenzhenmarket.com.tr` | Prova | v1.14.1 | Güncellemeler önce burada denenir |
 | `demo-erp.derneklab.com` | Vitrin | v1.9.2 | Müşteriye ürün gösterme |
 
 Üçü de ayrı namespace, ayrı veritabanı, ayrı disk, ayrı şifre.
@@ -26,24 +26,30 @@ güncellemeleri henüz canlıya alınmadı (bilinçli erteleme).
 ## 2. Kaynaklar
 
 ```
-GitHub    : orhaneymur/teknik-erp   (tek aktif repo, tek dal: main)
+GitHub    : orhaneymur/teknik-erp   ERP (tek dal: main)
+            <fiyat listesi deposu>  HENÜZ İTİLMEDİ — yerelde
             orhaneymur/akgunnew     ARŞİV
             orhaneymur/akgunteknik  ARŞİV (Laravel, terk edilmiş)
             orhaneymur/caritakip    ARŞİV
 
-DockerHub : since1907/teknikerp-backend    v1.9.0 … v1.13.2
-            since1907/teknikerp-frontend   v1.9.0 … v1.13.2
+DockerHub : since1907/teknikerp-backend    v1.9.0 … v1.14.1
+            since1907/teknikerp-frontend   v1.9.0 … v1.14.1
+            since1907/teknikfiyat          HENÜZ İTİLMEDİ
             (bestpool-*, fourseason başka projeler — dokunma)
 
 Sunucu    : 213.238.168.227  port 23422  kullanıcı root
-            k3s, /root/teknikerp = tek chart kopyası
+            k3s
+            /root/teknikerp    ERP chart'ı
+            /root/teknikfiyat  fiyat listesi chart'ı (henüz yok)
 ```
 
 ### Çalışma klasörü
 
 ```
-Bilgisayarda : ~/Desktop/teknik-erp
-Sunucuda     : /root/teknikerp
+Bilgisayarda : ~/Desktop/teknik-erp     ERP
+               ~/Desktop/Fiyat Liste  fiyat listesi
+Sunucuda     : /root/teknikerp        ERP
+               /root/teknikfiyat      fiyat listesi
 ```
 
 Her oturum başı `git pull`, iş bitince `git push`.
@@ -87,26 +93,21 @@ c0f5638  v1.13.2  kod yenileme yalnizca eski otomatik kodlara,
 
 ## 4. BEKLEYEN İŞLER
 
-### Sırada — kod yazıldı, imaja girmedi
+### v1.14.1 provaya alındı (8 Eylül)
 
-v1.14.0 imajı çıktıktan SONRA yazıldı; bir sonraki sürümde (v1.14.1)
-provaya gidecek:
+İçindekiler: Excel dosya adında firma kısaltması + tarih-saat, iade
+faturasına kalem ekleme, Çin iade deposu düzeltmesi, Satış 1 = TOPTAN /
+Satış 2 = PERAKENDE, **tüm API uçlarına kimlik doğrulaması**.
 
-- [ ] **Excel dosya adı** — indirilen dosya `SM-stoklar-20260907-1432.xlsx`
-      biçiminde iner (firma kısaltması + tarih-saat)
-- [ ] **İade faturasına kalem ekleme** — müşteri ekstresinden açılan iade
-      faturasına artık ürün eklenebiliyor
-- [ ] **Çin iade deposu düzeltmesi** — fatura düzenleme ucu satır bazlı
-      "Çin iade" tikini görmüyordu, her değişikliği MERKEZ_DEPO'ya
-      yazıyordu
+Provaya `fileTag: SMT` verildi (revision 7). Zaten firma adı
+"Shenzhen Market (TEST)" olduğu için otomatik de SMT üretiliyordu;
+firma adı ileride değişirse etiket kaymasın diye sabitlendi.
 
 ### Öncelikli
 
-- [ ] **Provada v1.14.0'ı gözden geçir** — klavye akışı, virgüllü fiyat,
-      yeşil kayıt şeridi, muadil önerisi. `test.shenzhenmarket.com.tr`
-- [ ] **Prova ortamına ayrı `fileTag`** — prova ile canlı aynı firma adını
-      taşıdığı için indirilen dosyalar da aynı adla iniyor. Provaya
-      `tenant.fileTag: "SMT"` verilirse karışma riski kalkar.
+- [ ] **Provada v1.14.1'i gözden geçir** — klavye akışı, virgüllü fiyat,
+      yeşil kayıt şeridi, muadil önerisi, giriş yapmadan sayfa açılmıyor
+      mu. `test.shenzhenmarket.com.tr`
 - [ ] **Canlı geçiş** — onaydan sonra. Sırası:
       1. Canlı DB yedeği al ve doğrula
       2. `update-all-tenants.sh <surum> shenzhen`
@@ -119,19 +120,32 @@ provaya gidecek:
       `CIN_IADE_DEPO` bakiyesi ile iade kayıtlarını karşılaştıran bir
       kontrol sorgusu yazılacak; düzeltme elle yapılacak.
 
-### Fiyat Listesi sitesi — YENİ PROJE
+### Fiyat Listesi sitesi — kod hazır, yayına alınmadı
 
-Her müşteriye ERP'nin yanında ikinci bir site: müşterinin kendi
-müşterilerine göndereceği fiyat listesi. Kaynak `~/Desktop/Fiyat Liste`
-(Next.js 16, Cursor ile yazıldı, temiz derleniyor).
-
-Kararlar ve adımlar için ayrıntı: bu belgenin 8. bölümü.
+Kararlar verildi ve kod yazıldı; ayrıntı için bu belgenin 8. bölümü.
+Kalan: iki depoyu GitHub'a itmek, imajı Docker Hub'a atmak, provaya
+kurup denemek.
 
 ### Bekleyen malzeme
 
 - [ ] **Logo** — fişe eklenecek, dosya bekleniyor
-- [ ] **Kategori temizliği** — `a` adlı hatalı kategori, iki boş kategori
-      (`iPhone Yedek Parça`, `APPLE`), 14 kategorisiz ürün
+- [ ] **Kategori temizliği** — 3 boş kategori silinecek: `a` (hatalı),
+      `iPhone Yedek Parça`, `APPLE`. 14 ürün kategorisiz.
+- [ ] **Marka adına yapışmış tedarikçi** — `SAMSUNG-ALKINDUS` 109,
+      `XIAOMI-ALKINDUS` 124, `APPLE-ALKINDUS` 91, `HUAWEI-ALKINDUS` 55,
+      `TECNO-ALKINDUS` 48 (toplam ~427 ürün). Fiyat listesinde ayrı marka
+      olarak görünürler — müşteri "SAMSUNG" ve "SAMSUNG-ALKINDUS" diye iki
+      kutu görür. Tek `UPDATE` ile çözülür.
+- [ ] **`YEDEK PARÇA` kovası** — 1755 ürün (%33) bu genel kategoride;
+      parça tipi söylemiyor. Fiyat listesinde bu dala girince tek uzun
+      liste çıkar. Bölmek işi durdurmaz, sonra yapılabilir.
+
+> **Not (8 Eylül):** Bu belgede daha önce "kategori tek: iPhone Yedek
+> Parça" yazıyordu, YANLIŞTI. Canlıda 9 gerçek kategori var ve 5278
+> üründen 5264'ü kategorili: `EKRAN & LCD` 1581, `KASA & KAPAK` 1262,
+> `BATARYA` 314, `DOKUNMATİK & CAM` 251, `TAMİR GEREÇLERİ` 78,
+> `ELEKTRONİK` 13, `ENTEGRE & ÇİP` 7, `AKSESUAR` 3. Marka 5178,
+> model 5155 üründe dolu.
 
 ### Ertelenenler
 
@@ -197,9 +211,23 @@ ssh -p 23422 root@213.238.168.227 "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml; 
 helm rollback teknikerp -n tenant-shenzhen
 helm upgrade teknikerp charts/teknikerp -n tenant-shenzhen --reuse-values --set image.tag=v1.13.2
 
-# Yeni musteri  (once Cloudflare A kaydi: <ad>-erp -> 213.238.168.227, Proxied)
+# Yeni musteri — ERP + fiyat listesi birlikte kurulur
+# Once Cloudflare A kayitlari (ikisi de Proxied):
+#   <ad>-erp  -> 213.238.168.227      (musterinin kendi alan adi yoksa)
+#   liste     -> 213.238.168.227      (musterinin alan adinda)
 cd /root/teknikerp && git pull
-bash k8s/new-tenant.sh xyzoto "XYZ Oto Elektrik"
+cd /root/teknikfiyat && git pull
+cd /root/teknikerp
+FIYAT_ALAN=liste.musteri.com.tr bash k8s/new-tenant.sh xyzoto "XYZ Oto Elektrik"
+
+# Yalnizca fiyat listesi (ERP zaten kurulu)
+cd /root/teknikfiyat && git pull
+bash k8s/kur.sh shenzhen "Shenzhen Market" liste.shenzhenmarket.com.tr
+
+# Fiyat listesi yeni surum (ERP'den BAGIMSIZ)
+cd /root/teknikfiyat
+bash k8s/tum-musteriler.sh v1.0.1 shenzhen-test   # once prova
+bash k8s/tum-musteriler.sh v1.0.1                 # sonra hepsi
 ```
 
 Şifreler için: `SIFRELER.md`
@@ -213,68 +241,77 @@ Mimari ve müşteri düzeni için: `SAAS.md`, `tenants/README.md`
 Sunucu   7.8 GB RAM  |  ~2.5 GB bos  |  musteri basina ~600-800 MB
 ```
 
-Yaklaşık 3-4 müşteri daha sığar. Rancher kaldırılırsa bir tane daha.
-Ondan sonra RAM yükseltmek veya ikinci sunucu gerekir — satış yaparken
-bilinmesi gereken sınır.
+Fiyat listesi müşteri başına ~150-250 MB daha ekler (ayrı pod). İkisi
+birlikte ~800 MB-1 GB eder, yani **2-3 müşteri daha sığar.** Rancher
+kaldırılırsa bir tane daha. Ondan sonra RAM yükseltmek veya ikinci
+sunucu gerekir — satış yaparken bilinmesi gereken sınır.
 
 ---
 
-## 8. Fiyat Listesi sitesi — açık kararlar ve plan
+## 8. Fiyat Listesi sitesi
 
-Hedef: müşteriyle anlaşınca **iki site birden** kurulur — ERP ve fiyat
-listesi. Fiyat listesi, müşterinin kendi müşterilerine link olarak
-gönderdiği, kategori altında Satış 1 / Satış 2 fiyatlarını gösteren
-sitedir.
+Müşterinin **kendi müşterilerine** link olarak gönderdiği açık fiyat
+sitesi. ERP alan her firmaya **ücretsiz ve varsayılan** olarak kurulur;
+ERP'siz satılmaz.
 
-### Elimizdeki uygulama
+### Kararlar (8 Eylül 2026)
 
-`~/Desktop/Fiyat Liste` — Next.js 16 / React 19 / Tailwind 4, TypeScript.
-`next build` temiz geçiyor. Şu anki hâli:
+| Konu | Karar |
+|---|---|
+| Veri kaynağı | ERP veritabanı, otomatik. Excel yok, panel yok |
+| Kod | **Ayrı depo, ayrı imaj, ayrı sürüm** — ERP'nin içinde değil |
+| Adres | `liste.<müşteri alan adı>` — ör. `liste.shenzhenmarket.com.tr` |
+| Erişim | Herkese açık, giriş yok. Bayi platformu ileride ayrı iş |
+| Para birimi | USD (ERP'deki gibi), çevrim yok |
+| Gösterilen | Toptan + perakende |
+| Stok | **Var / Yok** — iki durum, "sınırlı" yok, adet gösterilmez |
+| Kurulum | `new-tenant.sh` iki siteyi birden kurar |
 
-- Veri **tek bir JSON dosyasında** (`veri/fiyatlar.json`), veritabanı yok
-- Excel yükleyerek doldurulur; şablon indirme ve dışa aktarma var
-- Gezinme: Marka → Kategori → Model → fiyat tablosu, ayrıca arama
-- Yönetim paneli tek şifreyle (`ADMIN_SIFRE`, **varsayılanı `admin123`**)
-- Ayarlar: firma adı, telefon, WhatsApp, KDV, kur, hangi fiyat görünsün
-- Örnek veri: 2520 satır, 13 marka, 9 kategori, hepsi TRY
+### Nasıl çalışıyor
 
-### Karar bekleyen konular
+```
+ERP veritabanı
+      ↓
+teknikerp-backend :  GET /api/public/fiyat-listesi   (kimliksiz, salt okuma)
+      ↓                     ↑ aynı namespace, küme içi
+teknikfiyat pod   :  Next.js, 60 sn'de bir tazeler, hiçbir veri saklamaz
+      ↓
+liste.shenzhenmarket.com.tr
+```
 
-1. **Veri kaynağı.** Site ERP veritabanından mı beslensin (otomatik),
-   ERP'den indirilen Excel elle mi yüklensin, yoksa ERP'ye "fiyat
-   sitesine gönder" düğmesi mi konsun?
-2. **Kategori boşluğu.** Sitenin ağacı parça tipi ister (Ekran, Batarya).
-   ERP'de kategori tek: "iPhone Yedek Parça"; parça tipi yalnızca ürün
-   adının içinde geçiyor. Bu çözülmeden ERP verisi siteyi besleyemez.
-3. ~~Satış 1 / Satış 2 hangisi toptan?~~ **KARARLAŞTI (7 Eylül):**
-   Satış 1 = TOPTAN, Satış 2 = PERAKENDE. Tüm ekran etiketleri, Excel
-   yorumları ve satış ekranındaki varsayılan kademe buna göre düzeltildi.
-4. **Para birimi.** ERP tamamen USD; site TRY/USD/EUR destekliyor.
-   Müşteriye hangisi gösterilecek, TL ise kur nereden?
-5. **Site herkese açık mı?** Toptan fiyat ticari sırdır.
-6. **Stok görünsün mü?** Rakam mı, "Var/Sınırlı/Yok" mu, hiç mi?
-7. **Hangi ürünler yayınlanacak?** Hepsi mi, yoksa bir "yayınla" bayrağı
-   mı gerekir?
+Aradaki tek bağ bu HTTP ucudur — kod paylaşımı yok. ERP'ye sürüm atmak
+fiyat listesini etkilemez, tersi de geçerli.
 
-### Yapılacaklar (kararlardan sonra)
+**Ucun sınırı güvenliğin kendisi:** açık olduğu için sorgusu bilerek dar.
+Maliyet (`costPrice`), RMB fiyatı, stok adedi, açıklama, müşteri ve
+fatura verisi sorgunun içinde hiç yok. Stok yalnızca `MERKEZ_DEPO`'dan
+sayılır — `CIN_IADE_DEPO`'daki mal Çin'e geri gidecek arızalı maldır.
 
-- [ ] Klasörü sürüm kontrolüne al (ayrı repo mu, teknik-erp içinde mi)
-- [ ] `veri/fiyatlar.json` repoya girsin mi — içinde müşteri fiyatı var
-- [ ] `output: 'standalone'` ekle + çok aşamalı Dockerfile yaz
-- [ ] DockerHub'a it (`since1907/teknikfiyat-*`)
-- [ ] Helm chart'a ikinci deployment + service + ingress + kalıcı disk
-- [ ] `ADMIN_SIFRE` ve `OTURUM_ANAHTARI` Secret'a taşınsın —
-      **`admin123` asla canlıya gitmemeli**
-- [ ] Firma adı/iletişim ConfigMap'ten gelsin (ERP'deki `config.json`
-      kalıbının aynısı), her müşteri kendi ayarını taşısın
-- [ ] `new-tenant.sh` iki siteyi birden kursun
-- [ ] Adres kalıbı: tek seviye olmak zorunda (Cloudflare sertifikası) —
-      `<ad>-fiyat.derneklab.com`
-- [ ] ERP → site veri akışı (1. karara göre)
-- [ ] Kategori çözümü (2. karara göre)
+### Yapıldı
 
-### Kapasite etkisi
+- ERP'ye `GET /api/public/fiyat-listesi` ucu (`teknik-erp` deposu)
+- `new-tenant.sh` fiyat listesini de kuruyor (depo yoksa atlıyor)
+- Fiyat listesi ERP'den beslenir hale getirildi: panel, giriş, Excel,
+  yedek ve kalıcı disk kaldırıldı — **4034 satır silindi, 357 eklendi**
+- Kendi Helm chart'ı + `build-images.sh`, `kur.sh`, `tum-musteriler.sh`
+- Gerçek imaj, ERP ucunu taklit eden sunucuya bağlanıp denendi:
+  dört sayfa 200, tablo doğru bastı (renkler ayrı satır, stok Var/Yok)
 
-Sunucuda ~2.5 GB boş. Next.js sunucusu müşteri başına ~150-250 MB ekler.
-Tek siteyle 3-4 müşteri sığıyordu; **ikişer siteyle 2-3'e düşer.** Satış
-yaparken bilinmesi gereken yeni sınır budur.
+### Kalan
+
+- [ ] Fiyat listesi deposunu GitHub'a it
+- [ ] `bash k8s/build-images.sh v1.0.0` → `since1907/teknikfiyat`
+- [ ] Cloudflare A kaydı: `liste` → `213.238.168.227` (Proxied)
+- [ ] Sunucuya `git clone ... /root/teknikfiyat`
+- [ ] Provaya kur ve dene:
+      `bash k8s/kur.sh shenzhen-test "Shenzhen Market (TEST)"`
+- [ ] Canlıya kur: `bash k8s/kur.sh shenzhen "Shenzhen Market" liste.shenzhenmarket.com.tr`
+- [ ] Chart'lar yerelde `helm template` ile doğrulanamadı (helm kurulu
+      değil) — provada ilk kurulumda dikkatli bak
+
+### Bilinmesi gereken
+
+Marka adlarındaki `-ALKINDUS` eki ve `YEDEK PARÇA` kovası fiyat
+listesinde doğrudan görünür (bkz. 4. bölüm, "Bekleyen malzeme").
+Veri temizliği yapılana kadar müşteri "SAMSUNG" ve "SAMSUNG-ALKINDUS"
+diye iki ayrı marka kutusu görecek.
