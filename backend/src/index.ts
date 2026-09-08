@@ -247,6 +247,233 @@ async function adjustStockQuantity(
   }
 }
 
+/**
+ * Bir satis satirinin maliyeti.
+ *
+ * Once satis aninda DONDURULAN deger (unitCost) kullanilir. null ise
+ * kayit bu alan eklenmeden once olusmustur; o zaman urunun guncel
+ * varsayilan maliyetine duseriz — eski davranis, ama yalnizca eski
+ * kayitlar icin.
+ */
+function satirMaliyeti(item: {
+  unitCost?: number | null;
+  product?: { costPrice: number } | null;
+}): number {
+  if (item.unitCost != null) return item.unitCost;
+  return item.product?.costPrice ?? 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* FIFO stok katmanlari                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Her alis kendi birim maliyetiyle bir KATMAN acar; satis en ESKI
+ * katmandan tuketir.
+ *
+ * Neden: onceden urunun tek bir costPrice alani vardi ve her alis onu
+ * son alis fiyatina esitliyordu. Stokta 1 adet 1,00 dolarlik mal
+ * dururken 1,20'ye alim yapilinca eldeki eski malin maliyeti de 1,20
+ * oluyor, 3 adetlik satis 3,60 gorunuyordu — gercegi 3,40 iken.
+ *
+ * Katman kaydi SILINMEZ, yalnizca miktari azalir; boylece hangi malin
+ * kaca alindigi izi kalir.
+ */
+async function lotEkle(
+  tx: Prisma.TransactionClient,
+  params: {
+    productId: number;
+    branchId: number;
+    quantity: number;
+    unitCost: number;
+    sourceInvoiceItemId?: number | null;
+    isOpening?: boolean;
+    /** Acilis katmanlarinin sirasi bozulmasin diye tarih verilebilir */
+    createdAt?: Date;
+  }
+) {
+  if (params.quantity <= 0) return;
+
+  await tx.stockLot.create({
+    data: {
+      productId: params.productId,
+      branchId: params.branchId,
+      quantity: params.quantity,
+      unitCost: roundMoney(Math.max(0, params.unitCost)),
+      sourceInvoiceItemId: params.sourceInvoiceItemId ?? null,
+      isOpening: params.isOpening ?? false,
+      ...(params.createdAt ? { createdAt: params.createdAt } : {}),
+    },
+  });
+}
+
+/**
+ * Satista katmanlari en eskiden baslayarak tuketir ve TUKETILEN
+ * miktarin agirlikli birim maliyetini dondurur.
+ *
+ * Stok yetmezse (stoksuz satis — piyasadan alip satma) kalan miktar en
+ * son katmanin maliyetinden sayilir; hic katman yoksa urun kartindaki
+ * varsayilan maliyet kullanilir.
+ */
+async function lotTuket(
+  tx: Prisma.TransactionClient,
+  params: {
+    productId: number;
+    branchId: number;
+    quantity: number;
+    /** Katman yoksa kullanilacak deger — Product.costPrice */
+    varsayilanMaliyet: number;
+  }
+): Promise<number> {
+  const { productId, branchId, quantity, varsayilanMaliyet } = params;
+  if (quantity <= 0) return 0;
+
+  const lotlar = await tx.stockLot.findMany({
+    where: { productId, branchId, quantity: { gt: 0 } },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  });
+
+  let kalan = quantity;
+  let toplamMaliyet = 0;
+  let sonKullanilanMaliyet: number | null = null;
+
+  for (const lot of lotlar) {
+    if (kalan <= 0) break;
+
+    const alinan = Math.min(lot.quantity, kalan);
+    toplamMaliyet += alinan * lot.unitCost;
+    sonKullanilanMaliyet = lot.unitCost;
+    kalan -= alinan;
+
+    await tx.stockLot.update({
+      where: { id: lot.id },
+      data: { quantity: { decrement: alinan } },
+    });
+  }
+
+  if (kalan > 0) {
+    /*
+     * Katman yetmedi: stoksuz satis. Kullanici bunu sik yapiyor —
+     * stokta olmayan urunu piyasadan alip satiyor. Kalan miktari en son
+     * bilinen maliyetten sayiyoruz ki kar raporu sifir maliyetle
+     * sismesin.
+     */
+    const dolgu = sonKullanilanMaliyet ?? varsayilanMaliyet;
+    toplamMaliyet += kalan * dolgu;
+  }
+
+  /*
+   * DIKKAT: birim maliyet 2 basamaga YUVARLANMAZ.
+   *
+   * 1,00 + 1,20 + 1,20 = 3,40 dolarlik uc adetlik satista birim maliyet
+   * 1,13333... cikar. Iki basamaga yuvarlanirsa 1,13 olur ve uc adet
+   * 3,39 eder — bir kurus kaybolur. Kalem sayisi arttikca bu fark
+   * buyur, kar raporu sessizce kayar.
+   *
+   * Alti basamak tutuyoruz; ekranda gosterim zaten iki basamaga
+   * yuvarlaniyor, ama HESAP tam kaliyor.
+   */
+  return Math.round((toplamMaliyet / quantity) * 1e6) / 1e6;
+}
+
+/**
+ * Bir alis kaleminin actigi katmani geri alir (fatura silme/duzenleme).
+ *
+ * Katmandan mal satilmissa (quantity azalmissa) tamami geri alinamaz;
+ * o durumda kalan kadari dusulur. Eksik kalan miktar zaten satilmis
+ * demektir, stok sayisi ayrica duzeltilir.
+ */
+async function lotKaldir(
+  tx: Prisma.TransactionClient,
+  sourceInvoiceItemId: number
+) {
+  const lotlar = await tx.stockLot.findMany({ where: { sourceInvoiceItemId } });
+  for (const lot of lotlar) {
+    await tx.stockLot.delete({ where: { id: lot.id } });
+  }
+}
+
+/**
+ * Satis iadesinde mal geri gelir: yeni bir katman acilir.
+ *
+ * Maliyet olarak, iade edilen satis kaleminin DONDURULMUS maliyeti
+ * kullanilir (unitCost). Boylece mal kaca cikmissa o fiyatla geri
+ * girer; iade kar raporunu bozmaz.
+ */
+async function lotIadeIleGeriKoy(
+  tx: Prisma.TransactionClient,
+  params: {
+    productId: number;
+    branchId: number;
+    quantity: number;
+    /** Maliyet buradan okunur — iade edilen SATIS kalemi */
+    maliyetKaynagiKalemId?: number | null;
+    /** Katman buna baglanir — iade/satis kalemi; fatura silinince
+     *  katman bu id uzerinden bulunup kaldirilir */
+    katmanKalemId?: number | null;
+    /** Kalem baglantisi yoksa bu musterinin son alisindan maliyet bulunur */
+    customerId?: number | null;
+    varsayilanMaliyet: number;
+  }
+) {
+  let maliyet: number | null = null;
+
+  // 1) Iade dogrudan bir satis kalemine baglanmissa maliyeti oradan
+  if (params.maliyetKaynagiKalemId) {
+    const kaynak = await tx.invoiceItem.findUnique({
+      where: { id: params.maliyetKaynagiKalemId },
+      select: { unitCost: true },
+    });
+    if (kaynak?.unitCost != null) maliyet = kaynak.unitCost;
+  }
+
+  /*
+   * 2) Bagli degilse (serbest iade ucu fatura kalemi gondermiyor):
+   *    musterinin BU URUNDEN en son aldigi satisin maliyetini bul.
+   *
+   * Neden onemli: mal 3,00 maliyetle cikip 1,00 ile geri girerse
+   * envanter degeri eksilir ve o mal tekrar satildiginda kar sisik
+   * gorunur. Iade, mal hangi maliyetle cikmissa o maliyetle geri
+   * girmeli.
+   */
+  if (maliyet === null && params.customerId) {
+    const sonSatis = await tx.invoiceItem.findFirst({
+      where: {
+        productId: params.productId,
+        unitCost: { not: null },
+        invoice: { type: 'SATIS', customerId: params.customerId, ...ACTIVE_INVOICE_FILTER },
+      },
+      orderBy: { id: 'desc' },
+      select: { unitCost: true },
+    });
+    if (sonSatis?.unitCost != null) maliyet = sonSatis.unitCost;
+  }
+
+  // 3) Hicbiri yoksa urunun varsayilan maliyeti
+  if (maliyet === null) maliyet = params.varsayilanMaliyet;
+
+  await lotEkle(tx, {
+    productId: params.productId,
+    branchId: params.branchId,
+    quantity: params.quantity,
+    unitCost: maliyet,
+    sourceInvoiceItemId: params.katmanKalemId ?? null,
+  });
+}
+
+/** Bir urunun bir depodaki katmanlarinin toplam degeri */
+async function lotStokDegeri(
+  tx: Prisma.TransactionClient | typeof prisma,
+  productId: number,
+  branchId: number
+): Promise<number> {
+  const lotlar = await tx.stockLot.findMany({
+    where: { productId, branchId, quantity: { gt: 0 } },
+    select: { quantity: true, unitCost: true },
+  });
+  return lotlar.reduce((toplam, l) => toplam + l.quantity * l.unitCost, 0);
+}
+
 async function applyInvoiceStockDelta(
   tx: Prisma.TransactionClient,
   invoiceType: string,
@@ -386,6 +613,11 @@ async function reverseInvoiceEffects(
   const cinIadeDepoId = await getDepotBranchId(tx, 'CIN_IADE');
 
   for (const item of invoice.items) {
+    const urun = await tx.product.findUnique({
+      where: { id: item.productId },
+      select: { costPrice: true },
+    });
+
     if (invoice.type === 'SATIS') {
       await applyInvoiceStockDelta(
         tx,
@@ -395,6 +627,22 @@ async function reverseInvoiceEffects(
         merkezDepoId,
         -item.quantity
       );
+
+      /*
+       * Satis silindi: mal geri geliyor. Katman, satirin DONDURULMUS
+       * maliyetiyle geri konur — mal hangi maliyetle cikmissa o
+       * maliyetle geri girsin, stok degeri sismesin.
+       * On siparis stoktan hic dusmemisti, katman da tuketilmemisti.
+       */
+      if (!invoice.isPreOrder) {
+        await lotIadeIleGeriKoy(tx, {
+          productId: item.productId,
+          branchId: merkezDepoId,
+          quantity: item.quantity,
+          maliyetKaynagiKalemId: item.id,
+          varsayilanMaliyet: urun?.costPrice ?? 0,
+        });
+      }
     } else if (invoice.type === 'ALIS') {
       await applyInvoiceStockDelta(
         tx,
@@ -404,6 +652,9 @@ async function reverseInvoiceEffects(
         merkezDepoId,
         -item.quantity
       );
+
+      // Alis silindi: o alisin actigi katman kaldirilir
+      await lotKaldir(tx, item.id);
     } else if (invoice.type === 'IADE') {
       const stockBranchId = item.isChinaReturn ? cinIadeDepoId : merkezDepoId;
       await adjustStockQuantity(
@@ -412,6 +663,9 @@ async function reverseInvoiceEffects(
         stockBranchId,
         -item.quantity
       );
+
+      // Iade silindi: iadeyle geri konan katman kaldirilir
+      await lotKaldir(tx, item.id);
     }
   }
 
@@ -2413,11 +2667,42 @@ app.put<{
         body.isPreOrder !== undefined &&
         body.isPreOrder !== existing.isPreOrder
       ) {
+        /*
+         * On siparis bayragi degisti: stokla birlikte FIFO katmanlari da
+         * ayni yone gitmeli.
+         *   on siparise cevir  -> mal geri gelir, katman geri konur
+         *   siparisi tamamla   -> mal cikar, katman tuketilir ve satirin
+         *                         maliyeti o anda dondurulur
+         */
         for (const item of existing.items) {
+          const urun = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { costPrice: true },
+          });
+
           if (body.isPreOrder) {
             await adjustStockQuantity(tx, item.productId, merkezDepoId, item.quantity);
+            await lotIadeIleGeriKoy(tx, {
+              productId: item.productId,
+              branchId: merkezDepoId,
+              quantity: item.quantity,
+              // Kendi dondurulmus maliyetiyle geri koyulur
+              maliyetKaynagiKalemId: item.id,
+              katmanKalemId: item.id,
+              varsayilanMaliyet: urun?.costPrice ?? 0,
+            });
           } else {
             await adjustStockQuantity(tx, item.productId, merkezDepoId, -item.quantity);
+            const birimMaliyet = await lotTuket(tx, {
+              productId: item.productId,
+              branchId: merkezDepoId,
+              quantity: item.quantity,
+              varsayilanMaliyet: urun?.costPrice ?? 0,
+            });
+            await tx.invoiceItem.update({
+              where: { id: item.id },
+              data: { unitCost: birimMaliyet },
+            });
           }
         }
       }
@@ -2977,14 +3262,36 @@ app.post<{
         include: { items: true },
       });
 
-      for (const item of items) {
-        await incrementStock(tx, item.productId, stockBranchId, item.quantity);
+      /*
+       * Her alis kalemi kendi maliyetiyle bir FIFO katmani acar.
+       *
+       * Urunun costPrice'i ARTIK EZILMIYOR: eskiden burada
+       * "costPrice: item.unitPrice" vardi ve eldeki eski, ucuz malin
+       * maliyeti de son alis fiyatina ziplyordu. costPrice bundan boyle
+       * yalnizca VARSAYILAN degerdir (katman yokken kullanilir), elle
+       * girilir ve alis ona dokunmaz.
+       */
+      /*
+       * Kaydedilen kalemler uzerinden doneriz (girdideki dizi uzerinden
+       * degil): katmani acan kalemin id'si boylece kesin dogru baglanir,
+       * ayni urunden birden fazla kalem olsa bile karismaz.
+       */
+      for (const kalem of createdInvoice.items) {
+        await incrementStock(tx, kalem.productId, stockBranchId, kalem.quantity);
 
+        await lotEkle(tx, {
+          productId: kalem.productId,
+          branchId: stockBranchId,
+          quantity: kalem.quantity,
+          unitCost: kalem.unitPrice,
+          sourceInvoiceItemId: kalem.id,
+        });
+
+        // Satis fiyati alis fiyatindan turetilmeye devam ediyor
         await tx.product.update({
-          where: { id: item.productId },
+          where: { id: kalem.productId },
           data: {
-            costPrice: item.unitPrice,
-            priceUsd: item.unitPrice > 0 ? item.unitPrice / rate : 0,
+            priceUsd: kalem.unitPrice > 0 ? kalem.unitPrice / rate : 0,
           },
         });
       }
@@ -3775,10 +4082,14 @@ app.post<{
       if (!isPreOrder) {
         const stockBranchId = await getDepotBranchId(tx, 'MERKEZ');
 
-        for (const item of normalizedItems) {
+        /*
+         * Kaydedilen kalemler uzerinden doneriz: her satirin maliyeti
+         * kendi id'sine yazilacak.
+         */
+        for (const kalem of createdInvoice.items) {
           const stockKey = {
             productId_branchId: {
-              productId: item.productId,
+              productId: kalem.productId,
               branchId: stockBranchId,
             },
           };
@@ -3789,18 +4100,42 @@ app.post<{
             await tx.productStock.update({
               where: stockKey,
               data: {
-                quantity: { decrement: item.quantity },
+                quantity: { decrement: kalem.quantity },
               },
             });
           } else {
             await tx.productStock.create({
               data: {
-                productId: item.productId,
+                productId: kalem.productId,
                 branchId: stockBranchId,
-                quantity: -item.quantity,
+                quantity: -kalem.quantity,
               },
             });
           }
+
+          /*
+           * FIFO: en eski katmandan tuket ve satirin maliyetini DONDUR.
+           *
+           * Bu olmadan kar raporu urunun GUNCEL costPrice'ini kullaniyor,
+           * kapanmis aylarin kari her yeni alista geriye donuk
+           * degisiyordu. Artik satis anindaki maliyet satirda kalir.
+           */
+          const urun = await tx.product.findUnique({
+            where: { id: kalem.productId },
+            select: { costPrice: true },
+          });
+
+          const birimMaliyet = await lotTuket(tx, {
+            productId: kalem.productId,
+            branchId: stockBranchId,
+            quantity: kalem.quantity,
+            varsayilanMaliyet: urun?.costPrice ?? 0,
+          });
+
+          await tx.invoiceItem.update({
+            where: { id: kalem.id },
+            data: { unitCost: birimMaliyet },
+          });
         }
       }
 
@@ -4004,15 +4339,32 @@ app.post<{
         include: { items: true },
       });
 
-      for (const item of normalizedItems) {
-        const toChinaReturn = item.isChinaReturn ?? false;
-        const stockBranchId = toChinaReturn ? cinIadeDepoId : merkezDepoId;
-        await incrementStock(
-          tx,
-          item.productId,
-          stockBranchId,
-          item.quantity
-        );
+      /*
+       * Iade: mal geri geliyor, FIFO katmani da geri konuyor.
+       *
+       * Maliyet, iade edilen SATIS kaleminin dondurulmus maliyetinden
+       * alinir (sourceInvoiceItemId). Boylece mal hangi maliyetle
+       * cikmissa ayni maliyetle geri girer ve iade, kar raporunu
+       * bozmaz. Kaynak kalem yoksa urunun varsayilan maliyeti kullanilir.
+       */
+      for (const kalem of createdInvoice.items) {
+        const stockBranchId = kalem.isChinaReturn ? cinIadeDepoId : merkezDepoId;
+        await incrementStock(tx, kalem.productId, stockBranchId, kalem.quantity);
+
+        const urun = await tx.product.findUnique({
+          where: { id: kalem.productId },
+          select: { costPrice: true },
+        });
+
+        await lotIadeIleGeriKoy(tx, {
+          productId: kalem.productId,
+          branchId: stockBranchId,
+          quantity: kalem.quantity,
+          maliyetKaynagiKalemId: kalem.sourceInvoiceItemId,
+          katmanKalemId: kalem.id,
+          customerId: createdInvoice.customerId,
+          varsayilanMaliyet: urun?.costPrice ?? 0,
+        });
       }
 
       if (paymentMethod === 'Cari') {
@@ -4160,9 +4512,25 @@ app.post<{
         include: { items: true },
       });
 
-      for (const item of normalizedItems) {
-        const stockBranchId = item.isChinaReturn ? cinIadeDepoId : merkezDepoId;
-        await incrementStock(tx, item.productId, stockBranchId, item.quantity);
+      // Iade: mal geri geliyor, katman da geri konuyor (bkz. yukarisi)
+      for (const kalem of createdInvoice.items) {
+        const stockBranchId = kalem.isChinaReturn ? cinIadeDepoId : merkezDepoId;
+        await incrementStock(tx, kalem.productId, stockBranchId, kalem.quantity);
+
+        const urun = await tx.product.findUnique({
+          where: { id: kalem.productId },
+          select: { costPrice: true },
+        });
+
+        await lotIadeIleGeriKoy(tx, {
+          productId: kalem.productId,
+          branchId: stockBranchId,
+          quantity: kalem.quantity,
+          maliyetKaynagiKalemId: kalem.sourceInvoiceItemId,
+          katmanKalemId: kalem.id,
+          customerId: createdInvoice.customerId,
+          varsayilanMaliyet: urun?.costPrice ?? 0,
+        });
       }
 
       if (paymentMethod === 'Cari') {
@@ -5208,6 +5576,8 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
       select: {
         quantity: true,
         unitPrice: true,
+        // Satis anindaki maliyet; yoksa urunun varsayilanina dusulur
+        unitCost: true,
         totalPrice: true,
         isChinaReturn: true,
         product: {
@@ -5278,7 +5648,7 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
 
     for (const item of items) {
       const tutar = lineTotal(item);
-      const maliyet = (item.product?.costPrice ?? 0) * item.quantity;
+      const maliyet = satirMaliyeti(item) * item.quantity;
 
       if (item.invoice.type === 'SATIS') {
         toplamCiro += tutar;
@@ -5386,7 +5756,7 @@ app.get('/api/reports/profit', async () => {
 
     for (const item of items) {
       const revenue = item.quantity * item.unitPrice;
-      const costBase = item.product.costPrice;
+      const costBase = satirMaliyeti(item);
       const profit = (item.unitPrice - costBase) * item.quantity;
       totalRevenue += revenue;
       totalProfit += profit;
@@ -5411,7 +5781,7 @@ app.get('/api/reports/profit', async () => {
 
   for (const item of monthItems) {
     const revenue = item.quantity * item.unitPrice;
-    const profit = (item.unitPrice - item.product.costPrice) * item.quantity;
+    const profit = (item.unitPrice - satirMaliyeti(item)) * item.quantity;
 
     const existing = productMap.get(item.productId);
     if (existing) {
@@ -6031,21 +6401,61 @@ app.get('/api/reports/stock-value', async (request, reply) => {
     orderBy: { product: { name: 'asc' } },
   });
 
-  const rows = stocks.map((row) => ({
+  /*
+   * Stok degeri artik FIFO KATMANLARINDAN hesaplanir.
+   *
+   * Eskiden "adet x urunun costPrice'i" idi; costPrice her alista son
+   * alis fiyatina esitlendigi icin eldeki eski, ucuz mal da yeni fiyattan
+   * degerleniyordu ve envanter degeri gercekte olmayan bir sekilde
+   * siziyordu.
+   *
+   * Tum katmanlar TEK sorguda cekilip urun bazinda toplanir — urun basina
+   * ayri sorgu atmak 5000+ urunde raporu dakikalara cikarirdi.
+   */
+  const lotlar = await prisma.stockLot.findMany({
+    where: { branch: { name: 'MERKEZ_DEPO' }, quantity: { gt: 0 } },
+    select: { productId: true, quantity: true, unitCost: true },
+  });
+
+  const lotDegeri = new Map<number, number>();
+  const lotMiktari = new Map<number, number>();
+  for (const lot of lotlar) {
+    lotDegeri.set(lot.productId, (lotDegeri.get(lot.productId) ?? 0) + lot.quantity * lot.unitCost);
+    lotMiktari.set(lot.productId, (lotMiktari.get(lot.productId) ?? 0) + lot.quantity);
+  }
+
+  const rows = stocks.map((row) => {
+    const katmanDeger = lotDegeri.get(row.product.id);
+    const katmanMiktar = lotMiktari.get(row.product.id) ?? 0;
+
+    /*
+     * Katman varsa gercek deger ondan gelir; "Maliyet" sutununda ise
+     * katmanlarin agirlikli ortalamasi gosterilir (FIFO'da tek bir
+     * maliyet yoktur). Katman yoksa eski hesaba duseriz.
+     */
+    const stockValue =
+      katmanDeger !== undefined ? katmanDeger : row.quantity * row.product.costPrice;
+    const costPrice =
+      katmanDeger !== undefined && katmanMiktar > 0
+        ? katmanDeger / katmanMiktar
+        : row.product.costPrice;
+
+    return {
     productId: row.product.id,
     sku: row.product.sku,
     name: row.product.name,
     quantity: row.quantity,
-    costPrice: row.product.costPrice,
+    costPrice,
     priceUsd: row.product.priceUsd,
-    stockValue: row.quantity * row.product.costPrice,
+    stockValue,
     /*
      * Satis degeri Satis 1 (priceUsd) uzerinden hesaplanir; Satis 1 TOPTAN
      * fiyattir. Alan adi eskiden retailValue idi ve "Perakende Degeri" diye
      * gosteriliyordu — ikisi de yanlisti, hesap hep toptan uzerindendi.
      */
     saleValue: row.quantity * row.product.priceUsd,
-  }));
+    };
+  });
 
   const totals = rows.reduce(
     (acc, row) => ({

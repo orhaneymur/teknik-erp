@@ -22,6 +22,7 @@ model Branch {
   name      String
   type      BranchType     @default(STORE)
   stocks    ProductStock[]
+  lots      StockLot[]
   safes     Safe[]
   invoices  Invoice[]
   createdAt DateTime       @default(now())
@@ -67,35 +68,40 @@ model BrandModel {
 }
 
 model Product {
-  id           Int            @id @default(autoincrement())
-  sku          String         @unique
-  barcode      String?        @unique
-  name         String
-  brand        String?
-  model        String?
-  color        String?
-  appearance   String?
-  quality      String?
-  rbmPrice     Float          @default(0.0)
-  description  String?        @db.Text
+  id             Int            @id @default(autoincrement())
+  sku            String         @unique
+  barcode        String?        @unique
+  name           String
+  brand          String?
+  model          String?
+  color          String?
+  appearance     String?
+  quality        String?
+  rbmPrice       Float          @default(0.0)
+  description    String?        @db.Text
   /// Muadil model adlari — Excel'deki "Uyumlu" sutunu. Virgulle ayrilmis
   /// serbest metin; eslesme model adi / urun adi uzerinden yapilir.
   /// Iliski simetriktir: A muadili B yazmak B muadili A demektir.
-  compatibleWith String?      @db.Text
-  costPrice    Float          @default(0.0)
-  priceTl      Float          @default(0.0)
+  compatibleWith String?        @db.Text
+  /// VARSAYILAN maliyet — elle girilir.
+  /// Stokta katman kalmadiginda (stoksuz satis) veya hic alis kaydi
+  /// yokken bu deger kullanilir. Alis islemi ARTIK BUNU EZMEZ;
+  /// her alis kendi StockLot katmanini acar.
+  costPrice      Float          @default(0.0)
+  priceTl        Float          @default(0.0)
   /// Satış 1 (Toptan) — satışta varsayılan fiyat
-  priceUsd     Float          @default(0.0)
+  priceUsd       Float          @default(0.0)
   /// Satış 2 (Perakende) — başlangıçta Satış 1 ile aynı
-  priceUsd2    Float          @default(0.0)
-  categoryId   Int?
-  brandModelId Int?
-  category     Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  brandModel   BrandModel?    @relation(fields: [brandModelId], references: [id], onDelete: SetNull)
-  stocks       ProductStock[]
-  invoiceItems InvoiceItem[]
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  priceUsd2      Float          @default(0.0)
+  categoryId     Int?
+  brandModelId   Int?
+  category       Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brandModel     BrandModel?    @relation(fields: [brandModelId], references: [id], onDelete: SetNull)
+  stocks         ProductStock[]
+  lots           StockLot[]
+  invoiceItems   InvoiceItem[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 }
 
 model ProductStock {
@@ -107,6 +113,45 @@ model ProductStock {
   branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@unique([productId, branchId])
+}
+
+/// Stok katmani (FIFO).
+///
+/// Her alis, kendi birim maliyetiyle bir katman acar. Satis en ESKI
+/// katmandan tuketir; boylece "hangi mali kaca aldim" bilgisi kaybolmaz.
+///
+/// Neden gerekti: onceden urunun tek bir costPrice alani vardi ve her
+/// alis onu son alis fiyatina esitliyordu. Stokta 1 adet 1,00 dolarlik
+/// mal dururken 1,20'ye alim yapilinca eldeki eski malin maliyeti de
+/// 1,20 oluyordu — 3 adetlik satis 3,60 gorunuyordu, gercegi 3,40 iken.
+model StockLot {
+  id        Int @id @default(autoincrement())
+  productId Int
+  branchId  Int
+
+  /// Katmanda KALAN miktar. Satis tukettikce azalir; 0 olunca katman
+  /// kapanir ama kayit silinmez (gecmis iz).
+  quantity Float
+
+  /// Bu katmanin birim maliyeti (USD)
+  unitCost Float
+
+  /// Katmani acan alis kalemi. Fatura silinir/duzenlenirse katman
+  /// bunun uzerinden bulunur.
+  sourceInvoiceItemId Int?
+
+  /// Acilis katmani mi — surume gecerken mevcut stoktan uretilenler.
+  /// Bunlarin gercek bir alis kaydi yoktur.
+  isOpening Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branch  Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  /// FIFO sirasi: en eski katman once tuketilir
+  @@index([productId, branchId, createdAt])
+  @@index([sourceInvoiceItemId])
 }
 
 model Customer {
@@ -143,36 +188,36 @@ model Safe {
 }
 
 model Invoice {
-  id              Int           @id @default(autoincrement())
-  invoiceNo       String        @unique
-  type            String        @default("SATIS")
-  customerId      Int
-  safeId          Int
-  branchId        Int
-  userId          Int?
-  paymentMethod   String        @default("Nakit")
-  paymentType     String?
-  exchangeRate    Float         @default(1.0)
-  deliveryType    String        @default("Mağazadan Teslim")
-  dueDate         DateTime?
-  isPreOrder      Boolean       @default(false)
-  processedBy     String?
-  orderNotes      String?       @db.Text
-  shippingCompany String?
-  trackingNumber  String?
-  totalAmountTl   Float         @default(0.0)
-  totalAmountUsd  Float         @default(0.0)
+  id                Int           @id @default(autoincrement())
+  invoiceNo         String        @unique
+  type              String        @default("SATIS")
+  customerId        Int
+  safeId            Int
+  branchId          Int
+  userId            Int?
+  paymentMethod     String        @default("Nakit")
+  paymentType       String?
+  exchangeRate      Float         @default(1.0)
+  deliveryType      String        @default("Mağazadan Teslim")
+  dueDate           DateTime?
+  isPreOrder        Boolean       @default(false)
+  processedBy       String?
+  orderNotes        String?       @db.Text
+  shippingCompany   String?
+  trackingNumber    String?
+  totalAmountTl     Float         @default(0.0)
+  totalAmountUsd    Float         @default(0.0)
   originalInvoiceId Int?
-  originalInvoice   Invoice?    @relation("InvoiceReturns", fields: [originalInvoiceId], references: [id], onDelete: SetNull)
-  returnInvoices    Invoice[]   @relation("InvoiceReturns")
-  customer        Customer      @relation(fields: [customerId], references: [id])
-  safe            Safe          @relation(fields: [safeId], references: [id])
-  branch          Branch        @relation(fields: [branchId], references: [id])
-  user            User?         @relation(fields: [userId], references: [id])
-  items           InvoiceItem[]
-  deletedAt       DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  originalInvoice   Invoice?      @relation("InvoiceReturns", fields: [originalInvoiceId], references: [id], onDelete: SetNull)
+  returnInvoices    Invoice[]     @relation("InvoiceReturns")
+  customer          Customer      @relation(fields: [customerId], references: [id])
+  safe              Safe          @relation(fields: [safeId], references: [id])
+  branch            Branch        @relation(fields: [branchId], references: [id])
+  user              User?         @relation(fields: [userId], references: [id])
+  items             InvoiceItem[]
+  deletedAt         DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 }
 
 enum TransactionType {
@@ -197,11 +242,22 @@ model Transaction {
 }
 
 model InvoiceItem {
-  id                  Int           @id @default(autoincrement())
-  invoiceId           Int
-  productId           Int
-  quantity            Float
-  unitPrice           Float
+  id        Int   @id @default(autoincrement())
+  invoiceId Int
+  productId Int
+  quantity  Float
+  unitPrice Float
+
+  /// SATIS aninda DONDURULAN birim maliyet (USD).
+  ///
+  /// Neden: kar raporu eskiden urunun GUNCEL costPrice'ini kullaniyordu,
+  /// bu yuzden kapanmis aylarin kari her yeni alista geriye donuk
+  /// degisiyordu. Artik satirin maliyeti satis aninda yazilir ve bir
+  /// daha oynamaz.
+  ///
+  /// null = bu alan eklenmeden once olusmus eski kayit; raporlar o
+  /// durumda urunun costPrice'ina duser.
+  unitCost            Float?
   discountPercent     Float         @default(0)
   totalPrice          Float
   sourceInvoiceItemId Int?
