@@ -4,6 +4,11 @@
 # Kullanim:
 #   bash k8s/new-tenant.sh <kisa-ad> "<Firma Adi>" [ek helm parametreleri...]
 #
+# Fiyat listesi ERP ile birlikte kurulur. Musterinin kendi alan adi varsa
+# ortam degiskeni ile verilir (3. parametre ve sonrasi helm'e gider):
+#   FIYAT_ALAN=liste.shenzhenmarket.com.tr bash k8s/new-tenant.sh shenzhen "Shenzhen Market"
+# Verilmezse kaliptan uretilir: <kisa-ad>-liste.derneklab.com
+#
 # Ornekler:
 #   bash k8s/new-tenant.sh demo "TeknikERP Demo" --set demoReset.enabled=true
 #   bash k8s/new-tenant.sh xyzoto "XYZ Oto Elektrik" --set mysql.storage=10Gi
@@ -111,3 +116,40 @@ echo " Sifreyi guvenli bir yere kaydet. Daha sonra tekrar okumak icin:"
 echo "   kubectl get secret teknikerp-secrets -n ${NAMESPACE} \\"
 echo "     -o jsonpath='{.data.admin-password}' | base64 -d; echo"
 echo ""
+
+# ----------------------------------------------------------------------
+# Fiyat listesi — ERP'nin yaninda ucretsiz, varsayilan olarak kurulur.
+#
+# AYRI BIR DEPODUR (orhaneymur/teknik-fiyat). Kodu, imaji ve surumu
+# ERP'den bagimsizdir; buradan yalnizca kurulum betigi cagrilir.
+# Depo sunucuda yoksa kurulum atlanir ve ERP yine calisir.
+#
+# Musterinin kendi alan adi FIYAT_ALAN ortam degiskeniyle verilir:
+#   FIYAT_ALAN=liste.shenzhenmarket.com.tr bash k8s/new-tenant.sh shenzhen "Shenzhen Market"
+# ----------------------------------------------------------------------
+FIYAT_DEPO="${FIYAT_DEPO:-/root/teknikfiyat}"
+FIYAT_ALAN="${FIYAT_ALAN:-}"
+
+if [[ -x "${FIYAT_DEPO}/k8s/kur.sh" || -f "${FIYAT_DEPO}/k8s/kur.sh" ]]; then
+  echo ""
+  echo "==> Fiyat listesi kuruluyor (${FIYAT_DEPO})"
+  if bash "${FIYAT_DEPO}/k8s/kur.sh" "$TENANT_ID" "$COMPANY_NAME" "$FIYAT_ALAN"; then
+    FIYAT_HOST="$(kubectl get ingress teknikfiyat-ingress -n "$NAMESPACE"       -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo "-")"
+    echo ""
+    echo " Fiyat listesi : https://${FIYAT_HOST}   (herkese acik, giris istemez)"
+    echo ""
+  else
+    echo ""
+    echo " UYARI: Fiyat listesi kurulamadi. ERP calisiyor; fiyat listesini"
+    echo "        sonra elle kurabilirsin:"
+    echo "          cd ${FIYAT_DEPO} && bash k8s/kur.sh ${TENANT_ID} \"${COMPANY_NAME}\" [alan-adi]"
+    echo ""
+  fi
+else
+  echo ""
+  echo " NOT: Fiyat listesi deposu bulunamadi (${FIYAT_DEPO}), kurulmadi."
+  echo "      Kurmak icin:"
+  echo "        git clone <fiyat-listesi-deposu> ${FIYAT_DEPO}"
+  echo "        cd ${FIYAT_DEPO} && bash k8s/kur.sh ${TENANT_ID} \"${COMPANY_NAME}\" [alan-adi]"
+  echo ""
+fi
