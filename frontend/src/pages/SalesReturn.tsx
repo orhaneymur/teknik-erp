@@ -1724,9 +1724,6 @@ export default function SalesReturn({
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
                         Ürün
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                        Fatura
-                      </th>
                       <th className="w-24 px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
                         İade Adet
                       </th>
@@ -1773,20 +1770,6 @@ export default function SalesReturn({
                               {line.productName}
                             </button>
                             <p className="text-xs text-slate-500">{line.productSku}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            {line.manualOverride || line.invoiceId <= 0 ? (
-                              <span className="text-sm text-slate-400">{line.invoiceNo}</span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => setViewingInvoiceId(line.invoiceId)}
-                                className="text-sm font-semibold text-violet-700 hover:text-violet-900 hover:underline"
-                                title="Faturayı görüntüle"
-                              >
-                                {line.invoiceNo}
-                              </button>
-                            )}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <NumericInput
