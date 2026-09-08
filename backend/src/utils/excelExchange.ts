@@ -186,12 +186,12 @@ const QUALITY_LABELS: Record<string, string> = {
   OLED: 'OLED',
 };
 
-function appearanceLabel(value: string | null | undefined): string {
+export function appearanceLabel(value: string | null | undefined): string {
   if (!value) return '';
   return APPEARANCE_LABELS[value] ?? value;
 }
 
-function qualityLabel(value: string | null | undefined): string {
+export function qualityLabel(value: string | null | undefined): string {
   if (!value) return '';
   return QUALITY_LABELS[value] ?? value;
 }

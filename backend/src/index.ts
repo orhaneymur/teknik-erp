@@ -8,12 +8,14 @@ import Fastify from 'fastify';
 import type { Prisma } from '@prisma/client';
 import { prisma } from './lib/prisma.js';
 import {
+  appearanceLabel,
   exportCustomersExcel,
   exportInvoicesExcel,
   exportProductsExcel,
   importCustomersExcel,
   importInvoicesExcel,
   importProductsExcel,
+  qualityLabel,
   syncBrandModelsFromProducts,
 } from './utils/excelExchange.js';
 import {
@@ -1727,12 +1729,23 @@ app.register(rateLimit, { global: false });
  *                 doner, veri sizdirmaz.
  *   /api/auth/*   Giris ucu ile oturum kontrolu; ikisi de kendi
  *                 yanitini kendi uretir.
+ *
+ *   /api/public/fiyat-listesi
+ *                 Musterinin kendi musterilerine gonderdigi fiyat
+ *                 listesi sitesini besler. BILEREK aciktir: linki
+ *                 alan herkes gorebilmeli (karar: 8 Eylul 2026).
+ *                 Ucun sorgusu yalnizca marka, kategori, model,
+ *                 kalite, gorunum, renk, stok kodu ve iki satis
+ *                 fiyatini secer. Maliyet (costPrice), RMB fiyati,
+ *                 stok adedi, musteri ve fatura verisi sorgunun
+ *                 icinde HIC YOKTUR — sizdiracak alan birakilmadi.
  */
 const KIMLIKSIZ_UCLAR = new Set([
   'GET /api/health',
   'GET /api/version',
   'POST /api/auth/login',
   'GET /api/auth/me',
+  'GET /api/public/fiyat-listesi',
 ]);
 
 /**
@@ -6302,6 +6315,146 @@ app.get<{ Querystring: { customerId?: string } }>(
       data: { customer, lines },
       message: 'Customer statement retrieved successfully.',
     };
+  }
+);
+
+/* ------------------------------------------------------------------ */
+/* Fiyat listesi — herkese ACIK uc                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Musterinin kendi musterilerine link olarak gonderdigi fiyat listesi
+ * sitesini besler (/fiyat sayfasi). Kimlik dogrulamasi ISTEMEZ; karar
+ * 8 Eylul 2026'da alindi: liste herkese acik olacak.
+ *
+ * Bu yuzden sorgunun NE SECTIGI guvenlik sinirinin ta kendisidir.
+ * Asagidaki select bilerek dardir:
+ *
+ *   VERILEN : marka, kategori, model, kalite, gorunum, renk, stok kodu,
+ *             Satis 1 (toptan), Satis 2 (perakende) ve stok VAR/YOK
+ *   VERILMEYEN : costPrice (alis), rbmPrice (RMB), stok ADEDI,
+ *             tedarikci, musteri, fatura, aciklama, muadil bilgisi
+ *
+ * Stok neden adet degil de var/yok: kac adet oldugu ticari bilgidir,
+ * rakip stok derinligini ogrenmemeli. Musterinin musterisine lazim olan
+ * tek sey "simdi alabilir miyim" sorusunun cevabi.
+ *
+ * Sayima yalnizca MERKEZ_DEPO girer. CIN_IADE_DEPO'daki mal Cin'e geri
+ * gonderilecek arizali maldir; satilamaz, "stok var" demek yaniltir.
+ *
+ * Yeni bir alan eklemeden once "bunu rakip gorse ne olur" diye sor.
+ *
+ * Yayin olcutu: kategorisi olan ve en az bir satis fiyati girilmis
+ * urunler. Fiyati 0 olan urun "bedava" degil "fiyatlandirilmamis"
+ * demektir; listeye hic girmez.
+ */
+interface FiyatListesiUrunu {
+  marka: string;
+  kategori: string;
+  model: string;
+  kalite: string;
+  gorunum: string;
+  renk: string;
+  kod: string;
+  toptan: number | null;
+  perakende: number | null;
+  stokVar: boolean;
+}
+
+interface FiyatListesiYaniti {
+  guncellenme: string;
+  paraBirimi: 'USD';
+  urunSayisi: number;
+  urunler: FiyatListesiUrunu[];
+}
+
+/*
+ * Liste 5000+ satir olabiliyor ve herkese acik bir uc, ayni yaniti
+ * tekrar tekrar uretmemeli. Bir dakikalik bellek onbellegi hem veri
+ * tabanini korur hem de fiyat degisikliginin siteye yansimasini
+ * geciktirmeyecek kadar kisadir.
+ */
+const FIYAT_LISTESI_ONBELLEK_MS = 60_000;
+let fiyatListesiOnbellek: { uretimZamani: number; yanit: FiyatListesiYaniti } | null = null;
+
+app.get(
+  '/api/public/fiyat-listesi',
+  {
+    // Acik uc: tek bir istemcinin veritabanini mesgul etmesini onler
+    config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
+  },
+  async (_request, reply) => {
+    const simdi = Date.now();
+
+    if (
+      fiyatListesiOnbellek &&
+      simdi - fiyatListesiOnbellek.uretimZamani < FIYAT_LISTESI_ONBELLEK_MS
+    ) {
+      reply.header('Cache-Control', 'public, max-age=60');
+      return fiyatListesiOnbellek.yanit;
+    }
+
+    const kayitlar = await prisma.product.findMany({
+      where: {
+        categoryId: { not: null },
+        OR: [{ priceUsd: { gt: 0 } }, { priceUsd2: { gt: 0 } }],
+      },
+      select: {
+        sku: true,
+        brand: true,
+        model: true,
+        quality: true,
+        appearance: true,
+        color: true,
+        priceUsd: true,
+        priceUsd2: true,
+        category: { select: { name: true } },
+        // Yalnizca satilabilir depo; adet disari verilmez, toplanip
+        // var/yok'a cevrilir.
+        stocks: {
+          where: { branch: { name: 'MERKEZ_DEPO' } },
+          select: { quantity: true },
+        },
+      },
+      orderBy: [{ brand: 'asc' }, { model: 'asc' }, { priceUsd: 'asc' }],
+    });
+
+    const urunler: FiyatListesiUrunu[] = [];
+
+    for (const kayit of kayitlar) {
+      const marka = kayit.brand?.trim() ?? '';
+      const model = kayit.model?.trim() ?? '';
+      const kategori = kayit.category?.name?.trim() ?? '';
+
+      // Agac marka > kategori > model diye kuruluyor; ucu de eksik olan
+      // urun sitede hicbir dala oturamaz.
+      if (!marka || !model || !kategori) continue;
+
+      urunler.push({
+        marka,
+        kategori,
+        model,
+        kalite: qualityLabel(kayit.quality),
+        gorunum: appearanceLabel(kayit.appearance),
+        renk: kayit.color?.trim() ?? '',
+        kod: kayit.sku,
+        toptan: kayit.priceUsd > 0 ? kayit.priceUsd : null,
+        perakende: kayit.priceUsd2 > 0 ? kayit.priceUsd2 : null,
+        stokVar: kayit.stocks.reduce((toplam, s) => toplam + s.quantity, 0) > 0,
+      });
+    }
+
+    const yanit: FiyatListesiYaniti = {
+      guncellenme: new Date().toISOString(),
+      // ERP fiyatlari USD tutar; TL'ye cevirme sitede yapilmaz.
+      paraBirimi: 'USD',
+      urunSayisi: urunler.length,
+      urunler,
+    };
+
+    fiyatListesiOnbellek = { uretimZamani: simdi, yanit };
+    reply.header('Cache-Control', 'public, max-age=60');
+    return yanit;
   }
 );
 
