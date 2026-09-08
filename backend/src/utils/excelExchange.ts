@@ -423,7 +423,7 @@ async function addToStock(
   productId: number,
   branchId: number,
   delta: number
-) {
+): Promise<number> {
   const existing = await tx.productStock.findUnique({
     where: { productId_branchId: { productId, branchId } },
   });
@@ -438,6 +438,71 @@ async function addToStock(
     await tx.productStock.create({
       data: { productId, branchId, quantity: next },
     });
+  }
+  return next;
+}
+
+/**
+ * FIFO katmanlarini stok adediyle ESITLER.
+ *
+ * Excel yuklemesi stok adedini dogrudan yazar (fatura olusturmaz), ama
+ * katmanlara dokunmaz. Esitlenmezse ikisi ayrisir:
+ *
+ *   Excel stogu ARTIRIRSA  -> katman olusmaz; sonraki satista maliyet
+ *                             bulunamaz, stok deger raporu eksik cikar
+ *   Excel stogu DUSURURSE  -> katmanlar oldugu gibi kalir; envanter
+ *                             degeri gercekte olmayan mal uzerinden
+ *                             sisik gorunur
+ *
+ * Bu yuzden Excel bir SAYIM gibi davranir: ne yazildiysa stok o olur ve
+ * katmanlar ona uyar.
+ *
+ *   stok katmandan FAZLA  -> fark kadar yeni katman acilir; maliyeti
+ *                            Excel'deki AlisFiyati (kullanicinin girdigi)
+ *   stok katmandan AZ     -> fazlalik EN YENI katmandan geriye dogru
+ *                            dusulur; en eski (gercek) alislar korunur
+ */
+async function katmanlariStogaEsitle(
+  tx: Prisma.TransactionClient,
+  productId: number,
+  branchId: number,
+  hedefStok: number,
+  birimMaliyet: number
+) {
+  const lotlar = await tx.stockLot.findMany({
+    where: { productId, branchId, quantity: { gt: 0 } },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  });
+
+  const katmanToplami = lotlar.reduce((toplam, lot) => toplam + lot.quantity, 0);
+  const fark = hedefStok - katmanToplami;
+
+  // Kayan nokta artiklarini yok say
+  if (Math.abs(fark) < 0.0001) return;
+
+  if (fark > 0) {
+    await tx.stockLot.create({
+      data: {
+        productId,
+        branchId,
+        quantity: fark,
+        unitCost: Math.max(0, birimMaliyet),
+        // Gercek bir alis kaydi degil, sayimdan gelen katman
+        isOpening: true,
+      },
+    });
+    return;
+  }
+
+  let dusulecek = -fark;
+  for (const lot of [...lotlar].reverse()) {
+    if (dusulecek <= 0) break;
+    const azalt = Math.min(lot.quantity, dusulecek);
+    await tx.stockLot.update({
+      where: { id: lot.id },
+      data: { quantity: { decrement: azalt } },
+    });
+    dusulecek -= azalt;
   }
 }
 
@@ -909,13 +974,26 @@ export async function importProductsExcel(
      * GelenAdet sutunu doluysa Bakiye YOK SAYILIR ve adet mevcut stoga
      * EKLENIR. Bos ise eski davranis surer: Bakiye stok adedini belirler.
      */
-    if (item.hasGelenAdet) {
-      await addToStock(tx, product.id, merkezId, item.gelenAdet);
-    } else {
-      await upsertStock(tx, product.id, merkezId, item.merkezQty);
-    }
+    const merkezStok = item.hasGelenAdet
+      ? await addToStock(tx, product.id, merkezId, item.gelenAdet)
+      : (await upsertStock(tx, product.id, merkezId, item.merkezQty), item.merkezQty);
+
+    /*
+     * Stok yazildi; FIFO katmanlari da ayni sayiya cekilir. Yapilmazsa
+     * Excel yuklendigi anda katmanlar stoktan ayrisir ve stok deger
+     * raporu yanlis olur.
+     */
+    await katmanlariStogaEsitle(tx, product.id, merkezId, merkezStok, item.costPrice);
+
     if (item.hasCinIadeColumn) {
       await upsertStock(tx, product.id, cinIadeId, item.cinIadeQty);
+      await katmanlariStogaEsitle(
+        tx,
+        product.id,
+        cinIadeId,
+        item.cinIadeQty,
+        item.costPrice
+      );
     }
 
     return existingId ? 'updated' : 'created';
