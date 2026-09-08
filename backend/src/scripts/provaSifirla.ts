@@ -18,9 +18,13 @@
  *   MEVCUT STOK MİKTARLARI (ProductStock) — elde ne varsa kalır
  *
  * Kullanım (sunucuda, prova pod'unun içinde):
- *   npx tsx src/scripts/provaSifirla.ts --uygula
+ *   node dist/scripts/provaSifirla.js --uygula
  *
- * Parametresiz çalıştırılırsa yalnızca ne silineceğini RAPORLAR.
+ * --stok-sifirla eklenirse stok adetleri de SIFIRLANIR. Güncel Excel'i
+ * yükleyip sıfırdan başlamak için: dosyada olmayan ürünler eski
+ * stoklarını korumasın diye.
+ *
+ * Parametresiz çalıştırılırsa yalnızca ne yapılacağını RAPORLAR.
  */
 import { prisma } from '../lib/prisma.js';
 
@@ -35,6 +39,7 @@ const IZINLI_ORTAMLAR = ['shenzhen-test', 'demo', 'local', 'test'];
 
 async function main() {
   const uygula = process.argv.includes('--uygula');
+  const stokSifirla = process.argv.includes('--stok-sifirla');
   const tenant = (process.env.TENANT_ID ?? 'local').trim();
 
   console.log(`Ortam: ${tenant}`);
@@ -64,13 +69,21 @@ async function main() {
   console.log(`  ${hareketSayisi} kasa/cari hareketi`);
   console.log(`  ${katmanSayisi} stok katmanı  (mevcut stoktan yeniden üretilecek)`);
   console.log('');
+  if (stokSifirla) {
+    console.log(`  ${stokSayisi} üründeki stok adetleri de SIFIRLANACAK (--stok-sifirla)`);
+    console.log('  Güncel Excel yüklenince stok yalnızca dosyadaki ürünlerde olacak.');
+  }
+  console.log('');
   console.log('Korunacak:');
-  console.log(`  ${stokSayisi} üründe mevcut stok miktarı`);
+  if (!stokSifirla) {
+    console.log(`  ${stokSayisi} üründe mevcut stok miktarı`);
+  }
   console.log('  ürün kartları, müşteriler, kategoriler, kasalar');
   console.log('');
 
   if (!uygula) {
     console.log('Bu bir ÖNİZLEME. Uygulamak için: --uygula');
+    console.log('Stok adetlerini de sıfırlamak için: --uygula --stok-sifirla');
     return;
   }
 
@@ -83,6 +96,18 @@ async function main() {
 
     await tx.customer.updateMany({ data: { balance: 0 } });
     await tx.safe.updateMany({ data: { balance: 0 } });
+
+    if (stokSifirla) {
+      /*
+       * Stok adetleri de sıfırlanıyor: güncel Excel yüklendiğinde
+       * yalnızca dosyadaki ürünlerde stok olsun, dosyada olmayanlar eski
+       * adetleriyle kalmasın. Katmanlar zaten silindi; Excel yüklemesi
+       * kendi katmanlarını açacak.
+       */
+      const sonuc = await tx.productStock.updateMany({ data: { quantity: 0 } });
+      console.log(`${sonuc.count} stok kaydı sıfırlandı. Katman üretilmedi.`);
+      return;
+    }
 
     /*
      * Elde kalan stok için yeniden açılış katmanı üret: ürünün kendi
