@@ -788,72 +788,47 @@ export default function SalesReturn({
       return;
     }
 
-    const manualLines = activeLines.filter((line) => line.manualOverride);
-    const standardLines = activeLines.filter((line) => !line.manualOverride);
-
-    const byInvoice = new Map<number, ReturnCartLine[]>();
-    for (const line of standardLines) {
-      const group = byInvoice.get(line.invoiceId) ?? [];
-      group.push(line);
-      byInvoice.set(line.invoiceId, group);
-    }
+    /*
+     * İade artık KAYNAK FATURAYA BAĞLANMIYOR (karar: 8 Eylül 2026).
+     *
+     * Eskiden kalemler alındıkları faturaya göre gruplanır ve her fatura
+     * için ayrı bir iade faturası kesilirdi; iade edilen adet o faturadan
+     * düşülürdü. Müşteri aynı üründen iki ayrı faturayla aldığında tek bir
+     * iade üç ayrı belge üretebiliyordu.
+     *
+     * Yeni kural: müşteri daha önce almışsa iade alınır (almamışsa uyarı
+     * çıkar, kullanıcı yine de ekleyebilir) ve HEPSİ tek bir iade
+     * faturasına yazılır. Hangi faturadan geldiği artık takip edilmiyor;
+     * ürünün geçmişi zaten stok hareketlerinde duruyor.
+     */
 
     setSubmitting(true);
     try {
       const createdNos: string[] = [];
       let notesForPrint = orderNotes;
 
-      for (const [invoiceId, lines] of byInvoice) {
-        const exchangeRate = EXCHANGE_RATE;
-        const response = await axios.post(`${API_BASE}/api/sales/return`, {
-          customerId: customer.id,
-          branchId: Number(selectedBranch),
-          safeId: resolvedSafeId,
-          paymentMethod,
-          originalInvoiceId: invoiceId,
-          exchangeRate,
-          orderNotes: orderNotes.trim() || undefined,
-          items: lines.map((row) => ({
-            sourceInvoiceItemId: row.sourceInvoiceItemId,
-            productId: row.productId,
-            quantity: toIntegerQty(row.returnQty, 1),
-            unitPrice: row.unitPriceTl,
-            isChinaReturn: row.isChinaReturn,
-          })),
-        });
+      // Tüm kalemler tek iade faturasına — fatura bazlı gruplama yok
+      const response = await axios.post(`${API_BASE}/api/sales/return-discretionary`, {
+        customerId: customer.id,
+        branchId: Number(selectedBranch),
+        safeId: resolvedSafeId,
+        paymentMethod,
+        exchangeRate: EXCHANGE_RATE,
+        note: orderNotes.trim() || undefined,
+        items: activeLines.map((row) => ({
+          productId: row.productId,
+          quantity: toIntegerQty(row.returnQty, 1),
+          unitPrice: row.unitPriceTl,
+          isChinaReturn: row.isChinaReturn,
+        })),
+      });
 
-        if (response.data.success) {
-          const no = response.data.data?.invoiceNo;
-          if (no) createdNos.push(no);
-          const savedNotes = response.data.data?.orderNotes;
-          if (typeof savedNotes === 'string' && savedNotes.trim()) {
-            notesForPrint = savedNotes;
-          }
-        }
-      }
-
-      if (manualLines.length > 0) {
-        const response = await axios.post(`${API_BASE}/api/sales/return-discretionary`, {
-          customerId: customer.id,
-          branchId: Number(selectedBranch),
-          safeId: resolvedSafeId,
-          paymentMethod,
-          exchangeRate: EXCHANGE_RATE,
-          note: orderNotes.trim() || 'Kayıt dışı iade',
-          items: manualLines.map((row) => ({
-            productId: row.productId,
-            quantity: toIntegerQty(row.returnQty, 1),
-            unitPrice: row.unitPriceTl,
-            isChinaReturn: row.isChinaReturn,
-          })),
-        });
-        if (response.data.success) {
-          const no = response.data.data?.invoiceNo;
-          if (no) createdNos.push(no);
-          const savedNotes = response.data.data?.orderNotes;
-          if (typeof savedNotes === 'string' && savedNotes.trim()) {
-            notesForPrint = savedNotes;
-          }
+      if (response.data.success) {
+        const no = response.data.data?.invoiceNo;
+        if (no) createdNos.push(no);
+        const savedNotes = response.data.data?.orderNotes;
+        if (typeof savedNotes === 'string' && savedNotes.trim()) {
+          notesForPrint = savedNotes;
         }
       }
 
