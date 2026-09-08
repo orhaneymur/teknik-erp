@@ -24,6 +24,11 @@
  * yükleyip sıfırdan başlamak için: dosyada olmayan ürünler eski
  * stoklarını korumasın diye.
  *
+ * --urunleri-sil eklenirse ÜRÜN KARTLARI da silinir; Excel yüklemesi
+ * kartları sıfırdan oluşturur. Bu durumda yüklenecek dosyadan Id
+ * sütunu ÇIKARILMALI: o değerler silinmiş kartlara işaret eder,
+ * eşleştirme StokKodu üzerinden yapılır.
+ *
  * Parametresiz çalıştırılırsa yalnızca ne yapılacağını RAPORLAR.
  */
 import { prisma } from '../lib/prisma.js';
@@ -40,6 +45,7 @@ const IZINLI_ORTAMLAR = ['shenzhen-test', 'demo', 'local', 'test'];
 async function main() {
   const uygula = process.argv.includes('--uygula');
   const stokSifirla = process.argv.includes('--stok-sifirla');
+  const urunleriSil = process.argv.includes('--urunleri-sil');
   const tenant = (process.env.TENANT_ID ?? 'local').trim();
 
   console.log(`Ortam: ${tenant}`);
@@ -73,17 +79,29 @@ async function main() {
     console.log(`  ${stokSayisi} üründeki stok adetleri de SIFIRLANACAK (--stok-sifirla)`);
     console.log('  Güncel Excel yüklenince stok yalnızca dosyadaki ürünlerde olacak.');
   }
+  if (urunleriSil) {
+    const urunSayisi = await prisma.product.count();
+    console.log('');
+    console.log(`  ${urunSayisi} URUN KARTI SILINECEK (--urunleri-sil)`);
+    console.log('  Yuklenecek Excel dosyasindan Id sutunu CIKARILMALI.');
+  }
+
   console.log('');
   console.log('Korunacak:');
-  if (!stokSifirla) {
+  if (!stokSifirla && !urunleriSil) {
     console.log(`  ${stokSayisi} üründe mevcut stok miktarı`);
   }
-  console.log('  ürün kartları, müşteriler, kategoriler, kasalar');
+  console.log(
+    urunleriSil
+      ? '  müşteriler, kategoriler, marka/modeller, kasalar'
+      : '  ürün kartları, müşteriler, kategoriler, kasalar'
+  );
   console.log('');
 
   if (!uygula) {
     console.log('Bu bir ÖNİZLEME. Uygulamak için: --uygula');
-    console.log('Stok adetlerini de sıfırlamak için: --uygula --stok-sifirla');
+    console.log('Stok adetleri de sıfırlansın : --uygula --stok-sifirla');
+    console.log('Ürün kartları da silinsin    : --uygula --urunleri-sil');
     return;
   }
 
@@ -96,6 +114,21 @@ async function main() {
 
     await tx.customer.updateMany({ data: { balance: 0 } });
     await tx.safe.updateMany({ data: { balance: 0 } });
+
+    if (urunleriSil) {
+      /*
+       * Urun kartlari siliniyor: Excel yuklemesi kartlari sifirdan
+       * olusturacak. ProductStock ve StockLot kayitlari sema geregi
+       * (onDelete: Cascade) birlikte gider.
+       *
+       * Bu ancak fatura kalemleri silindikten SONRA yapilabilir —
+       * yukarida siliniyorlar.
+       */
+      const sonuc = await tx.product.deleteMany({});
+      console.log(`${sonuc.count} urun karti silindi.`);
+      console.log('Excel yuklerken Id sutununu CIKARMAYI unutmayin.');
+      return;
+    }
 
     if (stokSifirla) {
       /*
