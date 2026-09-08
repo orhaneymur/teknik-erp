@@ -29,6 +29,12 @@
  * sütunu ÇIKARILMALI: o değerler silinmiş kartlara işaret eder,
  * eşleştirme StokKodu üzerinden yapılır.
  *
+ * --tanimlari-sil ayrıca KATEGORİLERİ ve MARKA/MODEL kayıtlarını siler.
+ * Üçü de Excel'deki Kategori, Marka ve Model sütunlarından yeniden
+ * kurulur; boşta kalmış hatalı kategoriler de böylece temizlenir.
+ * Tanımlar ekranından elle eklenmiş ve Excel'de karşılığı olmayan bir
+ * kayıt varsa o da gider.
+ *
  * Parametresiz çalıştırılırsa yalnızca ne yapılacağını RAPORLAR.
  */
 import { prisma } from '../lib/prisma.js';
@@ -46,6 +52,7 @@ async function main() {
   const uygula = process.argv.includes('--uygula');
   const stokSifirla = process.argv.includes('--stok-sifirla');
   const urunleriSil = process.argv.includes('--urunleri-sil');
+  const tanimlariSil = process.argv.includes('--tanimlari-sil');
   const tenant = (process.env.TENANT_ID ?? 'local').trim();
 
   console.log(`Ortam: ${tenant}`);
@@ -86,6 +93,16 @@ async function main() {
     console.log('  Yuklenecek Excel dosyasindan Id sutunu CIKARILMALI.');
   }
 
+  if (tanimlariSil) {
+    const [kategoriSayisi, markaModelSayisi] = await Promise.all([
+      prisma.category.count(),
+      prisma.brandModel.count(),
+    ]);
+    console.log('');
+    console.log(`  ${kategoriSayisi} kategori ve ${markaModelSayisi} marka/model SILINECEK (--tanimlari-sil)`);
+    console.log('  Excel yuklemesi bunlari yeniden olusturur.');
+  }
+
   console.log('');
   console.log('Korunacak:');
   if (!stokSifirla && !urunleriSil) {
@@ -102,6 +119,7 @@ async function main() {
     console.log('Bu bir ÖNİZLEME. Uygulamak için: --uygula');
     console.log('Stok adetleri de sıfırlansın : --uygula --stok-sifirla');
     console.log('Ürün kartları da silinsin    : --uygula --urunleri-sil');
+    console.log('Kategori/marka da silinsin   : --uygula --urunleri-sil --tanimlari-sil');
     return;
   }
 
@@ -126,6 +144,24 @@ async function main() {
        */
       const sonuc = await tx.product.deleteMany({});
       console.log(`${sonuc.count} urun karti silindi.`);
+
+      if (tanimlariSil) {
+        /*
+         * Kategoriler ve marka/modeller de siliniyor.
+         *
+         * Urunler silindigi icin ikisi de sahipsiz kaldi; Excel'deki
+         * Kategori, Marka ve Model sutunlarindan yeniden kurulacaklar.
+         * Bostakalmis hatali kategoriler de boylece temizlenir.
+         *
+         * Sira onemli: marka/model kayitlari kategoriye bagli.
+         */
+        const markaModel = await tx.brandModel.deleteMany({});
+        const kategori = await tx.category.deleteMany({});
+        console.log(
+          `${markaModel.count} marka/model ve ${kategori.count} kategori silindi.`
+        );
+      }
+
       console.log('Excel yuklerken Id sutununu CIKARMAYI unutmayin.');
       return;
     }
