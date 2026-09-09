@@ -109,6 +109,82 @@ function SeeAllLink({
   );
 }
 
+/**
+ * Ozet karti — sayfanin ust seridindeki tek rakam.
+ *
+ * Rakam buyuk ve kalin; etiket ve karsilastirma kucuk. Renk yalnizca
+ * ANLAM tasidiginda kullanilir (dusus kirmizi, uyari amber); geri kalan
+ * her sey notr kalir ki goz once rakama gitsin.
+ */
+function OzetKart({
+  etiket,
+  deger,
+  degisim,
+  altBilgi,
+  Ikon,
+  sayfa,
+  uyari = false,
+}: {
+  etiket: string;
+  deger: string;
+  degisim?: number | null;
+  altBilgi?: string;
+  Ikon: typeof Wallet;
+  sayfa?: PageId;
+  uyari?: boolean;
+}) {
+  const icerik = (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-caption font-medium uppercase tracking-wide text-slate-500">
+          {etiket}
+        </span>
+        <Ikon
+          className={`h-4 w-4 ${uyari ? 'text-amber-500' : 'text-slate-300'}`}
+        />
+      </div>
+
+      <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+        {deger}
+      </p>
+
+      <div className="mt-1 flex items-center gap-1.5 text-xs">
+        {degisim != null && (
+          <span
+            className={`inline-flex items-center gap-0.5 font-semibold ${
+              degisim >= 0 ? 'text-emerald-600' : 'text-red-600'
+            }`}
+          >
+            {degisim >= 0 ? (
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            ) : (
+              <ArrowDownLeft className="h-3.5 w-3.5" />
+            )}
+            %{Math.abs(degisim).toFixed(0)}
+          </span>
+        )}
+        {altBilgi && <span className="text-slate-400">{altBilgi}</span>}
+      </div>
+    </>
+  );
+
+  const sinif =
+    'block rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm ring-1 ring-slate-900/5 no-underline transition';
+
+  return sayfa ? (
+    <a
+      href={buildPageUrl(sayfa)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`${sinif} hover:border-indigo-300 hover:shadow-md`}
+    >
+      {icerik}
+    </a>
+  ) : (
+    <div className={sinif}>{icerik}</div>
+  );
+}
+
 type DashboardData = {
   safeBalances: SafeBalance[];
   recentInvoices: RecentInvoice[];
@@ -323,11 +399,43 @@ export default function Dashboard({
 
   const { insights } = data;
 
+  /*
+   * Ozet rakamlari mevcut veriden turetilir — ek API cagrisi yok.
+   * "Bugun ne oldu" sorusunu sayfanin en ustunde cevaplamak icin:
+   * eskiden bu bilgi yalnizca grafigin icinde, okunmasi zor bicimde vardi.
+   */
+  const bugunSatis = insights.dailySales.at(-1)?.total ?? 0;
+  const dunSatis = insights.dailySales.at(-2)?.total ?? 0;
+  const buAySatis = insights.monthlySales.at(-1)?.total ?? 0;
+  const gecenAySatis = insights.monthlySales.at(-2)?.total ?? 0;
+
+  /*
+   * Kasalar farkli para birimlerinde olabilir; toplamak yaniltir.
+   * Ozet, ana para birimindeki (TRY) kasalari toplar; digerleri
+   * asagidaki kasa seridinde kendi birimiyle gorunur.
+   */
+  const tryKasaToplami = data.safeBalances
+    .filter((safe) => safe.currency === 'TRY')
+    .reduce((toplam, safe) => toplam + safe.balance, 0);
+
+  /** Onceki doneme gore yuzde degisim; onceki 0 ise oran anlamsizdir */
+  const degisim = (simdi: number, onceki: number): number | null => {
+    if (!onceki) return null;
+    return ((simdi - onceki) / Math.abs(onceki)) * 100;
+  };
+
   return (
     /*
-     * Blok sırası `order-*` ile belirlenir (üst → alt):
-     * 1 başlık · 2 hızlı işlemler · 3 son fatura + kasa hareketleri
-     * 4 kasa bakiyeleri · 5 trend/düşük stok + en çok satan ürün/müşteri
+     * Blok sırası (üst → alt):
+     *   1 başlık
+     *   2 hızlı işlemler
+     *   3 özet — bugün/bu ay/kasa/düşük stok
+     *   4 kasa bakiyeleri
+     *   5 son faturalar + kasa hareketleri   ← gün içinde en sık bakılan
+     *   6 grafikler ve düşük stok listesi
+     *
+     * Sıra artık yazım sırasıyla AYNI; eskiden order-* sınıfları ikisini
+     * ayırıyordu ve dosyayı okurken sayfanın nasıl göründüğü anlaşılmıyordu.
      */
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <div className="order-1 flex flex-wrap items-end justify-between gap-3">
@@ -380,40 +488,82 @@ export default function Dashboard({
         </div>
       </section>
 
-      <section className="order-4 flex gap-3 overflow-x-auto pb-1">
-        {data.safeBalances.map((safe) => (
-          <a
-            key={safe.id}
-            href={buildPageUrl('report-cash-flow')}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="min-w-[148px] shrink-0 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 px-4 py-3 shadow-sm no-underline transition hover:border-indigo-200 hover:shadow-md"
-          >
-            <div className="flex items-center gap-1.5 text-slate-500">
-              <Wallet className="h-3.5 w-3.5" />
-              <span className="truncate text-xs">{safe.name}</span>
-            </div>
-            <p className="mt-1 text-lg font-bold text-slate-900">
-              {formatMoney(safe.balance, safe.currency)}
-            </p>
-          </a>
-        ))}
-        <a
-          href={buildPageUrl('report-cash-flow')}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex min-w-[120px] shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-3 text-xs font-semibold text-indigo-700 no-underline hover:border-indigo-300 hover:bg-indigo-50"
-        >
-          Tüm kasalar
-          <ArrowRight className="ml-1 h-3.5 w-3.5" />
-        </a>
+      {/* Ozet — sayfanin en cok bakilan satiri, en buyuk rakamlar burada */}
+      <section className="order-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <OzetKart
+          etiket="Bugün satış"
+          deger={formatMoney(bugunSatis)}
+          degisim={degisim(bugunSatis, dunSatis)}
+          altBilgi="düne göre"
+          Ikon={TrendingUp}
+        />
+        <OzetKart
+          etiket="Bu ay satış"
+          deger={formatMoney(buAySatis)}
+          degisim={degisim(buAySatis, gecenAySatis)}
+          altBilgi="geçen aya göre"
+          Ikon={TrendingUp}
+        />
+        <OzetKart
+          etiket="Kasa (TL)"
+          deger={formatMoney(tryKasaToplami, 'TRY')}
+          altBilgi={`${data.safeBalances.length} kasa`}
+          Ikon={Wallet}
+          sayfa="report-cash-flow"
+        />
+        <OzetKart
+          etiket="Düşük stok"
+          deger={`${insights.lowStock.length}`}
+          altBilgi="5 adet ve altı"
+          Ikon={Package}
+          sayfa="stock-list"
+          uyari={insights.lowStock.length > 0}
+        />
       </section>
 
-      <div className="order-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <section className="order-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
+              <Wallet className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">Kasalar</h2>
+              <p className="text-caption text-slate-400">Güncel bakiyeler</p>
+            </div>
+          </div>
+          <SeeAllLink page="report-cash-flow" label="Kasa hareketleri" />
+        </div>
+
+        {data.safeBalances.length === 0 ? (
+          <p className="py-6 text-center text-sm text-slate-400">Kasa tanımlı değil</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
+            {data.safeBalances.map((safe) => (
+              <a
+                key={safe.id}
+                href={buildPageUrl('report-cash-flow')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-baseline justify-between gap-3 rounded-lg px-2 py-2 no-underline transition hover:bg-slate-50"
+              >
+                <span className="min-w-0 truncate text-sm text-slate-600">
+                  {safe.name}
+                </span>
+                <span className="shrink-0 text-sm font-semibold tabular-nums text-slate-900">
+                  {formatMoney(safe.balance, safe.currency)}
+                </span>
+              </a>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <div className="order-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
           <div className="mb-4 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="rounded-lg bg-indigo-100 p-2 text-indigo-700">
+              <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
                 <TrendingUp className="h-4 w-4" />
               </div>
               <div>
@@ -437,7 +587,7 @@ export default function Dashboard({
         <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
           <div className="mb-4 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="rounded-lg bg-violet-100 p-2 text-violet-700">
+              <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
                 <TrendingUp className="h-4 w-4" />
               </div>
               <div>
@@ -458,10 +608,10 @@ export default function Dashboard({
           />
         </section>
 
-        <section className="order-2 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
           <div className="mb-4 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
+              <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
                 <Package className="h-4 w-4" />
               </div>
               <div>
@@ -485,10 +635,10 @@ export default function Dashboard({
           />
         </section>
 
-        <section className="order-2 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
           <div className="mb-4 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="rounded-lg bg-sky-100 p-2 text-sky-700">
+              <div className="rounded-lg bg-slate-100 p-2 text-slate-600">
                 <Users className="h-4 w-4" />
               </div>
               <div>
@@ -518,7 +668,7 @@ export default function Dashboard({
           )}
         </section>
 
-        <section className="order-1 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 lg:col-span-2">
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5 lg:col-span-2">
           <div className="mb-4 flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               <div className="rounded-lg bg-amber-100 p-2 text-amber-800">
@@ -566,9 +716,9 @@ export default function Dashboard({
         </section>
       </div>
 
-      <div className="order-3 grid grid-cols-1 gap-6 md:grid-cols-2">
-        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+      <div className="order-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/5">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5">
             <h2 className="text-sm font-semibold text-slate-800">
               Son Fatura Hareketleri
             </h2>
@@ -656,8 +806,8 @@ export default function Dashboard({
           </ul>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+        <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/5">
+          <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5">
             <h2 className="text-sm font-semibold text-slate-800">Kasa Hareketleri</h2>
             <SeeAllLink page="customer-payments" />
           </div>
