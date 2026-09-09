@@ -1,0 +1,1417 @@
+<title>TeknikERP Kullanım Kılavuzu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+:root {
+  --kagit:      #F3F3F0;
+  --yuzey:      #FFFFFF;
+  --yuzey-2:    #FAFAF8;
+  --murekkep:   #171B21;
+  --murekkep-2: #4C5563;
+  --murekkep-3: #7B8492;
+  --cizgi:      #E2E2DC;
+  --cizgi-2:    #CFCFC8;
+  --vurgu:      #0B5C4E;
+  --vurgu-zemin:#E4EFEB;
+  --uyari:      #9A5410;
+  --uyari-zemin:#F7EDDF;
+  --tehlike:    #96263A;
+  --tehlike-zemin:#F8E6E8;
+  --iyi:        #1F6B3A;
+
+  --sans: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+  --serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --kagit:      #101317;
+    --yuzey:      #171B21;
+    --yuzey-2:    #1D222A;
+    --murekkep:   #E8E9E6;
+    --murekkep-2: #A5AEBB;
+    --murekkep-3: #7B8492;
+    --cizgi:      #2A2F38;
+    --cizgi-2:    #3A414C;
+    --vurgu:      #5EC5AC;
+    --vurgu-zemin:#12302A;
+    --uyari:      #E0A050;
+    --uyari-zemin:#2E2517;
+    --tehlike:    #E88A99;
+    --tehlike-zemin:#2E191D;
+    --iyi:        #63C286;
+  }
+}
+:root[data-theme="dark"] {
+  --kagit:      #101317;
+  --yuzey:      #171B21;
+  --yuzey-2:    #1D222A;
+  --murekkep:   #E8E9E6;
+  --murekkep-2: #A5AEBB;
+  --murekkep-3: #7B8492;
+  --cizgi:      #2A2F38;
+  --cizgi-2:    #3A414C;
+  --vurgu:      #5EC5AC;
+  --vurgu-zemin:#12302A;
+  --uyari:      #E0A050;
+  --uyari-zemin:#2E2517;
+  --tehlike:    #E88A99;
+  --tehlike-zemin:#2E191D;
+  --iyi:        #63C286;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--kagit);
+  color: var(--murekkep);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.68;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Üst şerit ---------- */
+.ustserit {
+  position: sticky; top: 0; z-index: 40;
+  background: var(--yuzey);
+  border-bottom: 1px solid var(--cizgi);
+}
+.ustserit-ic {
+  max-width: 1180px; margin: 0 auto;
+  padding: 10px 20px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.rozet {
+  font-family: var(--sans); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .09em; text-transform: uppercase;
+  color: var(--vurgu); background: var(--vurgu-zemin);
+  border: 1px solid color-mix(in srgb, var(--vurgu) 25%, transparent);
+  padding: 4px 9px; border-radius: 3px; white-space: nowrap;
+}
+.ustserit strong {
+  font-family: var(--sans); font-weight: 600; font-size: 15px;
+  letter-spacing: -.01em;
+}
+.ustserit .sag {
+  margin-left: auto; font-family: var(--mono); font-size: 11.5px;
+  color: var(--murekkep-3); display: flex; gap: 12px; align-items: center;
+}
+.yazdir-dugme {
+  font-family: var(--sans); font-size: 12px; font-weight: 600;
+  color: var(--murekkep-2); background: var(--yuzey-2);
+  border: 1px solid var(--cizgi-2); border-radius: 4px;
+  padding: 5px 11px; cursor: pointer;
+}
+.yazdir-dugme:hover { color: var(--murekkep); border-color: var(--murekkep-3); }
+
+/* ---------- Düzen ---------- */
+.duzen {
+  max-width: 1180px; margin: 0 auto;
+  padding: 34px 20px 90px;
+  display: grid; gap: 44px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 1040px) {
+  .duzen { grid-template-columns: 232px minmax(0, 1fr); align-items: start; }
+}
+
+/* ---------- İçindekiler ---------- */
+.icindekiler { display: none; }
+@media (min-width: 1040px) {
+  .icindekiler {
+    display: block; position: sticky; top: 74px;
+    max-height: calc(100dvh - 100px); overflow-y: auto;
+    font-family: var(--sans); font-size: 13px;
+    border-left: 1px solid var(--cizgi); padding-left: 16px;
+  }
+}
+.icindekiler p.ic-baslik {
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--murekkep-3); font-weight: 600; margin: 0 0 10px;
+}
+.icindekiler a {
+  display: block; color: var(--murekkep-2); text-decoration: none;
+  padding: 4px 0; line-height: 1.35; border-left: 2px solid transparent;
+  margin-left: -18px; padding-left: 16px;
+}
+.icindekiler a:hover { color: var(--murekkep); }
+.icindekiler a.aktif {
+  color: var(--vurgu); font-weight: 600; border-left-color: var(--vurgu);
+}
+
+/* ---------- Metin ---------- */
+main { max-width: 74ch; }
+
+h1 {
+  font-family: var(--sans); font-weight: 700; font-size: clamp(30px, 4.4vw, 42px);
+  line-height: 1.12; letter-spacing: -.025em; margin: 0 0 14px;
+  text-wrap: balance;
+}
+.girizgah {
+  font-size: 19px; color: var(--murekkep-2); margin: 0 0 8px; text-wrap: pretty;
+}
+h2 {
+  font-family: var(--sans); font-weight: 700; font-size: 25px;
+  letter-spacing: -.02em; line-height: 1.2;
+  margin: 62px 0 6px; padding-top: 26px; border-top: 2px solid var(--murekkep);
+  text-wrap: balance;
+}
+h2 .no {
+  display: block; font-size: 11px; font-weight: 600; letter-spacing: .12em;
+  color: var(--vurgu); margin-bottom: 7px; font-family: var(--mono);
+}
+h3 {
+  font-family: var(--sans); font-weight: 600; font-size: 18px;
+  letter-spacing: -.01em; margin: 34px 0 4px; text-wrap: balance;
+}
+h4 {
+  font-family: var(--sans); font-weight: 600; font-size: 14.5px;
+  margin: 24px 0 2px; color: var(--murekkep);
+}
+p { margin: 12px 0; text-wrap: pretty; }
+ul, ol { margin: 12px 0; padding-left: 22px; }
+li { margin: 6px 0; }
+li::marker { color: var(--murekkep-3); }
+strong { font-weight: 600; }
+a { color: var(--vurgu); }
+
+kbd {
+  font-family: var(--sans); font-size: 11.5px; font-weight: 600;
+  background: var(--yuzey); border: 1px solid var(--cizgi-2);
+  border-bottom-width: 2px; border-radius: 4px;
+  padding: 2px 7px; white-space: nowrap; color: var(--murekkep);
+}
+code {
+  font-family: var(--mono); font-size: .855em;
+  background: var(--yuzey-2); border: 1px solid var(--cizgi);
+  border-radius: 3px; padding: 1px 5px; white-space: nowrap;
+}
+.yol {
+  font-family: var(--sans); font-size: 13px; font-weight: 600;
+  color: var(--murekkep-2); background: var(--yuzey);
+  border: 1px solid var(--cizgi-2); border-radius: 4px;
+  padding: 2px 8px; white-space: nowrap;
+}
+
+/* ---------- Adım listesi ---------- */
+ol.adimlar { list-style: none; padding: 0; counter-reset: adim; margin: 18px 0; }
+ol.adimlar > li {
+  counter-increment: adim; position: relative;
+  padding: 0 0 0 42px; margin: 0 0 16px; min-height: 28px;
+}
+ol.adimlar > li::before {
+  content: counter(adim);
+  position: absolute; left: 0; top: 3px;
+  width: 27px; height: 27px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 12px; font-weight: 500;
+  color: var(--vurgu); background: var(--vurgu-zemin);
+  border: 1px solid color-mix(in srgb, var(--vurgu) 25%, transparent);
+}
+
+/* ---------- Kutular ---------- */
+.kutu {
+  border: 1px solid var(--cizgi-2); border-left-width: 3px;
+  border-radius: 4px; background: var(--yuzey);
+  padding: 14px 18px; margin: 22px 0;
+  font-size: 16px;
+}
+.kutu p:first-child { margin-top: 0; }
+.kutu p:last-child { margin-bottom: 0; }
+.kutu .kutu-baslik {
+  font-family: var(--sans); font-size: 11px; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase;
+  margin: 0 0 6px; display: block;
+}
+.kutu.dikkat { border-left-color: var(--uyari); background: var(--uyari-zemin); }
+.kutu.dikkat .kutu-baslik { color: var(--uyari); }
+.kutu.tehlike { border-left-color: var(--tehlike); background: var(--tehlike-zemin); }
+.kutu.tehlike .kutu-baslik { color: var(--tehlike); }
+.kutu.ipucu { border-left-color: var(--vurgu); background: var(--vurgu-zemin); }
+.kutu.ipucu .kutu-baslik { color: var(--vurgu); }
+
+/* ---------- Tablo ---------- */
+.tablo-sar { overflow-x: auto; margin: 22px 0; border: 1px solid var(--cizgi); border-radius: 5px; background: var(--yuzey); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; font-family: var(--sans); }
+th {
+  text-align: left; font-weight: 600; font-size: 11px;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--murekkep-3);
+  padding: 11px 14px; border-bottom: 1px solid var(--cizgi-2);
+  background: var(--yuzey-2); white-space: nowrap;
+}
+td { padding: 11px 14px; border-bottom: 1px solid var(--cizgi); vertical-align: top; line-height: 1.5; }
+tr:last-child td { border-bottom: none; }
+td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+td .kucuk { display: block; font-size: 12.5px; color: var(--murekkep-3); margin-top: 2px; }
+
+/* ---------- Sözlük ---------- */
+dl.sozluk { margin: 20px 0; }
+dl.sozluk dt {
+  font-family: var(--sans); font-weight: 600; font-size: 15px;
+  margin: 16px 0 2px; color: var(--murekkep);
+}
+dl.sozluk dd { margin: 0; color: var(--murekkep-2); font-size: 16px; }
+
+/* ---------- Alt bilgi ---------- */
+footer {
+  max-width: 1180px; margin: 0 auto; padding: 26px 20px 60px;
+  border-top: 1px solid var(--cizgi);
+  font-family: var(--sans); font-size: 12.5px; color: var(--murekkep-3);
+}
+
+/* ---------- Yazdırma ---------- */
+@media print {
+  body { background: #fff; font-size: 11pt; }
+  .ustserit, .icindekiler, .yazdir-dugme { display: none !important; }
+  .duzen { display: block; padding: 0; max-width: none; }
+  main { max-width: none; }
+  h2 { break-after: avoid; page-break-after: avoid; }
+  .kutu, .tablo-sar, ol.adimlar > li { break-inside: avoid; page-break-inside: avoid; }
+}
+</style>
+
+<div class="ustserit">
+  <div class="ustserit-ic">
+    <span class="rozet">Kullanım Kılavuzu</span>
+    <strong>TeknikERP</strong>
+    <span class="sag">
+      <span>Sürüm 1.18</span>
+      <button class="yazdir-dugme" onclick="window.print()">Yazdır / PDF</button>
+    </span>
+  </div>
+</div>
+
+<div class="duzen">
+
+  <nav class="icindekiler" aria-label="İçindekiler">
+    <p class="ic-baslik">İçindekiler</p>
+    <a href="#giris">1 · Bu program ne yapar</a>
+    <a href="#oturum">2 · Programa girmek</a>
+    <a href="#ekran">3 · Ekranı tanıyalım</a>
+    <a href="#kisayol">4 · Klavye kısayolları</a>
+    <a href="#satis">5 · Satış yapmak</a>
+    <a href="#onsiparis">6 · Ön sipariş</a>
+    <a href="#alis">7 · Alış faturası</a>
+    <a href="#iade">8 · İade almak</a>
+    <a href="#tahsilat">9 · Tahsilat ve ödeme</a>
+    <a href="#stok">10 · Stok işlemleri</a>
+    <a href="#excel">11 · Excel ile toplu çalışma</a>
+    <a href="#musteri">12 · Müşteriler (cari)</a>
+    <a href="#faturalar">13 · Faturalar ve silme</a>
+    <a href="#raporlar">14 · Raporlar</a>
+    <a href="#maliyet">15 · Maliyet nasıl hesaplanır</a>
+    <a href="#liste">16 · Fiyat listesi siteniz</a>
+    <a href="#dikkat">17 · Dikkat edilecekler</a>
+    <a href="#sss">18 · Sık sorulanlar</a>
+    <a href="#sozluk">19 · Sözlük</a>
+  </nav>
+
+  <main>
+
+    <h1>TeknikERP Kullanım Kılavuzu</h1>
+    <p class="girizgah">
+      Bu kılavuz, hiç bilgisayar programı kullanmamış birinin bile
+      baştan sona okuyup programın tamamını öğrenebilmesi için yazıldı.
+      Sırayla okuyun; her bölüm bir öncekinin üstüne biner.
+    </p>
+
+    <div class="kutu ipucu">
+      <span class="kutu-baslik">Önce şunu bilin</span>
+      <p>
+        Bu programda <strong>hiçbir şeyi bozamazsınız</strong>. Yanlış
+        kestiğiniz fatura silinebilir ve sildiğinizde stok da cari de
+        kendiliğinden eski hâline döner. Silinen ürün kartları çöp
+        kutusuna gider, oradan geri alınır. Korkmadan deneyin.
+      </p>
+    </div>
+
+
+    <h2 id="giris"><span class="no">BÖLÜM 1</span>Bu program ne yapar?</h2>
+
+    <p>
+      TeknikERP bir <strong>yedek parça toptancısı</strong> için yazılmış
+      bir ticaret programıdır. Beş işi bir arada yapar:
+    </p>
+
+    <ul>
+      <li><strong>Stok</strong> — elinizde hangi parçadan kaç adet var, nerede duruyor.</li>
+      <li><strong>Satış ve alış</strong> — kestiğiniz her fiş buraya işlenir, stoktan düşer veya stoğa girer.</li>
+      <li><strong>Cari</strong> — hangi müşteri size ne kadar borçlu, siz kime borçlusunuz.</li>
+      <li><strong>Kasa</strong> — nakit, kart ve havale hareketleri.</li>
+      <li><strong>Rapor</strong> — ne kazandınız, ne sattınız, elinizdeki mal kaç para eder.</li>
+    </ul>
+
+    <h3>Para birimi dolardır</h3>
+    <p>
+      Programdaki bütün fiyatlar ve bakiyeler <strong>ABD doları (USD)</strong>
+      cinsindendir. Üst şeritte bunu hatırlatan yeşil bir yazı durur:
+      <span class="yol">Tutarlar: USD ($)</span>
+    </p>
+    <p>
+      Türk lirası karşılığı sadece <em>gösterim</em> içindir; program TL'yi
+      saklamaz, o anki kurla çarpıp ekrana yazar. Kuru Merkez Bankası'ndan
+      (TCMB) otomatik çeker. Merkez Bankası'na ulaşamazsa yedek bir
+      kaynaktan alır. Kuru elle girmenize gerek yoktur.
+    </p>
+
+    <h3>Kurulum yok</h3>
+    <p>
+      Program bilgisayarınıza kurulmaz. İnternet tarayıcısından (Chrome,
+      Edge) size verilen adrese girerek kullanırsınız. Bütün bilgiler
+      sunucuda durur; hangi bilgisayardan girerseniz girin aynı bilgileri
+      görürsünüz. Telefon ve tablet de çalışır ama <strong>fiş kesmek için
+      bilgisayar</strong> çok daha rahattır.
+    </p>
+
+
+    <h2 id="oturum"><span class="no">BÖLÜM 2</span>Programa girmek</h2>
+
+    <ol class="adimlar">
+      <li>Tarayıcıyı açın ve size verilen adresi yazın.</li>
+      <li>Kullanıcı adı ve şifrenizi girin.</li>
+      <li><kbd>Enter</kbd>'a basın veya <strong>Giriş Yap</strong>'a tıklayın.</li>
+    </ol>
+
+    <p>
+      Bir kez girdikten sonra program sizi <strong>7 gün</strong> hatırlar.
+      Bu süre dolunca yeniden şifre ister. Her seferinde şifre girmek
+      istemiyorsanız çıkış yapmayın, sadece sekmeyi kapatın.
+    </p>
+
+    <p>
+      Çıkmak için sol menünün en altındaki <span class="yol">Güvenli Çıkış</span>
+      düğmesine basın. Ortak kullanılan bir bilgisayardan kalkarken bunu
+      mutlaka yapın.
+    </p>
+
+    <div class="kutu tehlike">
+      <span class="kutu-baslik">Şifre uyarısı</span>
+      <p>
+        Şifrenizi kimseyle paylaşmayın ve tarayıcıya kaydettirirken
+        dikkatli olun. Programın içinde <strong>bütün müşterilerinizin
+        adı, adresi, telefonu ve borç bilgisi</strong> duruyor. Şifreyi
+        bilen herkes bunların hepsini görebilir.
+      </p>
+    </div>
+
+
+    <h2 id="ekran"><span class="no">BÖLÜM 3</span>Ekranı tanıyalım</h2>
+
+    <h3>Sol taraf — menü</h3>
+    <p>
+      Sol tarafta altı başlık vardır. Başlığa tıklayınca altındaki
+      ekranlar açılır:
+    </p>
+
+    <div class="tablo-sar">
+      <table>
+        <thead>
+          <tr><th>Başlık</th><th>İçinde ne var</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Satış ve Alış</strong></td>
+            <td>Satış Yap · Satış İade · Alış Faturası · Ön Siparişler
+              <span class="kucuk">Günlük tezgâh işleri</span></td>
+          </tr>
+          <tr>
+            <td><strong>Stok İşlemleri</strong></td>
+            <td>Stok Listesi · Silinen Ürünler · Depo Transfer · Stok Hareketleri · Stok Kartı Oluştur · Barkod Etiket</td>
+          </tr>
+          <tr>
+            <td><strong>Müşteri İşlemleri</strong></td>
+            <td>Müşteri Listesi · Yeni Müşteri Kartı · Tahsilat / Ödeme · Müşteri Ekstre · Müşteri Borç / Alacak</td>
+          </tr>
+          <tr>
+            <td><strong>Raporlar</strong></td>
+            <td>İşletme Özeti · Satış Kırılımı · Kâr-Zarar · Stok Değeri · Kasa Raporu</td>
+          </tr>
+          <tr>
+            <td><strong>Tanımlar</strong></td>
+            <td>Ürün Tanımları · Kategoriler · Markalar · Modeller · Kasa Tanımları · Personel Tanımları</td>
+          </tr>
+          <tr>
+            <td><strong>Faturalar</strong></td>
+            <td>Fatura Listesi · Silinen İşlemler</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Üst şerit</h3>
+    <p>Ekranın en üstünde, her zaman görünen ince bir şerit vardır:</p>
+    <ul>
+      <li>Solda: bulunduğunuz sayfanın adı ve <strong>Geri</strong> düğmesi, yanında günün tarihi.</li>
+      <li>Sağda: <strong>döviz çevirici</strong> (dolar–TL hesabı yapmak için) ve <span class="yol">Tutarlar: USD ($)</span> hatırlatması.</li>
+    </ul>
+
+    <h3>Ana Sayfa</h3>
+    <p>
+      Program açıldığında Ana Sayfa gelir. Gün boyu açık kalması için
+      tasarlandı. Yukarıdan aşağıya:
+    </p>
+    <ul>
+      <li><strong>Beş büyük düğme</strong> — Satış Yap, Alış Yap, İade Al, Ödeme Al, Ön Siparişler. En çok kullanacağınız yer burasıdır.</li>
+      <li><strong>Özet şerit</strong> — bugünkü satış, bu ayki satış, kasadaki para, düşük stoklu ürün sayısı. Yanlarındaki yüzde, bir önceki döneme göre artış/azalışı gösterir.</li>
+      <li><strong>Kasalar</strong> — her kasanın anlık bakiyesi.</li>
+      <li><strong>Son işlemler</strong> — en son kesilen faturalar ve alınan ödemeler.</li>
+      <li><strong>Grafikler</strong> — günlük/aylık satış eğrisi, en çok satan ürünler, düşük stoklar.</li>
+    </ul>
+    <p>
+      Kartların köşesindeki <strong>Tümünü gör</strong> yazısı sizi ilgili
+      detay sayfasına götürür.
+    </p>
+
+
+    <h2 id="kisayol"><span class="no">BÖLÜM 4</span>Klavye kısayolları</h2>
+
+    <p>
+      Fare kullanmadan çalışmak fiş kesme hızını en az iki katına
+      çıkarır. Öğrenmeniz gereken sadece iki tuş var.
+    </p>
+
+    <h3><kbd>F2</kbd> — hızlı arama</h3>
+    <p>
+      Satış, Alış, İade, Tahsilat/Ödeme ve Müşteri Ekstre ekranlarında
+      <kbd>F2</kbd>'ye basınca bir arama penceresi açılır. Ne aradığınızı
+      yazın, sonra:
+    </p>
+    <div class="tablo-sar">
+      <table>
+        <thead><tr><th>Tuş</th><th>Ne yapar</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">↓ ↑</td><td>Listede bir satır aşağı / yukarı</td></tr>
+          <tr><td class="mono">PageDown / PageUp</td><td>Sekiz satır birden atlar</td></tr>
+          <tr><td class="mono">Enter</td><td>Seçili satırı fişe ekler</td></tr>
+          <tr><td class="mono">Esc</td><td>Pencereyi kapatır</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Arama listesinde satırların rengi stok durumunu gösterir:
+      <strong>yeşil = stokta var</strong>, <strong>kırmızı = stokta yok</strong>.
+      Stokta olmayanı da satabilirsiniz, program engellemez — sadece uyarır.
+    </p>
+    <p>
+      Müşteri seçtiyseniz, arama listesinde her ürünün altında
+      <strong>"Son fiyat"</strong> yazar. Bu, <em>o müşteriye</em> o ürünü en son
+      kaça sattığınızdır. Fişe eklerken program otomatik o fiyatı getirir,
+      böylece "geçen sefer kaça vermiştim?" diye bakmanız gerekmez.
+    </p>
+
+    <div class="kutu dikkat">
+      <span class="kutu-baslik">F2 her yerde çalışmaz</span>
+      <p>
+        Başka bir ekranda <kbd>F2</kbd>'ye basarsanız program size
+        hangi ekranlarda çalıştığını söyleyen bir uyarı gösterir. Bu bir
+        hata değildir.
+      </p>
+    </div>
+
+    <h3><kbd>F8</kbd> — maliyeti göster (basılı tutun)</h3>
+    <p>
+      Satış ve İade ekranlarında <kbd>F8</kbd> tuşunu <strong>basılı
+      tuttuğunuz sürece</strong> ürünlerin maliyeti görünür. Tuşu
+      bıraktığınızda kaybolur.
+    </p>
+    <p>
+      Sebebi basit: müşteri tezgâhın karşısında dururken ekranda maliyet
+      yazmasın. Pazarlık ederken "bu maldan ne kadar kârım var" diye
+      bakmak istediğinizde tuşu basılı tutar, bakar, bırakırsınız.
+    </p>
+
+
+    <h2 id="satis"><span class="no">BÖLÜM 5</span>Satış yapmak</h2>
+
+    <p>
+      <span class="yol">Satış ve Alış → Satış Yap</span> veya Ana Sayfadaki
+      <strong>Satış Yap</strong> düğmesi.
+    </p>
+
+    <h3>Adım adım</h3>
+    <ol class="adimlar">
+      <li>
+        <strong>Müşteriyi seçin.</strong> Müşteri kutusuna adının veya
+        kodunun bir kısmını yazın, çıkan listeden tıklayın.
+        Perakende müşteri için kayıtlı <strong>genel müşteri kartını</strong>
+        (kod 120) kullanın.
+      </li>
+      <li>
+        <strong>Fiyat kademesini kontrol edin.</strong> Varsayılan
+        <strong>Toptan</strong>'dır (Satış 1). Perakende satış yapıyorsanız
+        <strong>Perakende</strong>'ye (Satış 2) çevirin.
+        <br><span style="color:var(--murekkep-3);font-size:15px">
+        Not: müşterinin o üründe daha önceki fiyatı varsa kademe ne olursa
+        olsun <em>o fiyat</em> gelir. Kademe yalnızca ilk kez satılan
+        ürünlerde devreye girer.</span>
+      </li>
+      <li>
+        <strong>Ürünleri ekleyin.</strong> <kbd>F2</kbd> ile arayın,
+        <kbd>Enter</kbd> ile ekleyin. Sepete düşen satırda adet ve fiyat
+        değiştirilebilir; istersen satır bazında <strong>iskonto yüzdesi</strong>
+        de girebilirsiniz.
+      </li>
+      <li>
+        <strong>Ödeme bilgilerini seçin.</strong> Aşağıdaki tabloya bakın.
+      </li>
+      <li>
+        <strong>İşlemi yapanı seçin.</strong> Personel listesinden kim
+        sattıysa onu işaretleyin; yıllık ciro raporunda bu bilgi
+        kullanılır.
+      </li>
+      <li>
+        <strong>Kaydet</strong>'e basın. Ekranın üstünde yeşil bir onay
+        şeridi çıkar ve fatura numarası yazar.
+      </li>
+      <li>
+        İsterseniz <strong>Fiş Yazdır</strong> ile çıktı alın.
+      </li>
+    </ol>
+
+    <h3>Ödeme Yöntemi ile Ödeme Şekli farkı</h3>
+    <p>Bu ikisi karıştırılır. Ayrı şeylerdir:</p>
+
+    <div class="tablo-sar">
+      <table>
+        <thead><tr><th>Alan</th><th>Seçenekler</th><th>Ne anlama gelir</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Ödeme Yöntemi</strong></td>
+            <td>Nakit · Kart · EFT/Havale · <strong>Cari</strong></td>
+            <td>Para <em>nasıl</em> geldi. İlk üçünde para kasaya girer.
+              <strong>Cari</strong> seçilirse para gelmemiştir — tutar
+              müşterinin borcuna yazılır.</td>
+          </tr>
+          <tr>
+            <td><strong>Ödeme Şekli</strong></td>
+            <td>Peşin · Vadeli</td>
+            <td>Bu sadece bir <em>not</em>tur; fişin üstüne yazılır.
+              Vadeli seçerseniz vade tarihi de girebilirsiniz.</td>
+          </tr>
+          <tr>
+            <td><strong>Ürün Teslimi</strong></td>
+            <td>Mağazadan Teslim · Kargo</td>
+            <td>Kargo seçerseniz kargo firması ve takip numarası
+              girebilirsiniz.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="kutu dikkat">
+      <span class="kutu-baslik">En sık yapılan hata</span>
+      <p>
+        Müşteri parayı ödemediği hâlde <strong>Nakit</strong> seçmek.
+        O zaman para kasaya girmiş görünür ve müşterinin borcu
+        oluşmaz — ay sonunda kasa tutmaz. Para gelmediyse
+        <strong>Cari</strong> seçin.
+      </p>
+    </div>
+
+    <h3>Stokta olmayan ürün</h3>
+    <p>
+      Stokta olmayan bir ürünü sepete eklerseniz program engellemez ama
+      altında <strong>muadil öneri</strong> çıkarır: aynı parçanın uyduğu
+      başka modeller varsa ve onlar stoktaysa, tek tıkla o ürüne
+      geçebilirsiniz. Bu öneriler ürün kartındaki <strong>Uyumlu</strong>
+      alanından gelir (bkz. <a href="#excel">Bölüm 11</a>).
+    </p>
+
+    <h3>Fişin üstündeki bilgiler</h3>
+    <p>
+      Müşteri seçtiğinizde sağda <strong>Müşteri Limiti</strong> ve
+      <strong>Müşteri Bakiyesi</strong> görünür. Bakiye artıya doğru
+      gidiyorsa müşteri size borçludur. Limit aşılıyorsa program uyarır
+      ama satışı durdurmaz — karar sizindir.
+    </p>
+
+
+    <h2 id="onsiparis"><span class="no">BÖLÜM 6</span>Ön sipariş</h2>
+
+    <p>
+      Müşteri mal istedi ama mal henüz elinizde yok. Ya da elinizde ama
+      henüz teslim etmediniz. Bu durumda satış ekranında
+      <strong>Ön Sipariş</strong> kutusunu işaretleyin.
+    </p>
+
+    <p>Ön siparişte program:</p>
+    <ul>
+      <li><strong>Stoktan düşmez</strong> — mal hâlâ sizin sayılır.</li>
+      <li><strong>Cariye işlemez</strong> — müşteriye borç yazılmaz.</li>
+      <li><strong>Kasaya para girmez.</strong></li>
+    </ul>
+    <p>
+      Yani ön sipariş bir <em>rezervasyon kaydı</em>dır, ticari bir işlem
+      değildir.
+    </p>
+
+    <h3>Ön siparişi teslim etmek</h3>
+    <ol class="adimlar">
+      <li><span class="yol">Satış ve Alış → Ön Siparişler</span> ekranını açın.</li>
+      <li>Teslim edeceğiniz siparişi bulun ve açın.</li>
+      <li><strong>Siparişi Tamamla</strong> düğmesine basın.</li>
+    </ol>
+    <p>
+      O anda ön sipariş gerçek satışa döner: stok düşer, cari işler,
+      para seçtiğiniz yönteme göre kasaya girer.
+    </p>
+
+    <div class="kutu ipucu">
+      <span class="kutu-baslik">Ne zaman kullanmalı</span>
+      <p>
+        Çin'den mal gelecek, müşteri şimdiden sipariş verdi — ön sipariş.
+        Müşteri malı aldı, parayı sonra ödeyecek — <em>ön sipariş değil</em>,
+        normal satış + Ödeme Yöntemi <strong>Cari</strong>.
+      </p>
+    </div>
+
+
+    <h2 id="alis"><span class="no">BÖLÜM 7</span>Alış faturası</h2>
+
+    <p>
+      <span class="yol">Satış ve Alış → Alış Faturası</span>. Mal
+      aldığınızda kesilir. Kullanımı satış ekranıyla neredeyse aynıdır;
+      farklar:
+    </p>
+    <ul>
+      <li>Müşteri yerine <strong>tedarikçiyi</strong> seçersiniz (tedarikçi de bir müşteri kartıdır).</li>
+      <li>Fiyat olarak <strong>aldığınız fiyatı</strong> girersiniz.</li>
+      <li>Kaydettiğinizde stok <strong>artar</strong>.</li>
+      <li><strong>Cari</strong> seçerseniz tedarikçiye borçlanırsınız (bakiye eksiye gider).</li>
+    </ul>
+
+    <div class="kutu ipucu">
+      <span class="kutu-baslik">Alış artık maliyeti bozmaz</span>
+      <p>
+        Eskiden yeni bir alış, o ürünün maliyetini <em>tamamen</em>
+        değiştiriyordu ve elinizdeki eski mal da yeni fiyattan
+        maliyetlenmiş görünüyordu. Artık her alış kendi maliyetiyle
+        ayrı bir "katman" açar. Ayrıntı için <a href="#maliyet">Bölüm 15</a>.
+      </p>
+    </div>
+
+
+    <h2 id="iade"><span class="no">BÖLÜM 8</span>İade almak</h2>
+
+    <p>
+      <span class="yol">Satış ve Alış → Satış İade</span> veya Ana Sayfadaki
+      <strong>İade Al</strong>.
+    </p>
+
+    <p>
+      İade ekranı satış ekranı gibi çalışır: müşteriyi seçin,
+      <kbd>F2</kbd> ile iade edilen ürünleri ekleyin, adet ve fiyatı
+      yazın, kaydedin.
+    </p>
+
+    <p>Kaydettiğinizde:</p>
+    <ul>
+      <li>Mal <strong>stoğa geri girer</strong>.</li>
+      <li>Müşterinin borcu <strong>azalır</strong> (veya kasadan para çıkar).</li>
+    </ul>
+
+    <div class="kutu ipucu">
+      <span class="kutu-baslik">İade için fatura aramanıza gerek yok</span>
+      <p>
+        İade almak için o malın hangi faturayla satıldığını bulmanız
+        gerekmez. Müşteriyi seçip ürünü eklemeniz yeterlidir. Program
+        maliyeti kendisi bulur: önce o müşteriye yapılmış satışa,
+        bulamazsa o müşteriden yapılmış son alışa, o da yoksa ürün
+        kartındaki maliyete bakar.
+      </p>
+    </div>
+
+    <h3>Çin İade — arızalı mal</h3>
+    <p>
+      İade satırlarının yanında <strong>Çin İade</strong> diye bir kutucuk
+      vardır. Bu kutuyu işaretlerseniz mal <strong>satılabilir stoğa
+      girmez</strong>; ayrı bir depoya, <strong>Çin İade Deposu</strong>'na
+      yazılır.
+    </p>
+    <p>
+      Mantık şu: müşteri arızalı ekranı iade etti. Bu ekranı tekrar
+      satamazsınız, Çin'e geri göndereceksiniz. Ama elinizde durduğu için
+      kaybolmasını da istemezsiniz. Çin İade Deposu tam olarak bunun
+      içindir.
+    </p>
+    <p>
+      Bu deponun içinde ne olduğunu görmek için
+      <span class="yol">Stok İşlemleri → Stok Listesi</span> ekranındaki
+      <strong>Depo</strong> kutusundan <strong>Çin İade Deposu</strong>'nu
+      seçin.
+    </p>
+
+    <div class="kutu dikkat">
+      <span class="kutu-baslik">Tek tek işaretleyin</span>
+      <p>
+        Çin İade kutusu <strong>satır satır</strong>dır, faturanın
+        tamamı için değil. Aynı iade fişinde bir ekran sağlam
+        (satılabilir), bir ekran arızalı (Çin'e gidecek) olabilir.
+        Sadece arızalı satırı işaretleyin.
+      </p>
+    </div>
+
+
+    <h2 id="tahsilat"><span class="no">BÖLÜM 9</span>Tahsilat ve ödeme</h2>
+
+    <p>
+      <span class="yol">Müşteri İşlemleri → Tahsilat / Ödeme</span> veya
+      Ana Sayfadaki <strong>Ödeme Al</strong>. Burası faturadan
+      bağımsızdır: müşteri hesabına para yatırdığında veya siz bir
+      tedarikçiye ödeme yaptığınızda kullanılır.
+    </p>
+
+    <ol class="adimlar">
+      <li>Müşteriyi seçin (<kbd>F2</kbd> çalışır).</li>
+      <li><strong>Tahsilat</strong> (para aldınız) veya <strong>Ödeme</strong> (para verdiniz) seçin.</li>
+      <li>Tutarı girin. Para birimini USD, TL veya EUR seçebilirsiniz — program dolara çevirip cariye işler.</li>
+      <li>Yöntemi seçin: Nakit, Kredi Kartı, EFT/Havale.</li>
+      <li>Hangi kasaya girdiğini seçin.</li>
+      <li>Kaydedin. İsterseniz <strong>fiş yazdırın</strong>.</li>
+    </ol>
+
+    <p>
+      Her tahsilat/ödeme kendi <strong>fiş numarasını</strong> alır
+      (<code>ÖDM-YYYY-0001</code> biçiminde). Bu numara faturalardan
+      ayrıdır; karışmaz.
+    </p>
+
+
+    <h2 id="stok"><span class="no">BÖLÜM 10</span>Stok işlemleri</h2>
+
+    <h3>Depolar</h3>
+    <p>Programda iki depo vardır ve bunlar sabittir:</p>
+    <div class="tablo-sar">
+      <table>
+        <thead><tr><th>Depo</th><th>İçinde ne var</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Merkez Depo</strong></td>
+            <td>Satılabilir mal. Satış yaptığınızda buradan düşer,
+              alış yaptığınızda buraya girer. Fiyat listesi sitenizde
+              "stok var" yazması için malın burada olması gerekir.</td>
+          </tr>
+          <tr>
+            <td><strong>Çin İade Deposu</strong></td>
+            <td>Arızalı, Çin'e geri gidecek mal. Satılamaz, raporlarda
+              satılabilir stok sayılmaz.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Stok Listesi</h3>
+    <p>
+      <span class="yol">Stok İşlemleri → Stok Listesi</span>. Bütün
+      ürünleriniz burada. Yapabilecekleriniz:
+    </p>
+    <ul>
+      <li><strong>Arama</strong> — stok kodu, ad, marka, model ile arayın. Birden fazla kelime yazarsanız hepsini birden içeren ürünler gelir.</li>
+      <li><strong>Filtre</strong> — kategori, marka, model, renk ve <strong>depo</strong>.</li>
+      <li><strong>Düzenleme</strong> — satır üstünde ad, fiyat gibi alanları doğrudan değiştirin.</li>
+      <li><strong>Ürün adına tıklama</strong> — o ürünün bütün stok hareketleri (hangi faturayla girdi, hangisiyle çıktı) küçük bir pencerede açılır.</li>
+      <li><strong>Excel</strong> — indir / yükle (bkz. <a href="#excel">Bölüm 11</a>).</li>
+      <li><strong>Silme</strong> — ürünü çöp kutusuna atar.</li>
+    </ul>
+
+    <h3>Stok Kartı Oluştur</h3>
+    <p>
+      <span class="yol">Stok İşlemleri → Stok Kartı Oluştur</span>.
+      Tek bir yeni ürün eklemek için. Alanlar:
+    </p>
+
+    <div class="tablo-sar">
+      <table>
+        <thead><tr><th>Alan</th><th>Açıklama</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Stok Kodu</strong></td><td>Boş bırakırsanız program otomatik üretir. Elle girecekseniz benzersiz olmalı.</td></tr>
+          <tr><td><strong>Stok Adı</strong></td><td><strong>Zorunlu.</strong> Müşteriye görünen ad budur. Örn. <em>APPLE IPHONE 11 LCD ÇITASIZ BLACK</em></td></tr>
+          <tr><td><strong>Kategori</strong></td><td>Parça türü: Ekran &amp; LCD, Batarya, Kasa &amp; Kapak… Listeden seçilir.</td></tr>
+          <tr><td><strong>Marka / Model</strong></td><td>Apple / iPhone 11 Pro gibi. <strong>Fiyat listesi sitesi için gereklidir</strong> — boşsa ürün sitede görünmez.</td></tr>
+          <tr><td><strong>Görünüm / Kalite / Renk</strong></td><td>A Kalite, Servis Orjinal, Siyah gibi ayırt edici bilgiler.</td></tr>
+          <tr><td><strong>Alış Fiyatı</strong></td><td><strong>Varsayılan</strong> maliyet. Gerçek maliyet alış faturalarından gelir; bu değer yalnızca hiç alış kaydı yokken kullanılır.</td></tr>
+          <tr><td><strong>Satış 1 (Toptan)</strong></td><td>Bayiye satış fiyatı. Varsayılan fiyat budur.</td></tr>
+          <tr><td><strong>Satış 2 (Perakende)</strong></td><td>Son kullanıcıya satış fiyatı. Boş bırakırsanız Satış 1 ile aynı olur.</td></tr>
+          <tr><td><strong>Uyumlu</strong></td><td>Bu parçanın uyduğu <em>diğer</em> modeller, virgülle: <code>iPhone 11, iPhone XR</code>. Stokta yokken muadil önerisi buradan çıkar ve fiyat listesi sitenizde de görünür.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Depo Transfer</h3>
+    <p>
+      <span class="yol">Stok İşlemleri → Depo Transfer</span>. Malı bir
+      depodan diğerine taşır. Ürünü, kaynak depoyu, hedef depoyu ve adedi
+      seçip kaydedersiniz. Kaynak depoda yeterli mal yoksa program izin
+      vermez.
+    </p>
+
+    <h3>Stok Hareketleri</h3>
+    <p>
+      <span class="yol">Stok İşlemleri → Stok Hareketleri</span>. "Bu maldan
+      elimde 3 tane görünüyor ama rafta 1 tane var, ne oldu?" sorusunun
+      cevabı burada. Her giriş ve çıkış, hangi faturayla olduğu ve tarihiyle
+      birlikte listelenir.
+    </p>
+
+    <h3>Silinen Ürünler (çöp kutusu)</h3>
+    <p>
+      Bir ürünü sildiğinizde <strong>kayıt yok olmaz</strong>, çöp kutusuna
+      gider. Sebebi önemli: o ürün geçmiş faturalarınızda geçiyor olabilir.
+      Kayıt gerçekten silinseydi, o eski faturalar ürün adını kaybederdi ve
+      okunamaz hâle gelirdi.
+    </p>
+    <p>Çöp kutusundaki ürün:</p>
+    <ul>
+      <li>Stok listesinde, aramada, Excel'de ve fiyat listesi sitenizde <strong>görünmez</strong>.</li>
+      <li>Geçmiş faturalarda ve raporlarda <strong>aynen durur</strong>.</li>
+    </ul>
+    <p>
+      <span class="yol">Stok İşlemleri → Silinen Ürünler</span> ekranından
+      <strong>Geri al</strong> diyerek her an geri getirebilirsiniz.
+    </p>
+    <p>
+      <strong>Kalıcı sil</strong> düğmesi yalnızca <em>hiçbir faturada
+      geçmemiş</em> ürünlerde açıktır — yanlışlıkla açılmış veya mükerrer
+      kartlar için. Faturası olan bir ürün kalıcı silinemez; ekranda
+      "kalıcı silinemez" yazar.
+    </p>
+
+    <h3>Barkod Etiket</h3>
+    <p>
+      <span class="yol">Stok İşlemleri → Barkod Etiket</span>. Ürünü seçin,
+      etiket çıktısı alın. Rafa veya kutuya yapıştırmak için.
+    </p>
+
+
+    <h2 id="excel"><span class="no">BÖLÜM 11</span>Excel ile toplu çalışma</h2>
+
+    <p>
+      Bu bölüm kılavuzun en önemli kısmıdır. Binlerce ürünü tek tek
+      düzenlemek yerine Excel'de toplu çalışırsınız.
+    </p>
+
+    <h3>Nasıl işler</h3>
+    <ol class="adimlar">
+      <li>
+        <span class="yol">Stok Listesi</span> ekranından <strong>Excel
+        İndir</strong>. Dosya adında firma kısaltmanız ve tarih-saat
+        bulunur, karışmaz.
+      </li>
+      <li>Excel'de istediğiniz değişikliği yapın.</li>
+      <li>Aynı ekrandan <strong>Excel Yükle</strong> ile geri gönderin.</li>
+      <li>Program kaç ürün oluşturdu, kaç ürün güncelledi, kaç satır atladı — hepsini yazar.</li>
+    </ol>
+
+    <h3>Sütunlar</h3>
+    <div class="tablo-sar">
+      <table>
+        <thead><tr><th class="mono">Sütun</th><th>Ne işe yarar</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">Id</td><td>Programın o ürüne verdiği numara. <strong>Silmeyin, dokunmayın.</strong> Eşleştirme öncelikle bununla yapılır.</td></tr>
+          <tr><td class="mono">StokKodu</td><td>Ürün kodu. Boş bırakırsanız program otomatik üretir.</td></tr>
+          <tr><td class="mono">StokAdi</td><td><strong>Zorunlu.</strong> Boş olan satır atlanır ve size bildirilir.</td></tr>
+          <tr><td class="mono">Kategori</td><td>Parça türü. Yeni bir ad yazarsanız kategori <strong>kendiliğinden oluşur</strong>.</td></tr>
+          <tr><td class="mono">Marka</td><td>Aynı şekilde otomatik oluşur.</td></tr>
+          <tr><td class="mono">Model</td><td>Aynı şekilde otomatik oluşur.</td></tr>
+          <tr><td class="mono">Gorunum</td><td>Ürünün görünüm bilgisi.</td></tr>
+          <tr><td class="mono">Kalite</td><td>A Kalite, Servis Orjinal vb.</td></tr>
+          <tr><td class="mono">Renk</td><td>Siyah, Beyaz…</td></tr>
+          <tr><td class="mono">Aciklama</td><td>Serbest not.</td></tr>
+          <tr><td class="mono">Rmb</td><td>Çin yuanı fiyatı (bilgi amaçlı, hesaplamaya girmez).</td></tr>
+          <tr><td class="mono">AlisFiyati</td><td>Varsayılan maliyet.</td></tr>
+          <tr><td class="mono">Satis1</td><td><strong>Toptan</strong> satış fiyatı ($).</td></tr>
+          <tr><td class="mono">Satis2</td><td><strong>Perakende</strong> satış fiyatı ($). Boşsa Satış 1 ile aynı olur.</td></tr>
+          <tr><td class="mono">AlisAdedi</td><td><strong>Salt okunur.</strong> Bugüne kadar bu üründen toplam kaç adet aldınız. Yazdığınız değer dikkate alınmaz.</td></tr>
+          <tr><td class="mono">SatisAdedi</td><td><strong>Salt okunur.</strong> Bugüne kadar toplam kaç adet sattınız.</td></tr>
+          <tr><td class="mono">Bakiye</td><td>Merkez Depo'daki <strong>mevcut stok</strong>. Ne yazarsanız stok o olur (sayım mantığı).</td></tr>
+          <tr><td class="mono">Uyumlu</td><td>Bu parçanın uyduğu diğer modeller, virgülle ayrılmış.</td></tr>
+          <tr><td class="mono">GelenAdet</td><td>Dosyada <strong>bilerek boş</strong> iner. Yeni gelen adedi buraya yazın, <strong>mevcut stoğa eklenir</strong>.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Bakiye ile GelenAdet farkı — çok önemli</h3>
+    <div class="tablo-sar">
+      <table>
+        <thead><tr><th></th><th class="mono">Bakiye</th><th class="mono">GelenAdet</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Ne der</strong></td>
+            <td>"Elimde toplam <em>bu kadar</em> var"</td>
+            <td>"Bu kadar <em>yeni geldi</em>"</td>
+          </tr>
+          <tr>
+            <td><strong>Sonuç</strong></td>
+            <td>Stok yazdığınız sayıya <strong>eşitlenir</strong></td>
+            <td>Mevcut stoğun üstüne <strong>eklenir</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Örnek</strong></td>
+            <td>Stok 12 iken Bakiye = 20 yazarsanız → stok <strong>20</strong></td>
+            <td>Stok 12 iken GelenAdet = 20 yazarsanız → stok <strong>32</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="kutu dikkat">
+      <span class="kutu-baslik">GelenAdet, Bakiye'yi ezer</span>
+      <p>
+        Aynı satırda hem <code>Bakiye</code> hem <code>GelenAdet</code>
+        doluysa program <strong>GelenAdet</strong>'i uygular,
+        <code>Bakiye</code>'yi yok sayar. İkisini birlikte kullanmayın.
+      </p>
+    </div>
+
+    <h3>Excel ürün SİLMEZ</h3>
+    <p>
+      Dosyadan bir satırı silip yüklerseniz o ürün programdan
+      <strong>silinmez</strong>, olduğu gibi kalır. Bu bilerek böyle
+      yapıldı: yanlışlıkla filtrelenmiş veya eksik bir dosya yüklendiğinde
+      binlerce ürünün yok olmasını engeller.
+    </p>
+    <p>
+      Ürünü gerçekten kaldırmak istiyorsanız Stok Listesi'nden silin
+      (çöp kutusuna gider).
+    </p>
+
+    <h3>Id sütununu ne zaman silmeli?</h3>
+    <p>
+      <strong>Normalde asla.</strong> Program eşleştirmeyi önce
+      <code>Id</code>, tutmazsa <code>StokKodu</code> ile yapar. Id
+      durursa stok kodunu değiştirseniz bile ürün doğru kartla eşleşir.
+    </p>
+    <p>Yalnızca iki durumda silinir:</p>
+    <ul>
+      <li>Bütün ürün kartları silinip sıfırdan yükleme yapılıyorsa (eski Id'ler artık var olmayan kayıtları gösterir).</li>
+      <li>Dosya başka bir programdan geliyorsa.</li>
+    </ul>
+
+    <h3>Müşteri Excel'i</h3>
+    <p>
+      <span class="yol">Müşteri Listesi</span> ekranında da Excel indirme
+      ve yükleme vardır. Sütunlar: <code>CariKodu</code>, <code>CariAdi</code>,
+      <code>YetkiliAdi</code>, <code>Adres</code>, <code>Ilce</code>,
+      <code>Il</code>, <code>Email</code>, <code>Gsm</code>,
+      <code>VergiDairesi</code>, <code>VergiTcNo</code>,
+      <code>KrediLimiti</code>, <code>Bakiye</code>.
+    </p>
+
+
+    <h2 id="musteri"><span class="no">BÖLÜM 12</span>Müşteriler (cari)</h2>
+
+    <h3>Kart açmak</h3>
+    <p>
+      <span class="yol">Müşteri İşlemleri → Yeni Müşteri Kartı</span>.
+      Zorunlu olan tek alan <strong>ad</strong>dır. Cari kodunu boş
+      bırakırsanız program otomatik verir.
+    </p>
+    <p>
+      <strong>Kredi Limiti</strong>, o müşterinin ne kadar borçlanmasına
+      göz yumacağınızdır. Aşıldığında program uyarı gösterir ama satışı
+      durdurmaz.
+    </p>
+    <p>
+      <strong>Yetkili</strong> alanı personel listesinden seçilir —
+      "bu müşteriden bizde kim sorumlu" bilgisi.
+    </p>
+
+    <h3>Bakiye ne demek</h3>
+    <div class="tablo-sar">
+      <table>
+        <thead><tr><th>Bakiye</th><th>Anlamı</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Artı (+)</strong></td><td>Müşteri <strong>size borçlu</strong>. Alacağınız var.</td></tr>
+          <tr><td><strong>Eksi (−)</strong></td><td><strong>Siz borçlusunuz</strong>. Genelde tedarikçilerde olur.</td></tr>
+          <tr><td><strong>Sıfır</strong></td><td>Hesap kapalı.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Müşteri Ekstre</h3>
+    <p>
+      <span class="yol">Müşteri İşlemleri → Müşteri Ekstre</span>. Bir
+      müşterinin bütün hareketleri tarih sırasıyla: her fatura, her
+      tahsilat ve her satırdan sonraki bakiye. Satırın önündeki oka
+      basınca faturanın kalemleri açılır.
+    </p>
+    <p>
+      Ekstreyi <strong>yazdırabilir</strong> veya <strong>CSV
+      indirebilirsiniz</strong>. Müşteriyle hesap görürken bunu
+      kullanın.
+    </p>
+
+    <h3>Müşteri Borç / Alacak</h3>
+    <p>
+      <span class="yol">Müşteri İşlemleri → Müşteri Borç / Alacak</span>.
+      Borçlular ve alacaklılar iki ayrı listede. En üstte toplam alacağınız
+      ve limit aşan müşterilerin toplamı yazar. Tahsilat planı yaparken
+      açacağınız ekran budur.
+    </p>
+
+
+    <h2 id="faturalar"><span class="no">BÖLÜM 13</span>Faturalar ve silme</h2>
+
+    <h3>Fatura Listesi</h3>
+    <p>
+      <span class="yol">Faturalar → Fatura Listesi</span>. Bütün faturalar.
+      Türe göre süzebilirsiniz: Satış, Alış, İade, Ön Sipariş. Fatura
+      numarasına tıklayınca içindeki kalemler açılır; oradan
+      <strong>düzenleyebilir</strong> veya <strong>yazdırabilirsiniz</strong>.
+    </p>
+
+    <h3>Fatura düzenlemek</h3>
+    <p>
+      Bir faturayı açıp kalem ekleyebilir, çıkarabilir, adet ve fiyat
+      değiştirebilirsiniz. Kaydettiğinizde program eski etkileri geri alıp
+      yenisini uygular: stok ve cari kendiliğinden düzelir.
+    </p>
+
+    <h3>Fatura silmek</h3>
+    <p>
+      Faturayı sildiğinizde <strong>Silinen İşlemler</strong> listesine
+      gider ve stok ile cari etkileri <strong>anında geri alınır</strong>.
+      Yani sattığınız mal stoğa döner, müşterinin borcu silinir.
+    </p>
+
+    <div class="kutu tehlike">
+      <span class="kutu-baslik">Fatura silme geri alınamaz</span>
+      <p>
+        Ürünlerin aksine, <strong>silinen fatura geri getirilemez</strong>.
+        Silinen İşlemler ekranında yalnızca <em>kalıcı silme</em> vardır.
+        Fatura yanlışsa silmek yerine <strong>düzenlemeyi</strong> tercih
+        edin.
+      </p>
+    </div>
+
+    <p>
+      Bir faturadan iade yapılmışsa program o faturayı silmenize izin
+      vermez; "önce iadeleri silin" der. Bu, hesapların bozulmasını
+      engeller.
+    </p>
+
+
+    <h2 id="raporlar"><span class="no">BÖLÜM 14</span>Raporlar</h2>
+
+    <p>Her rapor bir soruyu cevaplar:</p>
+
+    <dl class="sozluk">
+      <dt>İşletme Özeti</dt>
+      <dd>"İşler nasıl gidiyor?" — Ciro eğrisi, en çok/en az satan ürünler,
+        en iyi müşteriler, personel bazlı ciro, düşük stoklar. Haftada bir
+        bakılacak ekran.</dd>
+
+      <dt>Satış Kırılımı</dt>
+      <dd>"Ne sattım?" — Seçtiğiniz tarih aralığında satışın kategori ve
+        müşteri dağılımı, iade oranı.</dd>
+
+      <dt>Kâr-Zarar Raporu</dt>
+      <dd>"Ne kazandım?" — Ay bazında ciro, maliyet ve kâr; ürün bazında
+        kârlılık. Maliyet, malı <em>sattığınız andaki</em> gerçek maliyettir
+        (bkz. <a href="#maliyet">Bölüm 15</a>), bu yüzden kapanmış ayların
+        kârı sonradan değişmez.</dd>
+
+      <dt>Stok Değeri</dt>
+      <dd>"Elimdeki mal kaç para?" — Depodaki malın toplam maliyet değeri.
+        Ürün bazındaki maliyet, o üründeki katmanların ağırlıklı
+        ortalamasıdır.</dd>
+
+      <dt>Kasa Raporu</dt>
+      <dd>"Kasaya ne girdi, ne çıktı?" — Dönem seçip bütün kasa
+        hareketlerini görür, CSV indirirsiniz.</dd>
+    </dl>
+
+
+    <h2 id="maliyet"><span class="no">BÖLÜM 15</span>Maliyet nasıl hesaplanır</h2>
+
+    <p>
+      Bu bölüm biraz teknik ama <strong>kâr rakamlarınızın doğru olması
+      buna bağlı</strong>. Bir kez okuyun, yeter.
+    </p>
+
+    <h3>Sorun neydi</h3>
+    <p>
+      Diyelim elinizde 1 adet ekran var, tanesini 1,00 $'a almışsınız.
+      Sonra aynı ekrandan 2 adet daha alıyorsunuz, bu sefer 1,20 $'a.
+      Şimdi 3 adet ekranınız var ve toplam maliyetiniz:
+    </p>
+    <p style="font-family:var(--mono);font-size:15px;text-align:center;margin:18px 0">
+      1,00 + 1,20 + 1,20 = <strong>3,40 $</strong>
+    </p>
+    <p>
+      Eski sistemde her yeni alış, ürünün maliyetini son alış fiyatına
+      eşitliyordu. Yani elinizdeki eski 1,00 $'lık ekran da 1,20 $'lık
+      olmuş sayılıyor, üçünü sattığınızda maliyet <strong>3,60 $</strong>
+      görünüyordu. Kârınız 20 sent eksik çıkıyordu — ve bu her üründe
+      birikiyordu.
+    </p>
+
+    <h3>Şimdi nasıl çalışıyor: katman mantığı</h3>
+    <p>
+      Her alış artık kendi <strong>katmanını</strong> açar. Katman
+      "şu tarihte, şu fiyattan, şu kadar mal aldım" demektir.
+    </p>
+    <div class="tablo-sar">
+      <table>
+        <thead><tr><th>Katman</th><th>Adet</th><th>Birim maliyet</th></tr></thead>
+        <tbody>
+          <tr><td>1 (eski)</td><td class="mono">1</td><td class="mono">1,00 $</td></tr>
+          <tr><td>2 (yeni)</td><td class="mono">2</td><td class="mono">1,20 $</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      Satış yaptığınızda program <strong>en eski katmandan</strong> tüketir
+      (ilk giren ilk çıkar). 3 adet sattığınızda önce 1,00 $'lık tek adet,
+      sonra 1,20 $'lık iki adet gider: toplam <strong>3,40 $</strong>.
+      Doğru rakam.
+    </p>
+
+    <h3>Satış anında maliyet dondurulur</h3>
+    <p>
+      Bir satış kaydedildiğinde o satırın maliyeti faturaya
+      <strong>yazılır ve bir daha değişmez</strong>. Sonradan aynı üründen
+      daha pahalıya mal alsanız bile geçmiş ayın kârı oynamaz.
+    </p>
+
+    <h3>Ürün kartındaki "Alış Fiyatı" ne oldu?</h3>
+    <p>
+      O artık bir <strong>varsayılan</strong>dır. Yalnızca hiç alış kaydı
+      olmayan bir ürün satıldığında (stoksuz satış, Excel'den gelen açılış
+      stoğu) devreye girer. Alış faturaları bu değeri artık <strong>ezmez</strong>.
+    </p>
+
+    <h3>Excel yüklemesi ne yapıyor</h3>
+    <p>
+      Excel'de <code>Bakiye</code> ile stok değiştirdiğinizde program
+      katmanları da buna göre ayarlar:
+    </p>
+    <ul>
+      <li><strong>Stok arttıysa</strong> — farkı, <code>AlisFiyati</code> sütunundaki fiyatla yeni bir katman olarak ekler.</li>
+      <li><strong>Stok azaldıysa</strong> — farkı <strong>en yeni</strong> katmandan düşer. Böylece gerçek eski alışlarınız korunur.</li>
+    </ul>
+
+
+    <h2 id="liste"><span class="no">BÖLÜM 16</span>Fiyat listesi siteniz</h2>
+
+    <p>
+      ERP ile birlikte size <strong>ücretsiz</strong> bir fiyat listesi
+      sitesi verilir. Bu site, <em>sizin müşterilerinizin</em> link
+      üzerinden girip fiyatlarınızı görebileceği açık bir sayfadır.
+      Adresi genelde <code>liste.firmaadiniz.com.tr</code> biçimindedir.
+    </p>
+
+    <h3>Nasıl beslenir</h3>
+    <p>
+      Site <strong>doğrudan ERP'nizden</strong> beslenir. Ayrı bir panel,
+      ayrı bir Excel yoktur. ERP'de fiyatı değiştirirsiniz, site
+      <strong>en geç iki dakika içinde</strong> kendiliğinden güncellenir.
+    </p>
+
+    <h3>Ne gösterir</h3>
+    <ul>
+      <li>Marka → parça türü → model şeklinde bir ağaç.</li>
+      <li>Her ürünün <strong>toptan ve perakende</strong> fiyatı.</li>
+      <li>Stok durumu yalnızca <strong>Var / Yok</strong> — adet gösterilmez.</li>
+      <li>Ürünün uyduğu diğer modeller; üstüne basınca o modelin sayfasına gider.</li>
+      <li>Sağ altta <strong>WhatsApp</strong> düğmesi.</li>
+    </ul>
+
+    <h3>Ne göstermez</h3>
+    <p>
+      Maliyetiniz, RMB fiyatı, stok adediniz, müşterileriniz ve
+      faturalarınız <strong>siteye hiç gitmez</strong>. Site sadece
+      yukarıdaki dar bilgiyi görebilir; bilgisayar korsanı bile o adresten
+      başka bir şey çekemez.
+    </p>
+
+    <h3>Hangi ürünler listede görünmez</h3>
+    <ul>
+      <li><strong>Kategorisi, markası veya modeli boş olanlar.</strong> Site bu üçüyle ağaç kuruyor; biri eksikse ürün hiçbir dala oturamaz.</li>
+      <li><strong>Satış 1 ve Satış 2'nin ikisi de 0 olanlar.</strong> Fiyatı olmayan ürün fiyat listesinde ne yazsın.</li>
+      <li><strong>Çöp kutusundakiler.</strong></li>
+      <li><strong>Çin İade Deposu'ndaki mal</strong> stok sayılmaz — o ürün "stokta yok" görünür.</li>
+    </ul>
+    <p>
+      Tamir gereçleri, sarf malzemeleri ve cihazlar (bant, lehim teli,
+      mikroskop, sıcak hava makinesi) genelde marka/model taşımaz; bu
+      yüzden listede görünmezler. Bu bilerek böyledir.
+    </p>
+    <p>
+      Bir ürünün sitede çıkmasını istiyorsanız kartındaki
+      <strong>Kategori, Marka, Model</strong> ve <strong>Satış 1</strong>
+      alanlarının dolu olduğundan emin olun.
+    </p>
+
+    <h3>Stokta olmayanın fiyatı gizlenir</h3>
+    <p>
+      Stokta olmayan ürün listede kalır (müşteri parçanın var olduğunu
+      bilsin) ama fiyatının yerinde çizgi durur ve satır listenin sonuna
+      düşer.
+    </p>
+
+
+    <h2 id="dikkat"><span class="no">BÖLÜM 17</span>Dikkat edilecekler</h2>
+
+    <h3>Her gün</h3>
+    <ul>
+      <li>Para gelmediyse <strong>Cari</strong> seçin, Nakit değil.</li>
+      <li>İadede arızalı malı <strong>Çin İade</strong> olarak işaretleyin, sağlam malla karıştırmayın.</li>
+      <li>Fişi kesen personeli <strong>İşlemi Yapan</strong> alanında seçin.</li>
+      <li>Gün sonunda Ana Sayfadaki kasa bakiyesiyle elinizdeki nakdi karşılaştırın.</li>
+    </ul>
+
+    <h3>Excel yüklerken</h3>
+    <ul>
+      <li><code>Id</code> sütununu silmeyin.</li>
+      <li><code>Bakiye</code> ile <code>GelenAdet</code>'i aynı satırda birlikte kullanmayın.</li>
+      <li>Yüklemeden önce dosyada <strong>filtre açık kalmadığından</strong> emin olun.</li>
+      <li>Yükleme sonrası çıkan "kaç oluşturuldu / kaç güncellendi" özetini <strong>okuyun</strong>. Beklediğinizden çok fazla "oluşturuldu" varsa bir şeyler ters gitmiştir.</li>
+    </ul>
+
+    <h3>Silerken</h3>
+    <ul>
+      <li>Ürün silmek güvenlidir — çöp kutusundan geri alınır.</li>
+      <li><strong>Fatura silmek geri alınamaz</strong> — önce düzenlemeyi deneyin.</li>
+    </ul>
+
+    <h3>Yapmayın</h3>
+    <ul>
+      <li>Aynı ürün için ikinci bir kart açmayın; önce arayın.</li>
+      <li>Fiyatı düzeltmek için faturayı silip yeniden kesmeyin; faturayı düzenleyin.</li>
+      <li>Şifreyi paylaşmayın; her personele kendi kaydını açın.</li>
+    </ul>
+
+
+    <h2 id="sss"><span class="no">BÖLÜM 18</span>Sık sorulanlar</h2>
+
+    <h4>Yanlış fatura kestim, ne yapayım?</h4>
+    <p>
+      Fatura Listesi'nden faturayı açıp <strong>düzenleyin</strong>. Stok ve
+      cari kendiliğinden düzelir. Fatura tamamen gereksizse silin — stok ve
+      cari etkileri geri alınır, ama fatura bir daha geri getirilemez.
+    </p>
+
+    <h4>Stok sayım yaptım, rakamlar tutmuyor.</h4>
+    <p>
+      Excel indirin, <code>Bakiye</code> sütununa saydığınız gerçek
+      adetleri yazın, geri yükleyin. Stok o rakama eşitlenir.
+    </p>
+
+    <h4>Sattığım ürün stokta yok görünüyordu, yine de sattım. Sorun olur mu?</h4>
+    <p>
+      Olmaz. Stok eksiye düşer ve maliyet olarak ürün kartındaki varsayılan
+      alış fiyatı kullanılır. Mal gelince alış faturasını kesince stok
+      düzelir.
+    </p>
+
+    <h4>Müşteri fiyatı çok yüksek diyor, geçen sefer daha ucuza almış.</h4>
+    <p>
+      <kbd>F2</kbd> ile ürünü aratın; müşteri seçiliyken listede
+      <strong>"Son fiyat"</strong> yazar. O müşteriye en son kaça
+      sattığınızı orada görürsünüz.
+    </p>
+
+    <h4>Fiyat listesi sitemde bir ürün görünmüyor.</h4>
+    <p>
+      Ürün kartında <strong>Kategori, Marka, Model</strong> ve
+      <strong>Satış 1</strong> dolu mu, kontrol edin. Biri boşsa ürün
+      sitede çıkmaz. Bkz. <a href="#liste">Bölüm 16</a>.
+    </p>
+
+    <h4>Fiyatı değiştirdim ama sitede eski fiyat duruyor.</h4>
+    <p>
+      Site fiyatları en geç <strong>iki dakikada</strong> tazeler. Biraz
+      bekleyip sayfayı yenileyin.
+    </p>
+
+    <h4>Kâr raporundaki maliyet neden ürün kartındakinden farklı?</h4>
+    <p>
+      Çünkü rapor, malı <em>sattığınız andaki</em> gerçek maliyeti
+      kullanır; ürün kartındaki rakam sadece bir varsayılandır.
+      Bkz. <a href="#maliyet">Bölüm 15</a>.
+    </p>
+
+    <h4>Program çok yavaşladı / açılmıyor.</h4>
+    <p>
+      Önce sayfayı <kbd>Ctrl</kbd>+<kbd>F5</kbd> ile yenileyin. Düzelmezse
+      internetinizi kontrol edin. Yine olmuyorsa yazılım sorumlunuza haber
+      verin; sunucu tarafında bir sorun olabilir.
+    </p>
+
+
+    <h2 id="sozluk"><span class="no">BÖLÜM 19</span>Sözlük</h2>
+
+    <dl class="sozluk">
+      <dt>Cari</dt>
+      <dd>Bir müşteri veya tedarikçiyle olan hesabınız. "Cariye işlemek",
+        parayı almadan borç/alacak kaydetmek demektir.</dd>
+
+      <dt>Bakiye</dt>
+      <dd>Hesabın o anki durumu. Artıysa müşteri size borçlu, eksiyse siz
+        borçlusunuz.</dd>
+
+      <dt>Katman</dt>
+      <dd>Tek bir alışın kaydı: kaç adet, kaç paraya. Maliyet hesabı
+        katmanlar üzerinden yürür.</dd>
+
+      <dt>FIFO</dt>
+      <dd>"İlk giren ilk çıkar." Satış, en eski katmandan tüketir.</dd>
+
+      <dt>Ön sipariş</dt>
+      <dd>Stoğu ve cariyi etkilemeyen rezervasyon kaydı. Teslim edilince
+        gerçek satışa döner.</dd>
+
+      <dt>Çöp kutusu</dt>
+      <dd>Silinen ürünlerin gittiği yer. Listelerde görünmezler ama geçmiş
+        faturalarda dururlar ve geri alınabilirler.</dd>
+
+      <dt>Muadil / Uyumlu</dt>
+      <dd>Aynı parçanın uyduğu diğer modeller. Stokta olmayan ürün yerine
+        öneri çıkarmak ve fiyat listesinde göstermek için kullanılır.</dd>
+
+      <dt>Merkez Depo</dt>
+      <dd>Satılabilir malın durduğu depo.</dd>
+
+      <dt>Çin İade Deposu</dt>
+      <dd>Arızalı, Çin'e geri gönderilecek malın durduğu depo. Satılabilir
+        stok sayılmaz.</dd>
+
+      <dt>Toptan / Perakende</dt>
+      <dd>Satış 1 = toptan (bayi), Satış 2 = perakende (son kullanıcı).</dd>
+    </dl>
+
+  </main>
+</div>
+
+<footer>
+  TeknikERP Kullanım Kılavuzu · Sürüm 1.18 · Bu belge programın tamamını kapsar.
+  Anlaşılmayan bir yer olursa yazılım sorumlunuza belirtin, kılavuza eklensin.
+</footer>
+
+<script>
+// İçindekiler — okunan bölümü işaretle
+(function () {
+  var baslikar = Array.prototype.slice.call(document.querySelectorAll('main h2[id]'));
+  var baglantilar = Array.prototype.slice.call(document.querySelectorAll('.icindekiler a'));
+  if (!baslikar.length || !baglantilar.length || !('IntersectionObserver' in window)) return;
+
+  var harita = {};
+  baglantilar.forEach(function (a) { harita[a.getAttribute('href').slice(1)] = a; });
+
+  var gozlemci = new IntersectionObserver(function (girisler) {
+    girisler.forEach(function (giris) {
+      if (!giris.isIntersecting) return;
+      baglantilar.forEach(function (a) { a.classList.remove('aktif'); });
+      var a = harita[giris.target.id];
+      if (a) a.classList.add('aktif');
+    });
+  }, { rootMargin: '-80px 0px -70% 0px' });
+
+  baslikar.forEach(function (h) { gozlemci.observe(h); });
+})();
+</script>

@@ -34,3 +34,8 @@ backend/prisma/*.db-journal
 # Yukarıdaki *.sql kuralı bunları da yutuyordu: yeni bir migration sessizce
 # commit'e girmiyor, sunucu git pull sonrası eski şemayla kalıyordu.
 !backend/prisma/migrations/**/*.sql
+
+# Dahili isletme notlari — acik guvenlik zafiyetlerini ve sunucu
+# ayrintilarini listeliyor. Depo PUBLIC oldugu surece commitlenmez.
+# Repo private olduktan sonra bu satir kaldirilabilir.
+docs/isletme-notlari.html
