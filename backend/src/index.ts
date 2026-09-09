@@ -7026,8 +7026,22 @@ app.get(
       const model = kayit.model?.trim() ?? '';
       const kategori = kayit.category?.name?.trim() ?? '';
 
-      // Agac marka > kategori > model diye kuruluyor; ucu de eksik olan
-      // urun sitede hicbir dala oturamaz.
+      /*
+       * Agac marka > kategori > model diye kuruluyor; ucu de eksik olan
+       * urun sitede hicbir dala oturamaz.
+       *
+       * Bunlarin cogu MODELE BAGLI OLMAYAN mallar: 3M bant, lehim teli,
+       * mikroskop, sicak hava makinesi, temizleme bezi, vantuz. Gercekten
+       * marka/model tasimiyorlar.
+       *
+       * KARAR (10 Eylul 2026): listede GORUNMESINLER. Fiyat listesi
+       * telefon yedek parcasi listesidir; tamir gereci ve sarf malzemesi
+       * musteriye telefonla/WhatsApp'tan satiliyor. Bunlar icin ayri bir
+       * bolum acilmasi teklif edildi, gerek gorulmedi.
+       *
+       * Kategorisi bos olan urun ise VERI HATASIDIR (Excel'de Kategori
+       * sutunu doldurulmamis) — duzeltilince kendiliginden listeye girer.
+       */
       if (!marka || !model || !kategori) continue;
 
       urunler.push({
