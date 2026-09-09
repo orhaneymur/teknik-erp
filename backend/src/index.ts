@@ -48,6 +48,15 @@ type StoreItem = {
 
 const ACTIVE_INVOICE_FILTER = { deletedAt: null } as const;
 
+/**
+ * Cop kutusundaki urunler hicbir listede gorunmez.
+ *
+ * Fatura kalemleri urune ISARET ETMEYE devam eder — gizlenen urunun
+ * gecmis faturasi ve raporu aynen okunur. Bu filtre yalnizca URUN
+ * LISTELERINDE kullanilir.
+ */
+const AKTIF_URUN_FILTRESI = { deletedAt: null } as const;
+
 const app = Fastify({ logger: true });
 
 /** Ortak fiş no: YYMMDDHHmmss — çakışırsa sonraki saniyeye kayar */
@@ -1222,7 +1231,9 @@ async function searchProductsForF2(options: {
 }) {
   const { search, page, limit, customerId, context, rate, prioritizeProductId } = options;
   const trimmedSearch = search?.trim() ?? '';
-  const where = trimmedSearch ? buildProductSearchWhere(trimmedSearch) : {};
+  const where: Prisma.ProductWhereInput = trimmedSearch
+    ? { AND: [buildProductSearchWhere(trimmedSearch), AKTIF_URUN_FILTRESI] }
+    : { ...AKTIF_URUN_FILTRESI };
   const invoiceType = context === 'purchase' ? 'ALIS' : 'SATIS';
 
   /*
@@ -1434,7 +1445,10 @@ function buildProductListWhere(query: {
     filters.push({ appearance: query.appearance.trim() });
   }
 
-  return filters.length > 0 ? { AND: filters } : {};
+  // Cop kutusundakiler hicbir listede gorunmez
+  filters.push(AKTIF_URUN_FILTRESI);
+
+  return { AND: filters };
 }
 
 function buildProductSearchWhere(search: string): Prisma.ProductWhereInput {
@@ -5006,6 +5020,7 @@ app.get<{ Params: { id: string } }>(
       where: {
         AND: [
           { id: { not: source.id } },
+          AKTIF_URUN_FILTRESI,
           { OR: orFilters },
           // Yalnizca stokta olan onerilir — amac "yok" dememek
           {
@@ -5332,26 +5347,161 @@ app.delete<{ Params: { id: string } }>('/api/products/:id', async (request, repl
     });
   }
 
-  const invoiceItemCount = await prisma.invoiceItem.count({
-    where: { productId: id },
+  /*
+   * ÇÖP KUTUSUNA ATAR — kaydı silmez.
+   *
+   * Ürün kaydı silinirse geçmiş faturalar ürün adını kaybeder ve
+   * okunamaz hale gelir (fatura kalemi ürüne işaret ediyor, adı kendi
+   * içinde saklamıyor). Bu yüzden ürün gizlenir: hiçbir listede
+   * görünmez ama faturalarda ve raporlarda aynen durur.
+   *
+   * Hiç faturada geçmemiş ürün, çöp kutusundan KALICI silinebilir
+   * (/api/products/:id/kalici-sil).
+   */
+  await prisma.product.update({
+    where: { id },
+    data: { deletedAt: new Date() },
   });
-
-  if (invoiceItemCount > 0) {
-    return reply.status(409).send({
-      success: false,
-      message: `Bu ürün ${invoiceItemCount} fatura kaleminde kullanılmış; silinemez. Adını veya fiyatını düzenleyebilirsiniz.`,
-      errors: null,
-    });
-  }
-
-  await prisma.product.delete({ where: { id } });
 
   return {
     success: true,
     data: existing,
-    message: 'Ürün silindi.',
+    message: 'Ürün çöp kutusuna taşındı. Geçmiş faturalarda görünmeye devam eder.',
   };
 });
+
+/** Çöp kutusundaki ürünler */
+app.get('/api/products/cop-kutusu', async () => {
+  const urunler = await prisma.product.findMany({
+    where: { deletedAt: { not: null } },
+    orderBy: { deletedAt: 'desc' },
+    select: {
+      id: true,
+      sku: true,
+      name: true,
+      brand: true,
+      model: true,
+      costPrice: true,
+      priceUsd: true,
+      deletedAt: true,
+      category: { select: { name: true } },
+      _count: { select: { invoiceItems: true } },
+    },
+  });
+
+  return {
+    success: true,
+    data: urunler.map((urun) => {
+      const { _count, ...kalan } = urun;
+      return {
+        ...kalan,
+        faturaKalemSayisi: _count.invoiceItems,
+        /*
+         * Faturada geçen ürün kalıcı silinemez: silinirse o faturalar
+         * ürün adını kaybeder. Arayüz bu bilgiyle düğmeyi kapatır.
+         */
+        kaliciSilinebilir: _count.invoiceItems === 0,
+      };
+    }),
+    message: 'Çöp kutusu listelendi.',
+  };
+});
+
+/** Çöp kutusundan geri al */
+app.post<{ Params: { id: string } }>(
+  '/api/products/:id/geri-al',
+  async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return reply.status(400).send({
+        success: false,
+        message: 'Geçersiz ürün id.',
+        errors: null,
+      });
+    }
+
+    const existing = await prisma.product.findUnique({ where: { id } });
+    if (!existing) {
+      return reply.status(404).send({
+        success: false,
+        message: 'Ürün bulunamadı.',
+        errors: null,
+      });
+    }
+
+    await prisma.product.update({ where: { id }, data: { deletedAt: null } });
+
+    return {
+      success: true,
+      data: existing,
+      message: 'Ürün geri alındı.',
+    };
+  }
+);
+
+/**
+ * KALICI SILME — geri dönüşü yok.
+ *
+ * Yalnızca hiç faturada geçmemiş ürünler silinebilir. Faturası olan
+ * ürün silinirse o faturaların kalemleri sahipsiz kalır; fatura toplamı
+ * ile kalemleri tutmaz ve müşteriye kesilen belge okunamaz hale gelir.
+ * Bu yüzden kısıt kullanıcı onayıyla bile gevşetilmiyor.
+ */
+app.delete<{ Params: { id: string } }>(
+  '/api/products/:id/kalici-sil',
+  async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return reply.status(400).send({
+        success: false,
+        message: 'Geçersiz ürün id.',
+        errors: null,
+      });
+    }
+
+    const existing = await prisma.product.findUnique({
+      where: { id },
+      select: { id: true, sku: true, name: true, deletedAt: true },
+    });
+
+    if (!existing) {
+      return reply.status(404).send({
+        success: false,
+        message: 'Ürün bulunamadı.',
+        errors: null,
+      });
+    }
+
+    if (!existing.deletedAt) {
+      return reply.status(409).send({
+        success: false,
+        message: 'Ürün önce çöp kutusuna taşınmalı.',
+        errors: null,
+      });
+    }
+
+    const invoiceItemCount = await prisma.invoiceItem.count({
+      where: { productId: id },
+    });
+
+    if (invoiceItemCount > 0) {
+      return reply.status(409).send({
+        success: false,
+        message: `Bu ürün ${invoiceItemCount} fatura kaleminde kullanılmış; kalıcı silinemez. Çöp kutusunda kalacak ve hiçbir listede görünmeyecek.`,
+        errors: null,
+      });
+    }
+
+    // Stok kayıtları ve FIFO katmanları şema gereği birlikte gider
+    await prisma.product.delete({ where: { id } });
+
+    return {
+      success: true,
+      data: existing,
+      message: 'Ürün kalıcı olarak silindi.',
+    };
+  }
+);
 
 app.post<{
   Body: {
@@ -5888,7 +6038,7 @@ app.get('/api/settings/brand-models', async () => {
 
 app.get('/api/settings/color-suggestions', async () => {
   const rows = await prisma.product.findMany({
-    where: { color: { not: null } },
+    where: { color: { not: null }, ...AKTIF_URUN_FILTRESI },
     select: { color: true },
     distinct: ['color'],
     take: 300,
@@ -5947,7 +6097,7 @@ app.get<{ Querystring: { categoryId?: string; brand?: string; strict?: string } 
       productWhere.categoryId = categoryId;
     }
     const products = await prisma.product.findMany({
-      where: productWhere,
+      where: { ...productWhere, ...AKTIF_URUN_FILTRESI },
       select: { model: true, brand: true },
     });
     for (const product of products) {
@@ -6806,6 +6956,7 @@ app.get(
 
     const kayitlar = await prisma.product.findMany({
       where: {
+        ...AKTIF_URUN_FILTRESI,
         categoryId: { not: null },
         OR: [{ priceUsd: { gt: 0 } }, { priceUsd2: { gt: 0 } }],
       },

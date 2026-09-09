@@ -22,6 +22,7 @@ export type PageId =
   | 'sales-return'
   | 'invoice-purchase'
   | 'stock-list'
+  | 'deleted-products'
   | 'stock-transfer'
   | 'stock-movements'
   | 'product-create'
@@ -106,6 +107,7 @@ export const menuCategories: MenuCategory[] = [
     icon: Layers,
     items: [
       { id: 'stock-list', label: 'Stok Listesi' },
+      { id: 'deleted-products', label: 'Silinen Ürünler' },
       { id: 'stock-transfer', label: 'Depo Transfer' },
       { id: 'stock-movements', label: 'Stok Hareketleri' },
       { id: 'product-create', label: 'Stok Kartı Oluştur' },
@@ -230,6 +232,7 @@ const VALID_PAGES = new Set<PageId>([
   'sales-return',
   'invoice-purchase',
   'stock-list',
+  'deleted-products',
   'stock-transfer',
   'stock-movements',
   'product-create',
@@ -313,6 +316,7 @@ export function getPageLabel(page: PageId): string {
   if (page === 'customer-detail') return 'Müşteri Kartı';
   if (page === 'pre-orders') return 'Ön Siparişler';
   if (page === 'deleted-invoices') return 'Silinen İşlemler';
+  if (page === 'deleted-products') return 'Silinen Ürünler';
   for (const category of menuCategories) {
     const item = category.items.find((entry) => entry.id === page);
     if (item) return item.label;

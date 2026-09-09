@@ -21,6 +21,7 @@ import Dashboard from './pages/Dashboard';
 import SalesCreate from './pages/SalesCreate';
 import Invoices from './pages/Invoices';
 import DeletedInvoices from './pages/DeletedInvoices';
+import DeletedProducts from './pages/DeletedProducts';
 import StockList from './pages/StockList';
 import BarcodePrint from './pages/BarcodePrint';
 import CustomerList from './pages/CustomerList';
@@ -413,6 +414,13 @@ function App() {
       case 'deleted-invoices':
         return (
           <DeletedInvoices
+            onNotify={showNotification}
+            onDataChange={handleDataChange}
+          />
+        );
+      case 'deleted-products':
+        return (
+          <DeletedProducts
             onNotify={showNotification}
             onDataChange={handleDataChange}
           />

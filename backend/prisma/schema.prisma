@@ -100,8 +100,21 @@ model Product {
   stocks         ProductStock[]
   lots           StockLot[]
   invoiceItems   InvoiceItem[]
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+
+  /// ÇÖP KUTUSU — dolu ise ürün hiçbir listede görünmez.
+  ///
+  /// Kayıt SİLİNMEZ çünkü geçmiş faturalar ürüne işaret eder; silinirse
+  /// o faturalar ürün adını kaybeder ve okunamaz hale gelir. Gizlenen
+  /// ürün faturalarda ve raporlarda aynen görünmeye devam eder.
+  ///
+  /// Hiç faturada geçmemiş bir ürün çöp kutusundan KALICI silinebilir
+  /// (yanlış açılmış kart, mükerrer kayıt); faturası olan silinemez.
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([deletedAt])
 }
 
 model ProductStock {

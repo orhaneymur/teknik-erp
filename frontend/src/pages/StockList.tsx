@@ -399,14 +399,16 @@ export default function StockList({
   const handleDelete = async (product: Product, e: React.MouseEvent) => {
     e.stopPropagation();
     const ok = window.confirm(
-      `"${product.name}" (${product.sku}) ürününü silmek istiyor musunuz?\n\nFaturada kullanılmış ürünler silinemez.`
+      `"${product.name}" (${product.sku}) çöp kutusuna taşınacak.
+
+Ürün hiçbir listede görünmez ama geçmiş faturalarda ve raporlarda durmaya devam eder. Silinen Ürünler ekranından geri alabilirsiniz.`
     );
     if (!ok) return;
 
     setDeletingId(product.id);
     try {
       await axios.delete(`${API_BASE}/api/products/${product.id}`);
-      notify('success', 'Ürün silindi.');
+      notify('success', 'Ürün çöp kutusuna taşındı.');
       if (editing?.id === product.id) setEditing(null);
       await loadProducts(search, page);
     } catch (error) {
@@ -450,7 +452,7 @@ export default function StockList({
             importTimeoutMs={600_000}
             onImported={() => loadProducts(search, page)}
             onNotify={notify}
-            hint="Excel yalnızca EKLER ve GÜNCELLER — Excel'de olmayan ürünler silinmez. Eşleşme Id sütununa göre yapılır. Bakiye = stok adedi (üzerine yazar). En sağdaki Gelen Adet sütununa yazarsanız mevcut stoğa EKLENİR. Ürün silmek için satırdaki çöp kutusu simgesini kullanın."
+            hint="Excel yalnızca EKLER ve GÜNCELLER — Excel'de olmayan ürünler silinmez. Eşleşme Id sütununa göre yapılır. Bakiye = stok adedi (üzerine yazar). En sağdaki Gelen Adet sütununa yazarsanız mevcut stoğa EKLENİR. Ürün silmek için satırdaki çöp kutusu simgesini kullanın — ürün çöp kutusuna taşınır, geçmiş faturaları etkilenmez."
           />
         </div>
       </div>

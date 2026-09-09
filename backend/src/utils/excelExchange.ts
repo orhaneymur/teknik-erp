@@ -549,9 +549,13 @@ export async function exportProductsExcel(
   prisma: PrismaClient,
   where: Prisma.ProductWhereInput = {}
 ): Promise<Buffer> {
+  // Cop kutusundaki urunler dosyaya girmez; girseydi geri yuklemede
+  // sessizce canlanirlardi.
+  const aktifWhere: Prisma.ProductWhereInput = { AND: [where, { deletedAt: null }] };
+
   const [products, purchaseQtyRows, salesQtyRows] = await Promise.all([
     prisma.product.findMany({
-      where,
+      where: aktifWhere,
       orderBy: { name: 'asc' },
       include: {
         category: { select: { name: true } },
@@ -985,15 +989,32 @@ export async function importProductsExcel(
      */
     await katmanlariStogaEsitle(tx, product.id, merkezId, merkezStok, item.costPrice);
 
+    /*
+     * Cin iade deposunda YALNIZCA gercekten iade edilmis mal durur.
+     *
+     * Onceden sutun varsa 0 bile olsa kayit aciliyordu; binlerce bos
+     * satir birikiyor, depo listesi okunmaz hale geliyor ve her sorgu
+     * bu satirlari da tariyordu. Artik 0 (veya eksi) yazilan urunun
+     * kaydi ve katmani siliniyor.
+     */
     if (item.hasCinIadeColumn) {
-      await upsertStock(tx, product.id, cinIadeId, item.cinIadeQty);
-      await katmanlariStogaEsitle(
-        tx,
-        product.id,
-        cinIadeId,
-        item.cinIadeQty,
-        item.costPrice
-      );
+      if (item.cinIadeQty > 0) {
+        await upsertStock(tx, product.id, cinIadeId, item.cinIadeQty);
+        await katmanlariStogaEsitle(
+          tx,
+          product.id,
+          cinIadeId,
+          item.cinIadeQty,
+          item.costPrice
+        );
+      } else {
+        await tx.stockLot.deleteMany({
+          where: { productId: product.id, branchId: cinIadeId },
+        });
+        await tx.productStock.deleteMany({
+          where: { productId: product.id, branchId: cinIadeId },
+        });
+      }
     }
 
     return existingId ? 'updated' : 'created';
