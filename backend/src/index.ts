@@ -6915,8 +6915,9 @@ app.get<{ Querystring: { customerId?: string } }>(
  * Bu yuzden sorgunun NE SECTIGI guvenlik sinirinin ta kendisidir.
  * Asagidaki select bilerek dardir:
  *
- *   VERILEN : marka, kategori, model, kalite, gorunum, renk, stok kodu,
- *             Satis 1 (toptan), Satis 2 (perakende) ve stok VAR/YOK
+ *   VERILEN : urun ADI, marka, kategori, model, kalite, gorunum, renk,
+ *             stok kodu, muadil model listesi, Satis 1 (toptan),
+ *             Satis 2 (perakende) ve stok VAR/YOK
  *   VERILMEYEN : costPrice (alis), rbmPrice (RMB), stok ADEDI,
  *             tedarikci, musteri, fatura, aciklama, muadil bilgisi
  *
@@ -6934,6 +6935,12 @@ app.get<{ Querystring: { customerId?: string } }>(
  * demektir; listeye hic girmez.
  */
 interface FiyatListesiUrunu {
+  /**
+   * Urun adi — musteri karari 9 Eylul 2026: satirlar kalite kirilimi
+   * yerine stok adiyla gosterilecek ("APPLE IPHONE 11 LCD CITASIZ
+   * BLACK"). Musterinin musterisi icin daha anlasilir bulundu.
+   */
+  ad: string;
   marka: string;
   kategori: string;
   model: string;
@@ -6941,6 +6948,11 @@ interface FiyatListesiUrunu {
   gorunum: string;
   renk: string;
   kod: string;
+  /**
+   * Muadil model adlari, virgulle ayrilmis. Ayni parca birden fazla
+   * modele uydugunda musterinin musterisi bunu listede gorsun.
+   */
+  uyumlu: string;
   toptan: number | null;
   perakende: number | null;
   stokVar: boolean;
@@ -6987,11 +6999,13 @@ app.get(
       },
       select: {
         sku: true,
+        name: true,
         brand: true,
         model: true,
         quality: true,
         appearance: true,
         color: true,
+        compatibleWith: true,
         priceUsd: true,
         priceUsd2: true,
         category: { select: { name: true } },
@@ -7017,6 +7031,7 @@ app.get(
       if (!marka || !model || !kategori) continue;
 
       urunler.push({
+        ad: kayit.name.trim(),
         marka,
         kategori,
         model,
@@ -7024,6 +7039,7 @@ app.get(
         gorunum: appearanceLabel(kayit.appearance),
         renk: kayit.color?.trim() ?? '',
         kod: kayit.sku,
+        uyumlu: normalizeCompatibleList(kayit.compatibleWith) ?? '',
         toptan: kayit.priceUsd > 0 ? kayit.priceUsd : null,
         perakende: kayit.priceUsd2 > 0 ? kayit.priceUsd2 : null,
         stokVar: kayit.stocks.reduce((toplam, s) => toplam + s.quantity, 0) > 0,
