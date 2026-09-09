@@ -1429,6 +1429,8 @@ function buildProductListWhere(query: {
   model?: string;
   color?: string;
   appearance?: string;
+  /** 'MERKEZ' | 'CIN_IADE' — yalnizca o depoda STOGU OLANLAR */
+  depot?: string;
 }): Prisma.ProductWhereInput {
   const filters: Prisma.ProductWhereInput[] = [];
 
@@ -1443,6 +1445,26 @@ function buildProductListWhere(query: {
   if (query.color?.trim()) filters.push({ color: query.color.trim() });
   if (query.appearance?.trim()) {
     filters.push({ appearance: query.appearance.trim() });
+  }
+
+  /*
+   * Depo suzgeci: secilen depoda GERCEKTEN stogu olan urunler.
+   *
+   * "Cin Iade Deposu" secildiginde Cin'e gonderilecek mallarin tamami tek
+   * listede cikar — eskiden bunu gormek icin urun urun bakmak
+   * gerekiyordu. quantity > 0 sarti onemli: sifir kayitlar listeyi
+   * doldurmasin.
+   */
+  const depotKey = query.depot?.trim().toUpperCase();
+  if (depotKey === 'MERKEZ' || depotKey === 'CIN_IADE') {
+    filters.push({
+      stocks: {
+        some: {
+          quantity: { gt: 0 },
+          branch: { name: { in: DEPOT_LOOKUP[depotKey] } },
+        },
+      },
+    });
   }
 
   // Cop kutusundakiler hicbir listede gorunmez
@@ -4776,11 +4798,12 @@ app.get<{
     model?: string;
     color?: string;
     appearance?: string;
+    depot?: string;
   };
 }>(
   '/api/products',
   async (request) => {
-    const { search, page, limit, take, skip, categoryId, brand, model, color, appearance } =
+    const { search, page, limit, take, skip, categoryId, brand, model, color, appearance, depot } =
       request.query;
     const pagination = parseListPageQuery({ page, limit, take, skip });
 
@@ -4791,6 +4814,7 @@ app.get<{
       model,
       color,
       appearance,
+      depot,
     });
 
     const [products, totalCount] = await Promise.all([
@@ -4833,6 +4857,7 @@ app.get<{
     model?: string;
     color?: string;
     appearance?: string;
+    depot?: string;
   };
 }>('/api/products/export/excel', async (request, reply) => {
   // Ekrandaki filtrenin aynısı uygulanır; filtre yoksa tüm liste iner.

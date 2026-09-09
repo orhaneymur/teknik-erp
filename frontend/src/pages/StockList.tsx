@@ -71,6 +71,8 @@ export default function StockList({
     model: '',
     color: '',
     appearance: '',
+    /** '' | 'MERKEZ' | 'CIN_IADE' — yalnizca o depoda stogu olanlar */
+    depot: '',
   });
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -118,6 +120,7 @@ export default function StockList({
     if (filters.model) params.model = filters.model;
     if (filters.color) params.color = filters.color;
     if (filters.appearance) params.appearance = filters.appearance;
+    if (filters.depot) params.depot = filters.depot;
     return params;
   }, [search, filters]);
 
@@ -143,6 +146,7 @@ export default function StockList({
         if (activeFilters.model) params.model = activeFilters.model;
         if (activeFilters.color) params.color = activeFilters.color;
         if (activeFilters.appearance) params.appearance = activeFilters.appearance;
+        if (activeFilters.depot) params.depot = activeFilters.depot;
 
         const response = await axios.get<PaginatedListResponse<Product>>(
           `${API_BASE}/api/products`,
@@ -310,10 +314,18 @@ export default function StockList({
     (filters.brand ? 1 : 0) +
     (filters.model ? 1 : 0) +
     (filters.color ? 1 : 0) +
-    (filters.appearance ? 1 : 0);
+    (filters.appearance ? 1 : 0) +
+    (filters.depot ? 1 : 0);
 
   const clearFilters = () =>
-    setFilters({ categoryId: '', brand: '', model: '', color: '', appearance: '' });
+    setFilters({
+      categoryId: '',
+      brand: '',
+      model: '',
+      color: '',
+      appearance: '',
+      depot: '',
+    });
 
   const openEdit = (product: Product, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -601,6 +613,21 @@ export default function StockList({
                     {item.label}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600">Depo</label>
+              <select
+                value={filters.depot}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, depot: e.target.value }))
+                }
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
+                title="Seçilen depoda stoğu olan ürünler listelenir"
+              >
+                <option value="">Tümü</option>
+                <option value="MERKEZ">{depotLabel('MERKEZ_DEPO')}</option>
+                <option value="CIN_IADE">{depotLabel('CIN_IADE_DEPO')}</option>
               </select>
             </div>
           </div>
