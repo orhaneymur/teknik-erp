@@ -70,7 +70,6 @@ export default function StockList({
     brand: '',
     model: '',
     color: '',
-    appearance: '',
     /** '' | 'MERKEZ' | 'CIN_IADE' — yalnizca o depoda stogu olanlar */
     depot: '',
   });
@@ -119,7 +118,6 @@ export default function StockList({
     if (filters.brand) params.brand = filters.brand;
     if (filters.model) params.model = filters.model;
     if (filters.color) params.color = filters.color;
-    if (filters.appearance) params.appearance = filters.appearance;
     if (filters.depot) params.depot = filters.depot;
     return params;
   }, [search, filters]);
@@ -145,7 +143,6 @@ export default function StockList({
         if (activeFilters.brand) params.brand = activeFilters.brand;
         if (activeFilters.model) params.model = activeFilters.model;
         if (activeFilters.color) params.color = activeFilters.color;
-        if (activeFilters.appearance) params.appearance = activeFilters.appearance;
         if (activeFilters.depot) params.depot = activeFilters.depot;
 
         const response = await axios.get<PaginatedListResponse<Product>>(
@@ -314,18 +311,10 @@ export default function StockList({
     (filters.brand ? 1 : 0) +
     (filters.model ? 1 : 0) +
     (filters.color ? 1 : 0) +
-    (filters.appearance ? 1 : 0) +
     (filters.depot ? 1 : 0);
 
   const clearFilters = () =>
-    setFilters({
-      categoryId: '',
-      brand: '',
-      model: '',
-      color: '',
-      appearance: '',
-      depot: '',
-    });
+    setFilters({ categoryId: '', brand: '', model: '', color: '', depot: '' });
 
   const openEdit = (product: Product, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -599,23 +588,12 @@ export default function StockList({
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-600">Görünüm</label>
-              <select
-                value={filters.appearance}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, appearance: e.target.value }))
-                }
-                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-2 text-sm"
-              >
-                <option value="">Tümü</option>
-                {APPEARANCE_OPTIONS.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
+              {/*
+                Görünüm (Çıtalı/Çıtasız) süzgeci kaldırıldı, yerine Depo geldi:
+                görünüme göre süzmek nadiren gerekiyordu, depo seçimi ise Çin
+                iadelerini tek listede görmenin tek yolu. Filtre satırı da
+                böylece tek sıra kalıyor.
+              */}
               <label className="text-xs font-medium text-slate-600">Depo</label>
               <select
                 value={filters.depot}
