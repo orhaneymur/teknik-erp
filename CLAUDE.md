@@ -43,9 +43,10 @@ npx tsx prisma/<test-dosyasi>.ts
 `mysql:8.0` kullan (8.4 bazı bayrakları reddediyor), `localhost` değil
 `127.0.0.1` yaz (localhost IPv6'ya çözülüyor).
 
-**Sunucu komutları TEK SATIR olmalı.** Kullanıcının terminali çok satırlı
-yapıştırmayı kırpıyor; bu oturumda iki kez veri kaybına yaklaşıldı. Heredoc
-kullanma, backtick kullanma. Kalıp:
+**Sunucu komutları TEK SATIR olmalı.** Bu projenin sunucusuna açılan SSH
+oturumlarında çok satırlı yapıştırma kırpılıyor; 10 Eylül 2026'da iki kez
+oldu ve ikincisinde yarım çalışan bir `DELETE` bloğu veri kaybına yaklaştı.
+Heredoc kullanma, backtick kullanma. Kalıp:
 
 ```bash
 kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "SELECT ..."'
@@ -54,17 +55,18 @@ kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p
 Dış tırnak tek, iç tırnak çift, tablo adlarında backtick yok
 (`Transaction` MySQL'de ayrılmış kelime değil, tırnaksız çalışır).
 
-**Tehlikeli yetenekleri koda koyma.** Kullanıcının açık tercihi: canlı veriyi
-silebilecek bir yol uygulamada bulunmasın. `provaSifirla.ts` betiğindeki
-`IZINLI_ORTAMLAR` beyaz listesine **`shenzhen` asla eklenmez**. Canlı
-sıfırlama gerekirse sunucudan elle SQL ile yapılır.
+**Tehlikeli yetenekleri koda koyma.** Proje kararı (10 Eylül 2026): canlı
+veriyi silebilecek bir yol uygulamada bulunmasın — kodda var olan yetenek er
+ya da geç kullanılır. `provaSifirla.ts` betiğindeki `IZINLI_ORTAMLAR` beyaz
+listesine **`shenzhen` asla eklenmez** ve betiğe canlı için istisna yolu
+yazılmaz. Canlı sıfırlama gerekirse sunucudan elle SQL ile yapılır.
 
 **Önce prova, sonra canlı.** `shenzhen-test` → `shenzhen`. İkisinin sürümü
 ayrışmışsa bir sonraki sürümde eşitle.
 
 **Sürüm çıkarırken hangi maddenin kimin isteğiyle geldiğini söyle.** Bir dönem
-sürümler kullanıcının dağıtabildiğinden hızlı çıktı ve "bunu ne zaman
-istedim?" sorusu geldi.
+sürümler dağıtılabildiğinden hızlı çıktı ve "bunu ne zaman istedim?" sorusu
+geldi. Kısa bir tabloyla ilet.
 
 ---
 
