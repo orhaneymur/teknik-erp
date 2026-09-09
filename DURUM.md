@@ -1,9 +1,88 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **8 Eylül 2026**
+Son güncelleme: **10 Eylül 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
+
+---
+
+## 0. TAM ŞU AN NEREDE KALDIK
+
+> **12 EYLÜL CUMARTESİ SABAHI SHENZHEN MARKET GERÇEK SATIŞA BAŞLIYOR.**
+> Bugüne kadar hep test yapıyorlardı. Bu tarihe kadar yapılan her şey
+> o sabahı hazırlamak içindir.
+
+### Yapıldı (10 Eylül)
+
+- **Canlı veritabanı SIFIRLANDI.** Sunucudan elle SQL ile:
+  ürün / fatura / kalem / stok / katman / kategori / marka-model = **0**,
+  **181 müşteri kartı korundu**, cari ve kasa bakiyeleri 0'landı,
+  3 şube (Merkez Şube + 2 depo) duruyor.
+- Sıfırlamadan önce yedek alındı:
+  `/root/shenzhen-sifirlama-oncesi-2026-09-09-2203.sql.gz` (270 KB)
+- **ERP v1.19.0** derlendi ve Docker Hub'a gönderildi.
+- Müşteri kılavuzu ve dahili işletme notları yazıldı (`docs/`).
+
+### Sıradaki adım
+
+1. **`helm list -n tenant-shenzhen` → APP VERSION v1.19.0 mu?**
+   Değilse: `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.19.0 shenzhen`
+   **Bu şart:** eski sürümle Excel yüklenirse 5.700 ürünün hepsi
+   okunmayan `SK...` kodu alır.
+2. Kullanıcı Excel'i hazırlıyor: `Id` ve `StokKodu` sütunları
+   **tamamen boş**, dosya **Kategori'ye göre sıralı**.
+   Arşiv kopyası: `eski-kodlar-2026-09-10.xlsx` (eski 7 haneli kodların
+   `StokAdi` üzerinden eşleşme tablosu).
+3. Uygulamadan Stok Listesi → Excel Yükle. Bildirimde
+   `Excel senkron: <n> yeni, 0 güncellendi, ...` yazmalı.
+4. Yükleme sonrası kontrol (tek satır):
+
+```bash
+kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "SELECT COUNT(*) urun, SUM(LENGTH(sku)=8) yeni_bicim, SUM(LENGTH(sku)<>8) bicim_disi, COUNT(*)-COUNT(DISTINCT name) mukerrer_ad, COUNT(DISTINCT LEFT(sku,3)) onek FROM Product WHERE deletedAt IS NULL"'
+```
+
+   Beklenen: `bicim_disi = 0`, `mukerrer_ad = 0`, `yeni_bicim = urun`.
+
+5. Deneme satışı kes → sil (stok geri dönüyor mu), fiyat listesi
+   sitesini aç (iki dakika sonra ürünler geliyor mu).
+
+### Neden sıfırladık — 9 Eylül mükerrer olayı
+
+9 Eylül'de canlıya, sistemden indirilmemiş bir Excel yüklendi. Dosyada
+`Id` ve `StokKodu` sütunları boştu. Eşleştirme yapılamayınca program
+**481 satırın hepsini yeni ürün olarak açtı**; 479'u zaten var olan bir
+kartla aynı addaydı. Ürün sayısı 5278 → 5759 oldu ve stok iki karta
+bölündü.
+
+Kalıcı kural: **yüklenecek Excel her zaman programdan indirilmiş
+olmalı.** Kodlar dolu geldiği sürece mükerrer imkânsız.
+
+### v1.19.0 ne getirdi
+
+Excel yüklemesi kodu boş satırlara `generateSku()` ile
+`SKMRN9SYQ1NNRN` biçiminde 14-16 karakterlik kod atıyordu: okunmuyor,
+telefonda söylenmiyor. "Stok Kartı Oluştur" ekranı zaten kategori
+önekli 8 karakterlik biçimi üretiyordu — aynı programda iki kod biçimi
+dolaşıyordu.
+
+Artık üçü de aynı biçimi üretir: **kategori öneki + 5 hane.**
+
+```
+EKRAN & LCD → EKR00001    BATARYA        → BAT00001
+KASA & KAPAK → KAS00001   DOKUNMATİK&CAM → DOK00001
+TAMİR GEREÇLERİ → TAM00001  ELEKTRONİK   → ELE00001
+ENTEGRE & ÇİP → ENT00001  AKSESUAR       → AKS00001
+YEDEK PARÇA → YED00001    (kategorisiz)  → GEN00001
+```
+
+Sıra numarası her satırda veritabanına sorulmaz (yeni kayıtlar henüz
+yok, hepsi aynı numarayı alırdı); sayaçlar bir kez tohumlanır
+(veritabanındaki kodlar + dosyadaki dolu kodlar) ve bellekte artar.
+Kullanıcının elle yazdığı `EKR00007` ile çakışmaz.
+`renumberSkus` çalıştırmaya artık gerek yok.
+
+Doğrulama: `backend/prisma/excel-kod-test.ts` (yerel MySQL kabıyla).
 
 ---
 
@@ -11,10 +90,10 @@ oturuma başlarken önce buraya bak.
 
 | Adres | Ortam | Sürüm | Ne için |
 |---|---|---|---|
-| `teknik.shenzhenmarket.com.tr` | **CANLI MÜŞTERİ** | **v1.15.0** | Shenzhen Market — gerçek kullanım |
-| `liste.shenzhenmarket.com.tr` | **CANLI** | fiyat v1.3.0 | Müşterinin kendi müşterilerine gönderdiği açık fiyat listesi |
-| `test.shenzhenmarket.com.tr` | Prova | v1.15.0 | Güncellemeler önce burada denenir |
-| `shenzhen-test-liste.derneklab.com` | Prova | fiyat v1.3.0 | Fiyat listesi provası |
+| `teknik.shenzhenmarket.com.tr` | **CANLI MÜŞTERİ** | **v1.19.0** (kurulum teyit edilmeli) | Shenzhen Market — 12 Eylül'de gerçek kullanım başlıyor |
+| `liste.shenzhenmarket.com.tr` | **CANLI** | fiyat **v1.5.0** | Müşterinin kendi müşterilerine gönderdiği açık fiyat listesi |
+| `test.shenzhenmarket.com.tr` | Prova | v1.19.0 | Güncellemeler önce burada denenir |
+| `shenzhen-test-liste.derneklab.com` | Prova | fiyat **v1.4.0** — canlının GERİSİNDE | Fiyat listesi provası |
 | `demo-erp.derneklab.com` | Vitrin | v1.9.2 | Müşteriye ürün gösterme |
 
 Namespace'ler ayrı: ayrı veritabanı, ayrı disk, ayrı şifre. ERP ve fiyat
@@ -109,8 +188,27 @@ firma adı ileride değişirse etiket kaymasın diye sabitlendi.
 
 ### Öncelikli
 
-- [ ] **`renumberSkus --uygula`** — canlı geçişte atlandı, hâlâ
-      yapılmadı. Çalıştırınca çıktıyı SAKLA.
+- [x] ~~`renumberSkus --uygula`~~ — **GEREKSİZ KALDI.** v1.19.0 ile Excel
+      yüklemesi zaten okunur kod üretiyor; `SK...` biçimli kod artık
+      hiç oluşmuyor. Betik duruyor ama çalıştırılacak bir şey yok.
+- [ ] **Yedekleri sunucu dışına çıkar** — kalan tek gerçek veri riski.
+      Gecelik yedek çalışıyor ama canlıyla AYNI diskte duruyor.
+      Çözüm: yedek CronJob'unun sonuna `rclone` ile uzak hedef
+      (Backblaze B2 en ucuzu, ayda birkaç dolar).
+- [ ] **Rol bazlı yetki YOK** — `User.role` alanı var, JWT'ye yazılıyor
+      ama kodda tek bir rol kontrolü yok. Giriş yapan her personel
+      fatura silebiliyor, maliyet ve kâr raporunu görebiliyor, toplu
+      fiyat değiştirebiliyor. En az iki rol gerekli: `admin` / `satis`.
+- [ ] **Düz metin şifre karşılaştırması** — login'de bcrypt tutmazsa
+      `stored === password` dalına düşülüyor; eski personel şifreleri
+      veritabanında düz metin duruyor.
+- [ ] **Otomatik test yok** — `npm test` → "no test specified".
+      Para hesabı yapan bir yazılımda FIFO ve fatura düzenleme sessizce
+      yanlış rakam üretebilecek iki yer.
+- [ ] **Repoyu private yap** — 5 dakikalık iş, `akgun_canli_data.sql`
+      eski commit'lerde duruyor (181 müşterinin adı, adresi, telefonu,
+      vergi no'su herkese açık). Private olunca
+      `docs/isletme-notlari.html` de commit edilebilir hale gelir.
 - [ ] **Sunucu 8 Eylül'de ~2 saat düştü** — sebebi bilinmiyor. Ping ve
       tüm portlar kapalıydı, k3s değil makine seviyesindeydi; kendi
       kendine geri geldi. `uptime`, `df -h`, `dmesg` bakılmadı.
@@ -307,7 +405,19 @@ v1.1.0  açık tema denemesi — MÜŞTERİ BEĞENMEDİ
 v1.2.0  koyu temaya dönüş, rafine edildi; ikonlar büyütüldü
 v1.2.1  arama bozuktu (await unutulmuş), düzeltildi
 v1.3.0  stokta olmayanın fiyatı gizli, model listesinden fiyat kalktı
+v1.4.0  satırlar stok adıyla, muadil modeller listede  (provaya kaldı)
+v1.5.0  sağ altta WhatsApp düğmesi, uyumlu modeller tıklanabilir
 ```
+
+**WhatsApp numarası ConfigMap'ten gelir** (`tenant.whatsapp`), koda
+gömülü değildir. Shenzhen için `+90 530 889 34 00` verildi.
+
+**Fiyat listesinde görünmeyen ürünler (10 Eylül tespiti):** uç,
+kategorisi/markası/modeli boş olan ve iki satış fiyatı da 0 olan
+ürünleri eler. Sıfırlama öncesi 5.759 aktif üründen 127'si eleniyordu:
+123'ü modele bağlı olmayan tamir gereci ve sarf malzemesi
+(**karar: görünmesinler**), 13'ü Excel'de kategorisi boş kalmış veri
+hatası.
 
 ### Öğrenilenler
 
