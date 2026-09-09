@@ -32,7 +32,7 @@ import {
   getIstanbulYear,
   roundMoney,
 } from './utils/datetime.js';
-import { nextSkuForCategory, resolveSku } from './utils/sku.js';
+import { nextSkuForCategory } from './utils/sku.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const APP_VERSION = process.env.APP_VERSION ?? 'dev';
@@ -5208,12 +5208,37 @@ app.put<{
     });
   }
 
+  /*
+   * Kod bos birakilirsa kayit kodsuz kalmasin — otomatik kod atanir.
+   *
+   * Uretim "Stok Karti Olustur" ekraniyla AYNI bicimi kullanir
+   * (kategori oneki + 5 hane, "EKR00001"). Eskiden resolveSku()
+   * cagriliyordu ve okunmayan SK + zaman damgasi kodu uretiyordu;
+   * ayni programda iki farkli kod bicimi dolasiyordu.
+   */
+  let cozulmusSku: string | undefined;
+  if (sku !== undefined) {
+    const girilen = sku.trim();
+    if (girilen) {
+      cozulmusSku = girilen;
+    } else {
+      const hedefKategoriId =
+        categoryId !== undefined ? categoryId : existing.categoryId;
+      const kategori = hedefKategoriId
+        ? await prisma.category.findUnique({
+            where: { id: hedefKategoriId },
+            select: { name: true },
+          })
+        : null;
+      cozulmusSku = await nextSkuForCategory(prisma, kategori?.name ?? null);
+    }
+  }
+
   try {
     const product = await prisma.product.update({
       where: { id },
       data: {
-        // Kod boş bırakılırsa kayıt kodsuz kalmasın — otomatik kod atanır
-        ...(sku !== undefined ? { sku: resolveSku(sku) } : {}),
+        ...(cozulmusSku !== undefined ? { sku: cozulmusSku } : {}),
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(barcode !== undefined
           ? { barcode: barcode?.trim() || null }

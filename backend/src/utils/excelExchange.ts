@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { normalizeCompatibleList } from './compatibility.js';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { generateSku } from './sku.js';
+import { buildSku, categoryPrefix, maxSequenceForPrefix } from './sku.js';
 
 export type ImportResult = {
   created: number;
@@ -811,6 +811,46 @@ export async function importProductsExcel(
   let autoSkuAssigned = 0;
 
   /*
+   * OTOMATIK KOD URETIMI — kategori oneki + 5 hane ("EKR00001").
+   *
+   * Eskiden generateSku() kullaniliyordu: SK + zaman damgasi + rastgele
+   * (SKMRN9SYQ1NNRN, 14-16 karakter). Cakisma olmasin diye boyle
+   * yazilmisti ama okunmuyor, telefonda soylenmiyor, kagida yazilmiyor.
+   * "Stok Karti Olustur" ekrani zaten yeni bicimi uretiyordu; yalnizca
+   * Excel yuklemesi geride kalmisti. Artik ikisi ayni bicimi uretir ve
+   * yukleme sonrasi renumberSkus calistirmak gerekmez.
+   *
+   * Sira numarasi HER SATIRDA VERITABANINA SORULMAZ: yeni kayitlar
+   * henuz olusmadigi icin sorgu hep ayni numarayi dondurur ve butun
+   * satirlar ayni kodu alip tekillik kisitina carpardi. Bunun yerine
+   * sayaclar BIR KEZ tohumlanir, bellekte artar.
+   *
+   * Tohum iki kaynaktan gelir:
+   *   1. Veritabanindaki mevcut kodlar
+   *   2. DOSYADAKI dolu kodlar — kullanici elle "EKR00003" yazmis olabilir
+   *
+   * Boylece uretilen kod her zaman bilinen en buyugun ustundedir.
+   *
+   * Not: iki farkli kategori ayni oneke dusebilir ("Ekran" ve "Ekipman"
+   * ikisi de EKR). Sayac onek basina tutuldugu icin kodlar yine tekildir;
+   * yalnizca ayni seriyi paylasirlar.
+   */
+  const bilinenSkular = [
+    ...(await prisma.product.findMany({ select: { sku: true } })).map((p) => p.sku),
+    ...parsedRows.map((row) => row.sku).filter(Boolean),
+  ];
+  const skuSayaclari = new Map<string, number>();
+
+  const sonrakiOtomatikKod = (kategoriAdi: string | null): string => {
+    const onek = categoryPrefix(kategoriAdi);
+    const mevcut =
+      skuSayaclari.get(onek) ?? maxSequenceForPrefix(bilinenSkular, onek);
+    const sonraki = mevcut + 1;
+    skuSayaclari.set(onek, sonraki);
+    return buildSku(onek, sonraki);
+  };
+
+  /*
    * EŞLEŞTİRME SIRASI — Excel'deki `Id` sütunu BİRİNCİL anahtardır.
    *
    *   1. Id sütunu doluysa ve o kayıt varsa  -> o ürün güncellenir
@@ -852,7 +892,7 @@ export async function importProductsExcel(
         row.sku = dbSku;
       } else {
         // Kaydın kodu boşmuş — şimdi doldurulur
-        row.sku = generateSku();
+        row.sku = sonrakiOtomatikKod(row.categoryName);
         row.autoSku = true;
         autoSkuAssigned += 1;
       }
@@ -861,7 +901,7 @@ export async function importProductsExcel(
 
     // Id tutmadı: StokKodu ile eşleşecek. Kod da boşsa yeni kod üretilir.
     if (!row.sku) {
-      row.sku = generateSku();
+      row.sku = sonrakiOtomatikKod(row.categoryName);
       row.autoSku = true;
       autoSkuAssigned += 1;
     }
