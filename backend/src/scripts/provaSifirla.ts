@@ -108,11 +108,10 @@ async function main() {
   if (!stokSifirla && !urunleriSil) {
     console.log(`  ${stokSayisi} üründe mevcut stok miktarı`);
   }
-  console.log(
-    urunleriSil
-      ? '  müşteriler, kategoriler, marka/modeller, kasalar'
-      : '  ürün kartları, müşteriler, kategoriler, kasalar'
-  );
+  const korunanlar = ['müşteriler', 'kasalar', 'depolar', 'kullanıcılar'];
+  if (!urunleriSil) korunanlar.unshift('ürün kartları');
+  if (!tanimlariSil) korunanlar.splice(1, 0, 'kategoriler', 'marka/modeller');
+  console.log('  ' + korunanlar.join(', '));
   console.log('');
 
   if (!uygula) {
