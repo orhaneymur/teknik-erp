@@ -203,9 +203,35 @@ GECTI  20 -> 50 guncellemesi dogru islendi      (bakiye=10)
 > Çıkan ürünlerin satış fiyatı elle düzeltilmeli — doğru fiyat yalnızca
 > müşterinin Excel'inde var, sistem onu geri getiremez.
 
+**Boş tabloda Excel indirince başlık gelmiyordu (v1.21.3).**
+
+Sıfırlama sonrası "Excel İndir" tamamen boş bir dosya veriyordu — tek bir
+sütun başlığı bile yok, şablon olarak kullanılamıyordu. Sebep:
+`json_to_sheet` başlıkları **satırlardan** türetiyor, satır yoksa başlık da
+yok. Artık başlıklar sabit listelerden `header` seçeneğiyle veriliyor; bu
+aynı zamanda sütun **sırasını** da nesne anahtar sırasına değil listeye
+bağlıyor. Dört çıktının dördü de düzeltildi: Stoklar, Müşteriler,
+Faturalar, Kalemler.
+
+Doğrulama: `backend/prisma/excel-baslik-test.ts` — boş tabloda 19 sütun
+başlığı iniyor, dolu tabloda çıktı **birebir aynı** kalıyor (başlıklar,
+sıra ve değerler tek tek karşılaştırıldı). Mevcut `excel-kod-test.ts` de
+yeniden koşuldu, Excel modülü uçtan uca çalışıyor.
+
+Stok listesinin sütunları:
+
+```
+Id · StokKodu · StokAdi · Kategori · Marka · Model · Gorunum · Kalite
+Renk · Aciklama · Rmb · AlisFiyati · Satis1 · Satis2 · AlisAdedi
+SatisAdedi · Bakiye · Uyumlu · GelenAdet
+```
+
+Zorunlu tek sütun `StokAdi`. `Satis1` toptan, `Satis2` perakende,
+`Bakiye` merkez depo stoğu, `GelenAdet` mevcut stoğa **eklenir**.
+
 ### Sıradaki adım
 
-> **v1.21.2 fiş, Harem kuru ve 7 hata düzeltmesini taşır.** Müşteri kararıyla
+> **v1.21.3 fiş, Harem kuru, 7 hata düzeltmesi ve Excel başlıklarını taşır.** Müşteri kararıyla
 > (11 Eylül) kur Cumartesi'ye bırakılmadı; v1.20.0 ve v1.21.0 provaya hiç
 > kurulmadan v1.21.1'e geçildi; A4 çıktısı da aynı düzene alındı.
 > İki değişiklik birden devreye giriyor: yeni fiş düzeni ve para hesabına
@@ -214,7 +240,7 @@ GECTI  20 -> 50 guncellemesi dogru islendi      (bakiye=10)
 1. **Excel'deki 5 mükerrer adı incele** — renk/kalite farklıysa bırak,
    birebir aynıysa stoksuz olanı sil (uygulamadan, kalıcı sil).
 2. **Provaya kur:**
-   `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.21.2 shenzhen-test`
+   `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.21.3 shenzhen-test`
    Bu adım provada `prisma migrate deploy` çalıştırır, şema orada değişir
    (`Invoice.tryRate`, `Transaction.tryRate`).
 3. **Kur geldi mi:** `/api/exchange-rates` çıktısında

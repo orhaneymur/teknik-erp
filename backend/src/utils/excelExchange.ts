@@ -95,6 +95,82 @@ type CustomerExcelRow = {
   Bakiye?: string | number;
 };
 
+/*
+ * DISA AKTARMA SUTUN BASLIKLARI.
+ *
+ * Neden ayri sabit: json_to_sheet basliklari SATIRLARDAN turetir. Tablo
+ * bosken turetecek satir olmadigi icin dosya TAMAMEN BOS iniyordu —
+ * tek bir sutun basligi bile yoktu ve kullanici onu sablon olarak
+ * kullanamiyordu (11 Eylul 2026, sifirlama sonrasi fark edildi).
+ *
+ * Listeler `header` secenegi olarak verilir; boylece:
+ *   · tablo bosken bile baslik satiri iner,
+ *   · sutun SIRASI nesne anahtar sirasina degil, bu listeye baglidir.
+ *
+ * SIRA VE YAZIM BIREBIR KORUNMALI: ice aktarma bu adlari ariyor
+ * (bkz. cell() cagrilari) ve kullanicilarin elinde bu duzende dosyalar var.
+ */
+const MUSTERI_BASLIKLARI = [
+  'CariKodu',
+  'CariAdi',
+  'YetkiliAdi',
+  'Adres',
+  'Ilce',
+  'Il',
+  'Email',
+  'Gsm',
+  'VergiDairesi',
+  'VergiTcNo',
+  'KrediLimiti',
+  'Bakiye',
+] as const;
+
+const STOK_BASLIKLARI = [
+  'Id',
+  'StokKodu',
+  'StokAdi',
+  'Kategori',
+  'Marka',
+  'Model',
+  'Gorunum',
+  'Kalite',
+  'Renk',
+  'Aciklama',
+  'Rmb',
+  'AlisFiyati',
+  'Satis1',
+  'Satis2',
+  'AlisAdedi',
+  'SatisAdedi',
+  'Bakiye',
+  'Uyumlu',
+  'GelenAdet',
+] as const;
+
+const FATURA_BASLIKLARI = [
+  'FaturaNo',
+  'Tip',
+  'CariKodu',
+  'CariAdi',
+  'Tarih',
+  'Odeme',
+  'TutarTL',
+  'TutarUSD',
+  'Personel',
+  'Aciklama',
+  'Teslimat',
+  'KaynakFatura',
+] as const;
+
+const KALEM_BASLIKLARI = [
+  'FaturaNo',
+  'StokKodu',
+  'UrunAdi',
+  'Miktar',
+  'BirimFiyat',
+  'Toplam',
+] as const;
+
 export async function exportCustomersExcel(prisma: PrismaClient): Promise<Buffer> {
   const customers = await prisma.customer.findMany({ orderBy: { code: 'asc' } });
   const rows = customers.map((c) => ({
@@ -113,7 +189,11 @@ export async function exportCustomersExcel(prisma: PrismaClient): Promise<Buffer
   }));
 
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Musteriler');
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(rows, { header: [...MUSTERI_BASLIKLARI] }),
+    'Musteriler'
+  );
   return toBuffer(workbook);
 }
 
@@ -631,7 +711,11 @@ export async function exportProductsExcel(
   });
 
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'Stoklar');
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(rows, { header: [...STOK_BASLIKLARI] }),
+    'Stoklar'
+  );
   return toBuffer(workbook);
 }
 
@@ -1211,12 +1295,12 @@ export async function exportInvoicesExcel(
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(
     workbook,
-    XLSX.utils.json_to_sheet(summaryRows),
+    XLSX.utils.json_to_sheet(summaryRows, { header: [...FATURA_BASLIKLARI] }),
     'Faturalar'
   );
   XLSX.utils.book_append_sheet(
     workbook,
-    XLSX.utils.json_to_sheet(lineRows),
+    XLSX.utils.json_to_sheet(lineRows, { header: [...KALEM_BASLIKLARI] }),
     'Kalemler'
   );
   return toBuffer(workbook);
