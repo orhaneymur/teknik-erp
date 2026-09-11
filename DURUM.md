@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **10 Eylül 2026**
+Son güncelleme: **11 Eylül 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -13,6 +13,104 @@ oturuma başlarken önce buraya bak.
 > Bugüne kadar hep test yapıyorlardı. Bu tarihe kadar yapılan her şey
 > o sabahı hazırlamak içindir.
 
+### Yapıldı (11 Eylül)
+
+**Ürünler yüklendi — ama mükerrer olayı ikinci kez yaşandı.**
+
+Müşteri iki Excel gönderdi: önce stokları sıfır olan bir liste, sonra ürün
+eklenmiş ve stok girilmiş güncel listesi. İkinci dosya sisteme yüklenirken
+`Id` ve `StokKodu` sütunları silindi — dosya müşteriden geldiği için
+içindeki kodlar eski sistemin kodlarıydı, bırakılsa da eşleşmeyecekti.
+
+Program eşleşmeyen satırı yeni ürün sayar (`excelExchange.ts:869`, eşleşme
+yalnızca `Id` sonra `StokKodu` ile; **ad üzerinden eşleştirme yok**) ve
+Excel yüklemesi asla silmez (`excelExchange.ts:1119`, v1.11.0 kararı).
+Sonuç: 5248 + 5387 = **10635 ürün**, 4880 mükerrer ad.
+
+Çözüm — fatura/stok hareketi henüz olmadığı için sunucudan elle SQL ile
+tüm ürünler, kategoriler ve marka/modeller silindi, güncel Excel **boş
+tabloya bir kez** yüklendi. Sonuç doğrulandı:
+
+```
+urun 5387 · yeni_bicim 5387 · bicim_disi 0 · mukerrer_ad 5
+MERKEZ_DEPO · 235 urun · 10923 adet
+```
+
+Kalan 5 mükerrer ad sistemden değil, **Excel dosyasının kendi içinde**
+aynı adla iki kez yazılmış satırlardan geliyor. Renk/kalite farklıysa
+dokunulmayacak, birebir aynıysa stoksuz olan silinecek.
+
+> **Kural (ikinci kez yazılıyor):** dolu tabloya, sistemden indirilmemiş
+> Excel yüklenmez. Müşteri yeni liste gönderdiğinde doğru yol: sistemden
+> Excel'i indir, değişiklikleri onun üstüne işle, `Id` ve `StokKodu` dolu
+> hâlde geri yükle. Boş tabloya yüklerken sütunların boş olması doğrudur —
+> o tek seferliktir.
+
+**Fiş yeniden tasarlandı (v1.20.0 — HENÜZ ÇIKMADI).**
+
+Müşteri isteği: puntolar büyüsün, müşteri adresi çıkmasın, üstte logo
+alanı olsun, açıklama yazılmışsa görünsün, net toplam ve iki bakiyede TL
+karşılığı yazsın, en altta firma adı dursun, satış yapan kalsın.
+
+- Ölçü **68mm sabit** (`index.css`) — yazıcı ayarı buna bağlı, değişmedi
+- Beş fişin (satış, alış, iade, tahsilat, ekstre) ortak çerçevesi tek
+  bileşende toplandı: `frontend/src/components/ReceiptSlip.tsx`.
+  Bu arada iade fişindeki çift müşteri bloğu da düzeldi — biri A4'e ait
+  `pdf-party` sınıflarını kullanıyordu.
+- Logo `tenant.logoUrl` ile gelir (ConfigMap). **Dosya henüz gelmedi**,
+  şimdilik kesik çizgili `LOGO` yer tutucusu basılıyor; dosya gelince
+  ConfigMap güncellenir, kod değişmez, sürüm çıkmaz.
+
+**TL karşılığı — `exchangeRate` alanına YAZILMADI, ayrı alan açıldı.**
+
+Tuzak şu: `totalAmountTl` adına rağmen **USD tutar taşır** ve cari bakiye
+bu alandan işler (`index.ts:3338`). `exchangeRate` ise
+`totalAmountUsd = totalAmountTl / exchangeRate` dönüşümünü tanımlar ve her
+zaman 1'dir. Oraya gerçek kur yazılsaydı USD tutarlar kur katı kadar
+küçülür, kâr ve ciro raporları sessizce bozulurdu.
+
+Bunun yerine `Invoice.tryRate` ve `Transaction.tryRate` eklendi —
+yalnızca fişte TL yazmak için, hesaba hiç girmiyor. Migration:
+`20260911120000_invoice_transaction_try_rate` (iki `ALTER TABLE ... NULL`).
+
+Kur fatura kaydedilirken yazılır, böylece fiş aylar sonra yeniden
+basıldığında da kesildiği günün rakamını gösterir. Ekstre farklı: orada
+basılan üç rakam da bugüne ait toplam olduğu için **anlık kur** kullanılır.
+
+**Kur çekimi satışı bekletmiyor.** İlk hâlde TCMB yanıt vermezse 15 sn,
+ardından ECB 10 sn bekleniyordu — satış 25 saniye asılı kalabilirdi.
+`receiptTryRate()` artık en fazla **1,5 saniye** bekler; istek arka planda
+sürüp önbelleği ısıtır, süre dolarsa son bilinen kur kullanılır, o da
+yoksa fişe TL satırı basılmaz.
+
+Yerelde doğrulandı — `backend/prisma/fis-kur-test.ts`, temiz veritabanı,
+gerçek satış ve tahsilat:
+
+```
+GECTI  kur cekimi satisi bekletmedi        (261 ms)
+GECTI  tryRate yazildi                     (tryRate=48.4941)
+GECTI  exchangeRate 1 kaldi                (exchangeRate=1)
+GECTI  cari bakiye USD kadar arti          (bakiye=90 — kur bulassaydi ~4364)
+GECTI  bakiye 90 - 30 = 60                 (bakiye=60)
+```
+
+Kur kaynaklarının ikisi de erişilemez hâle getirilip tekrar denendi:
+satış **1.611 ms**'de bitti, `tryRate` null kaldı, **tutar ve bakiye
+etkilenmedi**.
+
+### Sıradaki adım
+
+1. **Excel'deki 5 mükerrer adı incele** — renk/kalite farklıysa bırak,
+   birebir aynıysa stoksuz olanı sil (uygulamadan, kalıcı sil).
+2. **v1.20.0 imajlarını çıkar:** `bash k8s/build-images.sh v1.20.0`
+3. **Provaya kur:** `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.20.0 shenzhen-test`
+   Bu adım provada `prisma migrate deploy` çalıştırır, şema orada değişir.
+4. **Provada fiş bas** — punto okunuyor mu, TL satırı doğru mu, kağıt boyu
+   makul mü. Ölçü bozulduysa canlıya GEÇME.
+5. Sorun yoksa aynı komut `shenzhen` ile.
+6. Deneme satışı kes → sil (stok geri dönüyor mu), fiyat listesi sitesini
+   aç (iki dakika sonra ürünler geliyor mu).
+
 ### Yapıldı (10 Eylül)
 
 - **Canlı veritabanı SIFIRLANDI.** Sunucudan elle SQL ile:
@@ -24,7 +122,7 @@ oturuma başlarken önce buraya bak.
 - **ERP v1.19.0** derlendi ve Docker Hub'a gönderildi.
 - Müşteri kılavuzu ve dahili işletme notları yazıldı (`docs/`).
 
-### Sıradaki adım
+### 10 Eylül'de sıradaki adım olarak yazılanlar (tamamlandı)
 
 1. **`helm list -n tenant-shenzhen` → APP VERSION v1.19.0 mu?**
    Değilse: `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.19.0 shenzhen`
@@ -191,6 +289,12 @@ firma adı ileride değişirse etiket kaymasın diye sabitlendi.
 - [x] ~~`renumberSkus --uygula`~~ — **GEREKSİZ KALDI.** v1.19.0 ile Excel
       yüklemesi zaten okunur kod üretiyor; `SK...` biçimli kod artık
       hiç oluşmuyor. Betik duruyor ama çalıştırılacak bir şey yok.
+- [ ] **Excel yüklemesine mükerrer ad uyarısı** — aynı hata 9 ve 11
+      Eylül'de iki kez oldu ve ikincisinde 5387 ürün ikinci kez açıldı.
+      Kod eşleşmeyi yalnızca `Id` ve `StokKodu` ile yapıyor; ad üzerinden
+      bakmıyor. Yükleme ÖNCESİ "dosyadaki N satırın adı mevcut ürünlerle
+      aynı, devam edilsin mi?" diye soran bir ekran bu hatayı üçüncü kez
+      yaşatmaz. Silme eklenmeyecek — yalnızca uyarı.
 - [ ] **Yedekleri sunucu dışına çıkar** — kalan tek gerçek veri riski.
       Gecelik yedek çalışıyor ama canlıyla AYNI diskte duruyor.
       Çözüm: yedek CronJob'unun sonuna `rclone` ile uzak hedef
@@ -228,7 +332,11 @@ Ayrıntı ve kalan işler: bu belgenin 8. bölümü.
 
 ### Bekleyen malzeme
 
-- [ ] **Logo** — fişe eklenecek, dosya bekleniyor
+- [ ] **Logo dosyası** — fişteki yer hazır (`tenant.logoUrl`), şu an kesik
+      çizgili `LOGO` yer tutucusu basılıyor. Dosya gelince yalnızca
+      ConfigMap güncellenir; kod değişmez, sürüm çıkmaz.
+      İstenen: saf siyah-beyaz PNG, ~512 piksel genişlik (termal kafa
+      1 bit basar, gri tonlu logo lekeli çıkar).
 - [ ] **Kategori temizliği** — 3 boş kategori silinecek: `a` (hatalı),
       `iPhone Yedek Parça`, `APPLE`. 14 ürün kategorisiz.
 - [ ] **Marka adına yapışmış tedarikçi** — `SAMSUNG-ALKINDUS` 109,
@@ -236,6 +344,15 @@ Ayrıntı ve kalan işler: bu belgenin 8. bölümü.
       `TECNO-ALKINDUS` 48 (toplam ~427 ürün). Fiyat listesinde ayrı marka
       olarak görünürler — müşteri "SAMSUNG" ve "SAMSUNG-ALKINDUS" diye iki
       kutu görür. Tek `UPDATE` ile çözülür.
+- [ ] **Kurun gömülü yedeği eskiyor** — TCMB ve ECB'ye birden
+      ulaşılamazsa `index.ts`'teki sabit `FALLBACK_USD = 46.39` devreye
+      girer. Artık bu rakam müşterinin eline geçen fişe basılıyor. Fişte
+      kur dipnot olarak yazdığı için gözden kaçmaz ama sabitin zamanla
+      kayacağı akılda tutulmalı.
+- [ ] **A4/PDF çıktısı fiş düzeniyle eşitlenmedi** — 11 Eylül'de yalnızca
+      termal fiş elden geçti (müşterinin isteği oydu). Adres kaldırma A4'e
+      de yansıdı çünkü ortak fonksiyondan geliyor, ama logo, alttaki firma
+      adı ve TL karşılığı A4'te yok. İki çıktı şu an farklı görünüyor.
 - [ ] **`YEDEK PARÇA` kovası** — 1755 ürün (%33) bu genel kategoride;
       parça tipi söylemiyor. Fiyat listesinde bu dala girince tek uzun
       liste çıkar. Bölmek işi durdurmaz, sonra yapılabilir.
