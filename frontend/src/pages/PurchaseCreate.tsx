@@ -108,7 +108,14 @@ export default function PurchaseCreate({
   onCancelEdit,
   onSaved,
 }: PurchaseCreateProps) {
-  const isEditMode = editInvoiceId != null && editInvoiceId > 0;
+  /**
+   * MUKERRER FIS KORUMASI — bkz. SalesCreate'teki ayni alan.
+   * Ilk kayittan sonra "Kaydet" AYNI faturayi gunceller; yeni alis icin
+   * "Yeni Fis" dugmesine basilir.
+   */
+  const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null);
+  const activeInvoiceId = editInvoiceId ?? savedInvoiceId;
+  const isEditMode = activeInvoiceId != null && activeInvoiceId > 0;
   const [initData, setInitData] = useState<InitData>({
     branches: [],
     safes: [],
@@ -250,10 +257,10 @@ export default function PurchaseCreate({
   });
 
   const handleTrashInvoice = useCallback(async () => {
-    if (!editInvoiceId || !displayInvoiceNo) return;
-    const ok = await trashInvoice(editInvoiceId, displayInvoiceNo);
+    if (!activeInvoiceId || !displayInvoiceNo) return;
+    const ok = await trashInvoice(activeInvoiceId, displayInvoiceNo);
     if (ok) notify('success', 'Fiş silinen işlemlere taşındı.');
-  }, [editInvoiceId, displayInvoiceNo, trashInvoice, notify]);
+  }, [activeInvoiceId, displayInvoiceNo, trashInvoice, notify]);
 
   const loadInitData = useCallback(async () => {
     try {
@@ -291,8 +298,30 @@ export default function PurchaseCreate({
     }
   }, [notify, isEditMode]);
 
+  /**
+   * YENI FIS — ekrani bosaltip yeni bir alisa gecer.
+   * Tedarikci secimi bilerek korunur; ayni tedarikciye arka arkaya fis
+   * kesmek en sik durum.
+   */
+  const yeniFis = useCallback(() => {
+    setSavedInvoiceId(null);
+    setCart([]);
+    setRemovedItemIds([]);
+    setDisplayInvoiceNo('');
+    setSavedNotice('');
+    setPrintParty(null);
+    setPrintBalance(null);
+    setPrintTryRate(null);
+    setOrderNotes('');
+    setDueDate('');
+    void loadInitData();
+  }, [loadInitData]);
+
+
   useEffect(() => {
-    if (!isEditMode || !editInvoiceId) return;
+    // Yalnizca listeden duzenlemeye gelindiginde. Bu ekranda kaydedilen
+    // fatura icin yeniden yukleme yapilmaz; kalem id'leri yanittan eslenir.
+    if (!editInvoiceId || editInvoiceId <= 0) return;
 
     let cancelled = false;
     const loadInvoice = async () => {
@@ -373,7 +402,7 @@ export default function PurchaseCreate({
     return () => {
       cancelled = true;
     };
-  }, [editInvoiceId, isEditMode, notify, onCancelEdit]);
+  }, [editInvoiceId, notify, onCancelEdit]);
 
   useEffect(() => {
     loadInitData();
@@ -505,8 +534,8 @@ export default function PurchaseCreate({
 
     setSubmitting(true);
     try {
-      if (isEditMode && editInvoiceId) {
-        await axios.put(`${API_BASE}/api/sales/invoices/${editInvoiceId}`, {
+      if (isEditMode && activeInvoiceId) {
+        await axios.put(`${API_BASE}/api/sales/invoices/${activeInvoiceId}`, {
           customerId: selectedSupplier.id,
           paymentMethod,
           paymentType,
@@ -529,10 +558,13 @@ export default function PurchaseCreate({
           }),
         });
 
-        setSavedNotice(`Fatura kaydedildi · ${displayInvoiceNo}`);
+        setSavedNotice(`Fatura güncellendi · ${displayInvoiceNo}`);
         notify('success', `Alış faturası güncellendi: ${displayInvoiceNo}`);
+        setRemovedItemIds([]);
         onDataChange?.();
-        onSaved?.();
+        // Listeden gelindiyse listeye don; bu ekranda kesilmis fisi
+        // guncelliyorsak EKRANDA KALINIR.
+        if (editInvoiceId) onSaved?.();
         return;
       }
 
@@ -560,6 +592,34 @@ export default function PurchaseCreate({
             ? response.data.data.invoiceNo
             : '';
         if (savedInvoiceNo) setDisplayInvoiceNo(savedInvoiceNo);
+
+        /*
+         * MUKERRER FIS KORUMASI — kalem id'leri yanittan eslenir, boylece
+         * ikinci kayit ayni faturayi gunceller ve kalemleri ikiye katlamaz.
+         */
+        const olusanId = response.data.data?.id;
+        if (typeof olusanId === 'number' && olusanId > 0) {
+          setSavedInvoiceId(olusanId);
+        }
+        const olusanKalemler = response.data.data?.items as
+          | Array<{ id: number; productId: number }>
+          | undefined;
+        if (Array.isArray(olusanKalemler) && olusanKalemler.length > 0) {
+          const havuz = new Map<number, number[]>();
+          for (const kalem of olusanKalemler) {
+            const liste = havuz.get(kalem.productId) ?? [];
+            liste.push(kalem.id);
+            havuz.set(kalem.productId, liste);
+          }
+          setCart((onceki) =>
+            onceki.map((satir) => {
+              const liste = havuz.get(satir.product.id);
+              const kalemId = liste && liste.length > 0 ? liste.shift() : undefined;
+              return kalemId ? { ...satir, sourceInvoiceItemId: kalemId } : satir;
+            })
+          );
+        }
+
         setPrintParty(selectedSupplier);
         setPrintTryRate(
           typeof response.data.data?.tryRate === 'number'
@@ -766,7 +826,17 @@ export default function PurchaseCreate({
       </ReceiptSlip>
 
       <div className="mb-2 flex items-center gap-3 print:hidden">
-        {isEditMode && onCancelEdit && (
+        {savedInvoiceId != null && (
+          <button
+            type="button"
+            onClick={yeniFis}
+            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+            title="Sepeti boşalt ve yeni bir fiş aç"
+          >
+            + Yeni Fiş
+          </button>
+        )}
+        {editInvoiceId != null && onCancelEdit && (
           <button
             type="button"
             onClick={onCancelEdit}
@@ -784,7 +854,9 @@ export default function PurchaseCreate({
             {isEditMode ? 'Alış Faturası Düzenle' : 'Hızlı Alış Yap'}
           </h1>
           <p className="page-subtitle">
-            {isEditMode
+            {savedInvoiceId != null
+              ? `${displayInvoiceNo} kaydedildi · tekrar Kaydet aynı fişi günceller · yeni alış için "Yeni Fiş"`
+              : isEditMode
               ? `${displayInvoiceNo} · kalemler ve üst bilgi güncellenir`
               : 'Esnaf fatura tezgâhı · F2 stok ara · Fiyatlar $ (USD) · MERKEZ_DEPO stok artışı'}
           </p>

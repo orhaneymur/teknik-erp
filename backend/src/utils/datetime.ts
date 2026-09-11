@@ -1,6 +1,40 @@
 const ISTANBUL_TZ = 'Europe/Istanbul';
 
 /** Fatura kayıt zamanı: seçilen tarih + İstanbul'daki şu anki saat */
+/**
+ * Fatura DUZENLENIRKEN kullanilan tarih birlestirme.
+ *
+ * Sorun: buildInvoiceCreatedAt tarihi disaridan, SAATI O ANDAN alir. Eski
+ * bir fatura duzenlendiginde saati "simdi" oluyor ve fatura, ekstrede o
+ * gunun kayitlari arasinda en uste firliyordu. Musteri "eski bir fiste
+ * guncelleme yaparsam sabit yerinde kalsin" dedi.
+ *
+ * Cozum: tarih GERCEKTEN degismediyse kayit hic ellenmez. Degistiyse yeni
+ * tarih, faturanin KENDI saatiyle birlestirilir — gun icindeki sirasi
+ * korunur.
+ */
+export function mergeInvoiceDate(mevcut: Date, yeniTarih: string): Date {
+  const temiz = yeniTarih.trim();
+  if (!temiz) return mevcut;
+
+  const mevcutTarih = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ISTANBUL_TZ,
+  }).format(mevcut);
+  if (mevcutTarih === temiz) return mevcut;
+
+  const saatParcalari = new Intl.DateTimeFormat('en-GB', {
+    timeZone: ISTANBUL_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(mevcut);
+  const al = (tip: string) =>
+    saatParcalari.find((p) => p.type === tip)?.value.padStart(2, '0') ?? '00';
+
+  return new Date(`${temiz}T${al('hour')}:${al('minute')}:${al('second')}+03:00`);
+}
+
 export function buildInvoiceCreatedAt(invoiceDate?: string): Date {
   const datePart =
     invoiceDate?.trim() ||

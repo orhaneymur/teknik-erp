@@ -161,7 +161,21 @@ export default function SalesCreate({
   onSaved,
   onF2ContextActive,
 }: SalesCreateProps) {
-  const isEditMode = editInvoiceId != null && editInvoiceId > 0;
+  /**
+   * MUKERRER FIS KORUMASI (11 Eylul 2026).
+   *
+   * Eskiden "Kaydet"e ikinci kez basmak IKINCI BIR FATURA aciyordu; ayni
+   * satis iki kez kaydediliyor, stok iki kez dusuyordu. Artik ilk kayittan
+   * sonra olusan faturanin id'si burada tutulur ve sonraki her kayit AYNI
+   * faturayi gunceller. Yeni bir fis icin "Yeni Fis" dugmesine basilir.
+   *
+   * `editInvoiceId` listeden duzenlemeye gelindiginde dolu gelir;
+   * `savedInvoiceId` bu ekranda kaydedilince dolar. Ikisi ayni ise de
+   * davranis aynidir.
+   */
+  const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null);
+  const activeInvoiceId = editInvoiceId ?? savedInvoiceId;
+  const isEditMode = activeInvoiceId != null && activeInvoiceId > 0;
 
   const onCancelEditRef = useRef(onCancelEdit);
   const onF2ContextActiveRef = useRef(onF2ContextActive);
@@ -349,10 +363,10 @@ export default function SalesCreate({
   });
 
   const handleTrashInvoice = useCallback(async () => {
-    if (!editInvoiceId || !displayInvoiceNo) return;
-    const ok = await trashInvoice(editInvoiceId, displayInvoiceNo);
+    if (!activeInvoiceId || !displayInvoiceNo) return;
+    const ok = await trashInvoice(activeInvoiceId, displayInvoiceNo);
     if (ok) notify('success', 'Fiş silinen işlemlere taşındı.');
-  }, [editInvoiceId, displayInvoiceNo, trashInvoice, notify]);
+  }, [activeInvoiceId, displayInvoiceNo, trashInvoice, notify]);
 
   const loadInitData = useCallback(async () => {
     try {
@@ -390,6 +404,30 @@ export default function SalesCreate({
     }
   }, [notify, isEditMode]);
 
+  /**
+   * YENI FIS — ekrani bosaltip yeni bir faturaya gecer.
+   *
+   * Kayittan sonra ekran ayni faturayi duzenlemeye devam ettigi icin
+   * (mukerrer fis korumasi) yeni satisa gecmek ARTIK ACIK BIR EYLEMDIR.
+   * Musteri secimi bilerek korunur: ayni musteriye arka arkaya fis kesmek
+   * en sik durum. Baska musteriye gecis zaten arama kutusundan yapilir.
+   */
+  const yeniFis = useCallback(() => {
+    setSavedInvoiceId(null);
+    setCart([]);
+    setRemovedItemIds([]);
+    setDisplayInvoiceNo('');
+    setSavedNotice('');
+    setPrintParty(null);
+    setPrintBalance(null);
+    setPrintTryRate(null);
+    setOrderNotes('');
+    setIsPreOrder(false);
+    setDueDate('');
+    void loadInitData();
+  }, [loadInitData]);
+
+
   useEffect(() => {
     loadInitData();
   }, [loadInitData]);
@@ -406,7 +444,10 @@ export default function SalesCreate({
   notifyRef.current = notify;
 
   useEffect(() => {
-    if (!isEditMode || !editInvoiceId) return;
+    // Yalnizca listeden duzenlemeye gelindiginde calisir. Bu ekranda
+    // kaydedilen fatura icin yeniden yukleme YAPILMAZ: kalem id'leri
+    // kayit yanitindan eslenir (asagida), sepet ve fis yerinde kalir.
+    if (!editInvoiceId || editInvoiceId <= 0) return;
 
     let cancelled = false;
     const loadInvoice = async () => {
@@ -519,7 +560,7 @@ export default function SalesCreate({
     return () => {
       cancelled = true;
     };
-  }, [editInvoiceId, isEditMode]);
+  }, [editInvoiceId]);
 
   useEffect(() => {
     if (lastAddedRowId.current) {
@@ -709,10 +750,10 @@ export default function SalesCreate({
   };
 
   const handleFulfill = async () => {
-    if (!editInvoiceId || !isPreOrder) return;
+    if (!activeInvoiceId || !isPreOrder) return;
     setFulfilling(true);
     try {
-      await axios.post(`${API_BASE}/api/sales/invoices/${editInvoiceId}/fulfill`);
+      await axios.post(`${API_BASE}/api/sales/invoices/${activeInvoiceId}/fulfill`);
       notify('success', 'Ön sipariş tamamlandı, stok düşüldü.');
       setIsPreOrder(false);
       onDataChange?.();
@@ -781,13 +822,13 @@ export default function SalesCreate({
 
     setSubmitting(true);
     try {
-      if (isEditMode && editInvoiceId) {
+      if (isEditMode && activeInvoiceId) {
         if (cart.length === 0) {
           notify('error', 'Sepette en az bir ürün olmalı.');
           return;
         }
 
-        await axios.put(`${API_BASE}/api/sales/invoices/${editInvoiceId}`, {
+        await axios.put(`${API_BASE}/api/sales/invoices/${activeInvoiceId}`, {
           customerId: customer.id,
           paymentMethod: method,
           paymentType,
@@ -814,10 +855,13 @@ export default function SalesCreate({
           }),
         });
 
-        setSavedNotice(`Fatura kaydedildi · ${displayInvoiceNo}`);
+        setSavedNotice(`Fatura güncellendi · ${displayInvoiceNo}`);
         notify('success', `Fatura güncellendi: ${displayInvoiceNo}`);
+        setRemovedItemIds([]);
         onDataChange?.();
-        onSaved?.();
+        // Listeden duzenlemeye gelindiyse listeye don. Bu ekranda kesilmis
+        // fisi guncelliyorsak EKRANDA KALINIR; kullanici yine duzeltebilir.
+        if (editInvoiceId) onSaved?.();
         return;
       }
 
@@ -888,6 +932,41 @@ export default function SalesCreate({
             savedInvoiceNo ? ` · ${savedInvoiceNo}` : ''
           } · ${formatUsd(totalUsd)}`
         );
+
+        /*
+         * MUKERRER FIS KORUMASI — bundan sonra "Kaydet" ayni faturayi
+         * gunceller, yenisini acmaz.
+         *
+         * Kalem id'leri kayit yanitindan eslenir: PUT'a giderken satirin
+         * `sourceInvoiceItemId` degeri varsa backend onu MEVCUT kalem
+         * sayar, yoksa YENI kalem ekler. Eslenmezse ikinci kayitta kalemler
+         * ikiye katlanirdi.
+         *
+         * Eslesme urun bazinda havuzdan yapilir; ayni urunden birden fazla
+         * satir varsa sirayla dagitilir.
+         */
+        const olusanId = response.data.data?.id;
+        if (typeof olusanId === 'number' && olusanId > 0) {
+          setSavedInvoiceId(olusanId);
+        }
+        const olusanKalemler = response.data.data?.items as
+          | Array<{ id: number; productId: number }>
+          | undefined;
+        if (Array.isArray(olusanKalemler) && olusanKalemler.length > 0) {
+          const havuz = new Map<number, number[]>();
+          for (const kalem of olusanKalemler) {
+            const liste = havuz.get(kalem.productId) ?? [];
+            liste.push(kalem.id);
+            havuz.set(kalem.productId, liste);
+          }
+          setCart((onceki) =>
+            onceki.map((satir) => {
+              const liste = havuz.get(satir.product.id);
+              const kalemId = liste && liste.length > 0 ? liste.shift() : undefined;
+              return kalemId ? { ...satir, sourceInvoiceItemId: kalemId } : satir;
+            })
+          );
+        }
 
         setPrintParty(customer);
         setPrintTryRate(
@@ -1091,7 +1170,17 @@ export default function SalesCreate({
       </ReceiptSlip>
 
       <div className="mb-2 flex items-center gap-3 print:hidden">
-        {isEditMode && onCancelEdit && (
+        {savedInvoiceId != null && (
+          <button
+            type="button"
+            onClick={yeniFis}
+            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+            title="Sepeti boşalt ve yeni bir fiş aç"
+          >
+            + Yeni Fiş
+          </button>
+        )}
+        {editInvoiceId != null && onCancelEdit && (
           <button
             type="button"
             onClick={onCancelEdit}
@@ -1113,9 +1202,11 @@ export default function SalesCreate({
               : 'Hızlı Satış Yap'}
           </h1>
           <p className="page-subtitle">
-            {isEditMode
-              ? `${displayInvoiceNo} · müşteri ve kalemler dolu gelir · Kaydet ile güncelle`
-              : 'Esnaf fatura tezgâhı · F2 stok ara · Fiyatlar $ (USD) · F8 maliyet'}
+            {savedInvoiceId != null
+              ? `${displayInvoiceNo} kaydedildi · tekrar Kaydet aynı fişi günceller · yeni satış için "Yeni Fiş"`
+              : isEditMode
+                ? `${displayInvoiceNo} · müşteri ve kalemler dolu gelir · Kaydet ile güncelle`
+                : 'Esnaf fatura tezgâhı · F2 stok ara · Fiyatlar $ (USD) · F8 maliyet'}
           </p>
         </div>
       </div>

@@ -167,7 +167,22 @@ export default function SalesReturn({
   onCancelEdit,
   onSaved,
 }: SalesReturnProps) {
-  const isEditMode = editInvoiceId != null && editInvoiceId > 0;
+  /**
+   * MUKERRER FIS KORUMASI (11 Eylul 2026).
+   *
+   * Kayittan sonra ekran, olusan iade faturasinin DUZENLEME gorunumune
+   * gecer: ikinci kez "Kaydet" ayni faturayi gunceller, yenisini acmaz.
+   * Yeni bir iade icin "Yeni Iade" dugmesine basilir.
+   *
+   * Deger YAZDIRMADAN SONRA atanir (afterReturn icinde): ekran hemen
+   * duzenleme gorunumune gecseydi, fis yazdirilirken yeni iade fisi
+   * DOM'dan kalkar ve bos kagit cikardi. Arada gecen surede kaydet
+   * dugmesi `postSonrasiKilit` ile kapali tutulur.
+   */
+  const [savedInvoiceId, setSavedInvoiceId] = useState<number | null>(null);
+  const [postSonrasiKilit, setPostSonrasiKilit] = useState(false);
+  const activeInvoiceId = editInvoiceId ?? savedInvoiceId;
+  const isEditMode = activeInvoiceId != null && activeInvoiceId > 0;
   const [branches, setBranches] = useState<Branch[]>([]);
   const [safes, setSafes] = useState<Safe[]>([]);
   const [cart, setCart] = useState<ReturnCartLine[]>([]);
@@ -313,10 +328,10 @@ export default function SalesReturn({
   });
 
   const handleTrashInvoice = useCallback(async () => {
-    if (!editInvoiceId || !displayInvoiceNo) return;
-    const ok = await trashInvoice(editInvoiceId, displayInvoiceNo);
+    if (!activeInvoiceId || !displayInvoiceNo) return;
+    const ok = await trashInvoice(activeInvoiceId, displayInvoiceNo);
     if (ok) notify('success', 'Fiş silinen işlemlere taşındı.');
-  }, [editInvoiceId, displayInvoiceNo, trashInvoice, notify]);
+  }, [activeInvoiceId, displayInvoiceNo, trashInvoice, notify]);
 
   const closeInvoiceView = useCallback(() => {
     setViewingInvoiceId(null);
@@ -363,7 +378,7 @@ export default function SalesReturn({
   }, [notify, isEditMode]);
 
   useEffect(() => {
-    if (!isEditMode || !editInvoiceId) return;
+    if (!activeInvoiceId || activeInvoiceId <= 0) return;
 
     let cancelled = false;
     const loadInvoice = async () => {
@@ -398,7 +413,7 @@ export default function SalesReturn({
               };
             }>;
           };
-        }>(`${API_BASE}/api/sales/invoices/${editInvoiceId}`);
+        }>(`${API_BASE}/api/sales/invoices/${activeInvoiceId}`);
 
         if (!invRes.data.success || cancelled) return;
         const data = invRes.data.data;
@@ -463,7 +478,7 @@ export default function SalesReturn({
     return () => {
       cancelled = true;
     };
-  }, [editInvoiceId, isEditMode, notify, onCancelEdit]);
+  }, [activeInvoiceId, notify, onCancelEdit]);
 
   useEffect(() => {
     loadInit();
@@ -725,8 +740,21 @@ export default function SalesReturn({
     onClose: closeSearchModal,
   });
 
+  /** Ekrani bosaltip yeni bir iade fisine gecer. */
+  const yeniIade = useCallback(() => {
+    setSavedInvoiceId(null);
+    setCart([]);
+    setEditLines([]);
+    setRemovedItemIds([]);
+    setDisplayInvoiceNo('');
+    setSavedNotice(null);
+    setPrintParty(null);
+    setPrintTryRate(null);
+    setOrderNotes('');
+  }, []);
+
   const handleEditSave = async () => {
-    if (!editInvoiceId || editCustomerId === '') return;
+    if (!activeInvoiceId || editCustomerId === '') return;
     if (editLines.length === 0) {
       notify('error', 'En az bir kalem olmalı.');
       return;
@@ -734,7 +762,7 @@ export default function SalesReturn({
 
     setSubmitting(true);
     try {
-      await axios.put(`${API_BASE}/api/sales/invoices/${editInvoiceId}`, {
+      await axios.put(`${API_BASE}/api/sales/invoices/${activeInvoiceId}`, {
         customerId: Number(editCustomerId),
         processedBy: editProcessedBy || null,
         orderNotes: editNotes || undefined,
@@ -753,10 +781,13 @@ export default function SalesReturn({
           isChinaReturn: line.isChinaReturn,
         })),
       });
-      setSavedNotice(`Fatura kaydedildi · ${displayInvoiceNo}`);
+      setSavedNotice(`Fatura güncellendi · ${displayInvoiceNo}`);
       notify('success', `İade faturası güncellendi: ${displayInvoiceNo}`);
+      setRemovedItemIds([]);
       onDataChange?.();
-      onSaved?.();
+      // Listeden gelindiyse listeye don; bu ekranda kesilen fisi
+      // guncelliyorsak EKRANDA KALINIR.
+      if (editInvoiceId) onSaved?.();
     } catch (error) {
       const message =
         axios.isAxiosError(error) && error.response?.data?.message
@@ -877,6 +908,14 @@ export default function SalesReturn({
           : null
       );
 
+      /*
+       * MUKERRER FIS KORUMASI — kayit tamam, ikinci kez kaydedilemesin.
+       * Fatura id'si yazdirma bittikten sonra atanir (asagida); bu araliktki
+       * kisa surede kaydet dugmesi kilitli kalir.
+       */
+      const olusanId = response.data.data?.id;
+      setPostSonrasiKilit(true);
+
       let afterReturnDone = false;
       const afterReturn = () => {
         if (afterReturnDone) return;
@@ -884,6 +923,11 @@ export default function SalesReturn({
         setShouldPrint(false);
         setPrintParty(null);
         setPrintTryRate(null);
+        // Ekran artik bu faturanin duzenleme gorunumune gecer.
+        if (typeof olusanId === 'number' && olusanId > 0) {
+          setSavedInvoiceId(olusanId);
+        }
+        setPostSonrasiKilit(false);
         onDataChange?.();
       };
 
@@ -1075,7 +1119,17 @@ export default function SalesReturn({
         </ReceiptSlip>
 
         <div className="mb-2 flex items-center gap-3 print:hidden">
-          {onCancelEdit && (
+          {savedInvoiceId != null && (
+            <button
+              type="button"
+              onClick={yeniIade}
+              className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+              title="Yeni bir iade fişi aç"
+            >
+              + Yeni İade
+            </button>
+          )}
+          {editInvoiceId != null && onCancelEdit && (
             <button
               type="button"
               onClick={onCancelEdit}
@@ -1091,206 +1145,233 @@ export default function SalesReturn({
           <div>
             <h1 className="page-title">İade Faturası Düzenle</h1>
             <p className="text-sm text-slate-500">
-              {displayInvoiceNo} · {editCustomerLabel}
+              {savedInvoiceId != null
+                ? `${displayInvoiceNo} kaydedildi · tekrar Kaydet aynı fişi günceller · yeni iade için "Yeni İade"`
+                : `${displayInvoiceNo} · ${editCustomerLabel}`}
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 print:hidden">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Fatura Tarihi</label>
-            <input
-              type="date"
-              value={editInvoiceDate}
-              onChange={(e) => setEditInvoiceDate(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-700">İşlemi Yapan</label>
-            <input
-              type="text"
-              value={editProcessedBy}
-              onChange={(e) => setEditProcessedBy(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
+        {/*
+          IADE DUZENLEME — "Hizli Iade Al" ekraniyla AYNI TEZGAH DUZENI
+          (musteri istegi, 11 Eylul 2026).
 
-        <div className="print:hidden">
-          <label className="mb-1 block text-sm font-medium text-slate-700">Not</label>
-          <textarea
-            rows={2}
-            value={editNotes}
-            onChange={(e) => setEditNotes(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          />
-        </div>
-
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm print:hidden">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-            <p className="text-sm font-semibold text-slate-700">Fatura Kalemleri</p>
-            <button
-              type="button"
-              onClick={() => setSearchModal(true)}
-              className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
-            >
-              <Search className="h-4 w-4" />
-              Ürün Ekle (F2)
-            </button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-sm">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                    SKU
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                    Ürün
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
-                    Adet
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
-                    Birim ($)
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-slate-500">
-                    Çin İade
-                  </th>
-                  <th className="w-12 px-4 py-3" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {editLines.map((line) => (
-                  <tr key={line.rowId} className="hover:bg-slate-50/60">
-                    <td className="px-4 py-3 font-mono font-semibold">{line.productSku}</td>
-                    <td className="px-4 py-3">
-                      {line.productName}
-                      {line.invoiceItemId == null && (
-                        <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-caption font-semibold text-emerald-700">
-                          yeni
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <NumericInput
-                        ref={setEditInputRef(line.rowId, 'quantity')}
-                        decimal={false}
-                        min={1}
-                        value={line.quantity}
-                        onValueChange={(qty) => {
-                          setSavedNotice(null);
-                          setEditLines((prev) =>
-                            prev.map((row) =>
-                              row.rowId === line.rowId
-                                ? { ...row, quantity: qty > 0 ? qty : row.quantity }
-                                : row
-                            )
-                          );
-                        }}
-                        onKeyDown={(e) => onEditFieldKeyDown(e, line.rowId, 'quantity')}
-                        className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <NumericInput
-                        ref={setEditInputRef(line.rowId, 'unitPriceTl')}
-                        min={0}
-                        value={line.unitPriceTl}
-                        onValueChange={(price) => {
-                          setSavedNotice(null);
-                          setEditLines((prev) =>
-                            prev.map((row) =>
-                              row.rowId === line.rowId
-                                ? {
-                                    ...row,
-                                    unitPriceTl: price >= 0 ? roundPrice(price) : row.unitPriceTl,
-                                  }
-                                : row
-                            )
-                          );
-                        }}
-                        onKeyDown={(e) => onEditFieldKeyDown(e, line.rowId, 'unitPriceTl')}
-                        className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
-                      />
-                    </td>
-                    {/*
-                      * Cin iade tiki: isaretli satirin stogu MERKEZ_DEPO
-                      * yerine CIN_IADE_DEPO'ya isler. Duzenlemede tik
-                      * degistirilirse sunucu miktari iki depo arasinda
-                      * tasir.
-                      */}
-                    <td className="px-4 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={line.isChinaReturn}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setSavedNotice(null);
-                          setEditLines((prev) =>
-                            prev.map((row) =>
-                              row.rowId === line.rowId
-                                ? { ...row, isChinaReturn: checked }
-                                : row
-                            )
-                          );
-                        }}
-                        title={
-                          line.isChinaReturn
-                            ? depotLabel('CIN_IADE_DEPO')
-                            : depotLabel('MERKEZ_DEPO')
-                        }
-                        className="h-4 w-4 rounded border-slate-300 text-orange-600"
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => removeEditLine(line.rowId)}
-                        className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {editLines.length === 0 && (
+          Onceden tek sutunlu, digerlerine benzemeyen bir duzendi: satis ve
+          alis faturalari duzenlenirken kendi "yap" ekranlarinda aciliyor,
+          yalniz iade farkli gorunuyordu. Alanlar ve isleyiciler aynen
+          korundu; yalnizca yerlesim iki sutuna alindi — solda kalemler,
+          sagda fatura bilgileri ve toplam.
+        */}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 print:hidden">
+          <div className="space-y-4 xl:col-span-2">
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm print:hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+              <p className="text-sm font-semibold text-slate-700">Fatura Kalemleri</p>
+              <button
+                type="button"
+                onClick={() => setSearchModal(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+              >
+                <Search className="h-4 w-4" />
+                Ürün Ekle (F2)
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-100 text-sm">
+                <thead className="bg-slate-50">
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
-                      Kalem yok
-                    </td>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                      SKU
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                      Ürün
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                      Adet
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                      Birim ($)
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-slate-500">
+                      Çin İade
+                    </th>
+                    <th className="w-12 px-4 py-3" />
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {editLines.map((line) => (
+                    <tr key={line.rowId} className="hover:bg-slate-50/60">
+                      <td className="px-4 py-3 font-mono font-semibold">{line.productSku}</td>
+                      <td className="px-4 py-3">
+                        {line.productName}
+                        {line.invoiceItemId == null && (
+                          <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-caption font-semibold text-emerald-700">
+                            yeni
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <NumericInput
+                          ref={setEditInputRef(line.rowId, 'quantity')}
+                          decimal={false}
+                          min={1}
+                          value={line.quantity}
+                          onValueChange={(qty) => {
+                            setSavedNotice(null);
+                            setEditLines((prev) =>
+                              prev.map((row) =>
+                                row.rowId === line.rowId
+                                  ? { ...row, quantity: qty > 0 ? qty : row.quantity }
+                                  : row
+                              )
+                            );
+                          }}
+                          onKeyDown={(e) => onEditFieldKeyDown(e, line.rowId, 'quantity')}
+                          className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <NumericInput
+                          ref={setEditInputRef(line.rowId, 'unitPriceTl')}
+                          min={0}
+                          value={line.unitPriceTl}
+                          onValueChange={(price) => {
+                            setSavedNotice(null);
+                            setEditLines((prev) =>
+                              prev.map((row) =>
+                                row.rowId === line.rowId
+                                  ? {
+                                      ...row,
+                                      unitPriceTl: price >= 0 ? roundPrice(price) : row.unitPriceTl,
+                                    }
+                                  : row
+                              )
+                            );
+                          }}
+                          onKeyDown={(e) => onEditFieldKeyDown(e, line.rowId, 'unitPriceTl')}
+                          className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
+                        />
+                      </td>
+                      {/*
+                        * Cin iade tiki: isaretli satirin stogu MERKEZ_DEPO
+                        * yerine CIN_IADE_DEPO'ya isler. Duzenlemede tik
+                        * degistirilirse sunucu miktari iki depo arasinda
+                        * tasir.
+                        */}
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={line.isChinaReturn}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setSavedNotice(null);
+                            setEditLines((prev) =>
+                              prev.map((row) =>
+                                row.rowId === line.rowId
+                                  ? { ...row, isChinaReturn: checked }
+                                  : row
+                              )
+                            );
+                          }}
+                          title={
+                            line.isChinaReturn
+                              ? depotLabel('CIN_IADE_DEPO')
+                              : depotLabel('MERKEZ_DEPO')
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-orange-600"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => removeEditLine(line.rowId)}
+                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {editLines.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
+                        Kalem yok
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
           </div>
-        </section>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-          <p className="text-sm font-semibold text-slate-700">
-            Toplam: {formatUsd(editTotalTl)}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handlePrint}
-              disabled={editLines.length === 0}
-              className="btn inline-flex items-center gap-2 border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
-            >
-              <Printer className="h-5 w-5" />
-              Fiş Yazdır
-            </button>
-            <button
-              type="button"
-              onClick={handleEditSave}
-              disabled={submitting}
-              className="btn btn-lg btn-primary inline-flex items-center gap-2"
-            >
-              <Save className="h-5 w-5" />
-              {submitting ? 'Kaydediliyor...' : 'DEĞİŞİKLİKLERİ KAYDET'}
-            </button>
+          <aside className="h-fit space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm xl:sticky xl:top-0">
+            <h2 className="font-semibold text-slate-800">Fatura Bilgileri</h2>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Müşteri</label>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                {editCustomerLabel || '—'}
+              </div>
+            </div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Fatura Tarihi</label>
+              <input
+                type="date"
+                value={editInvoiceDate}
+                onChange={(e) => setEditInvoiceDate(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="">
+              <label className="mb-1 block text-sm font-medium text-slate-700">İşlemi Yapan</label>
+              <input
+                type="text"
+                value={editProcessedBy}
+                onChange={(e) => setEditProcessedBy(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
           </div>
+
+          <div className="print:hidden">
+            <label className="mb-1 block text-sm font-medium text-slate-700">Not</label>
+            <textarea
+              rows={2}
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="space-y-3 border-t border-slate-100 pt-3">
+            <p className="text-sm font-semibold text-slate-700">
+              Toplam: {formatUsd(editTotalTl)}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePrint}
+                disabled={editLines.length === 0}
+                className="btn inline-flex items-center gap-2 border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
+              >
+                <Printer className="h-5 w-5" />
+                Fiş Yazdır
+              </button>
+              <button
+                type="button"
+                onClick={handleEditSave}
+                disabled={submitting}
+                className="btn btn-lg btn-primary inline-flex items-center gap-2"
+              >
+                <Save className="h-5 w-5" />
+                {submitting ? 'Kaydediliyor...' : 'DEĞİŞİKLİKLERİ KAYDET'}
+              </button>
+            </div>
+          </div>
+          </aside>
         </div>
 
         <InvoiceTrashButton
@@ -1807,9 +1888,19 @@ export default function SalesReturn({
                               {formatUsd(line.costUsd)}
                             </td>
                           )}
+                          {/*
+                            BIRIM FIYAT HER ZAMAN DUZENLENEBILIR
+                            (musteri istegi, 11 Eylul 2026).
+
+                            Onceden yalnizca `manualOverride` satirlarda
+                            acikti; eski satistan eslesen satirin fiyati
+                            kilitliydi. Oysa mal alindigi fiyattan iade
+                            edilmeyebilir — fiyat artmis veya dusmus
+                            olabilir. Varsayilan yine son satis fiyatidir,
+                            kullanici degistirebilir.
+                          */}
                           <td className="px-4 py-3 text-right text-sm">
-                            {line.manualOverride ? (
-                              <NumericInput
+                            <NumericInput
                                 ref={setCartInputRef(line.rowId, 'unitPriceUsd')}
                                 min={0}
                                 emptyWhenZero
@@ -1833,11 +1924,8 @@ export default function SalesReturn({
                                   onCartFieldKeyDown(e, line.rowId, 'unitPriceUsd')
                                 }
                                 className="w-20 rounded-md border border-violet-200 px-2 py-1 text-right text-sm"
-                                title="Birim fiyat USD"
-                              />
-                            ) : (
-                              formatUsd(unitUsd)
-                            )}
+                              title="Birim fiyat USD — iade fiyatı değiştirilebilir"
+                            />
                           </td>
                           <td className="px-4 py-3 text-right text-sm font-semibold">
                             {formatUsd(lineTotalUsd)}
@@ -1925,11 +2013,15 @@ export default function SalesReturn({
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || activeLines.length === 0}
+            disabled={submitting || postSonrasiKilit || activeLines.length === 0}
             className="btn btn-lg btn-primary btn-block uppercase tracking-wide print:hidden"
           >
             <Save className="h-5 w-5" />
-            {submitting ? 'Kaydediliyor...' : 'KAYDET'}
+            {submitting
+              ? 'Kaydediliyor...'
+              : postSonrasiKilit
+                ? 'Kaydedildi...'
+                : 'KAYDET'}
           </button>
         </aside>
       </div>

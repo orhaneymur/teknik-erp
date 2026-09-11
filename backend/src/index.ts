@@ -29,6 +29,7 @@ import {
 import { foldSearchText } from './utils/textSearch.js';
 import {
   buildInvoiceCreatedAt,
+  mergeInvoiceDate,
   formatTimestampInvoiceNo,
   getIstanbulYear,
   roundMoney,
@@ -2998,15 +2999,12 @@ app.put<{
             },
           });
 
-          if (existing.type === 'ALIS' && patch.unitPrice !== undefined) {
-            await tx.product.update({
-              where: { id: current.productId },
-              data: {
-                costPrice: roundMoney(nextUnitPrice),
-                priceUsd: nextUnitPrice > 0 ? nextUnitPrice / nextRate : 0,
-              },
-            });
-          }
+          /*
+           * Alis faturasi duzenlenirken de urun fiyatlarina DOKUNULMAZ.
+           * Burada eskiden costPrice ve priceUsd yeni birim fiyata
+           * esitleniyordu; alis ucundakiyle ayni hataydi. Satis fiyatini
+           * yalnizca kullanici belirler, maliyeti FIFO katmani tasir.
+           */
         }
 
         for (const patch of body.items ?? []) {
@@ -3153,8 +3151,11 @@ app.put<{
             : {}),
           ...(body.invoiceDate !== undefined
             ? {
+                // Tarih degismediyse kayit ellenmez; degistiyse faturanin
+                // KENDI saati korunur. Boylece duzenleme, fisi ekstrede
+                // yerinden oynatmaz.
                 createdAt: body.invoiceDate
-                  ? buildInvoiceCreatedAt(body.invoiceDate)
+                  ? mergeInvoiceDate(existing.createdAt, body.invoiceDate)
                   : existing.createdAt,
               }
             : {}),
@@ -3457,13 +3458,18 @@ app.post<{
           sourceInvoiceItemId: kalem.id,
         });
 
-        // Satis fiyati alis fiyatindan turetilmeye devam ediyor
-        await tx.product.update({
-          where: { id: kalem.productId },
-          data: {
-            priceUsd: kalem.unitPrice > 0 ? kalem.unitPrice / rate : 0,
-          },
-        });
+        /*
+         * ALIS SATIS FIYATINA DOKUNMAZ (11 Eylul 2026).
+         *
+         * Burada eskiden "priceUsd = alis fiyati" vardi ve her alis, urunun
+         * TOPTAN SATIS fiyatini maliyete esitliyordu. Musteri 12,70 dolara
+         * mal aldiginda satis fiyati da 12,70 oluyor, kar sifirlaniyordu;
+         * Excel'de girilmis 15,50 / 17,00 fiyatlari siliniyordu.
+         *
+         * Satis fiyatini yalnizca kullanici belirler: stok karti ekrani veya
+         * Excel yuklemesi. Alisin isi stok saymak ve FIFO katmani acmaktir.
+         * Maliyet de ezilmez — katman zaten yukarida acildi.
+         */
       }
 
       if (isCashLikePayment(paymentMethod)) {
@@ -4682,9 +4688,16 @@ app.post<{
           totalAmountTl,
           totalAmountUsd,
           tryRate,
-          orderNotes:
-            note?.trim() ||
-            'İnsiyatif iade — satın alma kaydı doğrulanmadı veya süre dışı',
+          /*
+           * Otomatik "insiyatif iade" metni KALDIRILDI (11 Eylul 2026).
+           *
+           * Musterinin bizde satis kaydi olmayan bir urunu iade etmesi
+           * olagan bir durum: firmalar eski sistemlerinden gecerken o
+           * donemde sattiklari mali iade aliyorlar. Bunu her faturaya
+           * aciklama olarak yazmak fisi kirletiyordu. Kullanici aciklama
+           * yazdiysa o yazilir, yazmadiysa bos kalir.
+           */
+          orderNotes: note?.trim() || null,
           items: {
             create: normalizedItems.map((item) => ({
               productId: item.productId,

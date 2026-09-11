@@ -160,9 +160,52 @@ Arıza yolları da denendi:
 Tahsilat ekranında TL/EUR seçiliyken uyarı sarı kutuda görünür — bayat
 kurla para işlemi yapıldığı gizlenmiyor.
 
+**Müşterinin bildirdiği 7 sorun düzeltildi (v1.21.2).**
+
+| # | Sorun | Ne yapıldı |
+|---|---|---|
+| 1 | Aynı fişi tekrar kaydetmek İKİNCİ FATURA açıyordu | Kayıttan sonra ekran o faturayı düzenlemeye devam eder; tekrar Kaydet aynı fişi günceller. Yeni fiş için **"Yeni Fiş"** düğmesi. Satış, alış ve iadede |
+| 2 | Alış, ürünün SATIŞ fiyatını maliyete eşitliyordu | `index.ts`'te iki yerde `priceUsd = alış fiyatı` vardı (alış ucu + fatura düzenleme). İkisi de kaldırıldı. Alış artık yalnızca stok sayar ve FIFO katmanı açar |
+| 3 | Ekstrede düzenlenen eski fiş en üste fırlıyordu | `buildInvoiceCreatedAt` tarihi dosyadan, **saati o andan** alıyordu. Yeni `mergeInvoiceDate`: tarih değişmediyse kayda hiç dokunmaz, değiştiyse faturanın kendi saatini korur |
+| 4 | İade fiyatı değiştirilemiyordu | Birim fiyat artık her satırda düzenlenebilir; varsayılan yine son satış fiyatı |
+| 5 | Faturaya "İnsiyatif iade…" yazıyordu | Otomatik metin kaldırıldı. Kullanıcı açıklama yazdıysa o yazılır. (Sebebi: iade ekranı her zaman `return-discretionary` ucunu çağırıyor — müşterinin bizde satış kaydı olmayan malı iade etmesi olağan) |
+| 6 | İade düzenleme ekranı farklı görünüyordu | "Hızlı İade Al" ile aynı iki sütunlu tezgâh düzenine alındı; alanlar ve işleyiciler aynen korundu |
+| 7 | Ödeme alınca kutular sıfırlanıyor, tekrar basınca ikinci kayıt açılıyordu | Kutular dolu kalır; tekrar basmak **aynı kaydı günceller**. Müşteri değişince kilit bırakılır (yoksa önceki müşterinin kaydı güncellenirdi). **"Yeni Ödeme"** düğmesi |
+
+**İADE BAKİYEYE DOĞRU İŞLİYOR** — testle kanıtlandı, kodda hata yoktu.
+100 $ satış → 40 $ iade (Açık/Cari) → bakiye **60 $**. Kullanıcının gördüğü
+durum muhtemelen **"Kapalı Fatura (Kasadan)"** seçimiydi: o seçenekte para
+kasadan çıkar, cariye yazılmaz — ekranda da böyle yazıyor.
+
+Doğrulama: `backend/prisma/duzeltmeler-test.ts`, 17 kontrol, hepsi gerçek uç
+üzerinden:
+
+```
+GECTI  alis TOPTAN satis fiyatini ezmedi        (priceUsd=15.5)
+GECTI  alis PERAKENDE satis fiyatini ezmedi     (priceUsd2=17)
+GECTI  FIFO katmani gercek maliyetle acildi     (unitCost=12.7)
+GECTI  IADE CARIYE ISLEDI (100 - 40 = 60)       (bakiye=60)
+GECTI  nakit iade kasadan 30 dusurdu            (10000 -> 9970)
+GECTI  duzenleme createdAt'i OYNATMADI          (aynı ISO damgası)
+GECTI  kalemler katlanmadi                      (1 -> 1)
+GECTI  ikinci bir SATIS faturasi acilmadi       (satis faturasi=1)
+GECTI  20 -> 50 guncellemesi dogru islendi      (bakiye=10)
+```
+
+> **ESKİ HASAR:** 2. maddedeki hata, düzeltmeden ÖNCE yapılmış alışlarda
+> ürünlerin satış fiyatını zaten bozmuş olabilir. Hasarlı ürünleri bulan
+> sorgu (tek satır):
+>
+> ```bash
+> kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "SELECT DISTINCT p.sku, p.name, p.priceUsd toptan, p.priceUsd2 perakende, ii.unitPrice alis FROM InvoiceItem ii JOIN Invoice i ON i.id=ii.invoiceId JOIN Product p ON p.id=ii.productId WHERE i.type="ALIS" AND i.deletedAt IS NULL AND ABS(p.priceUsd-ii.unitPrice)<0.005 ORDER BY p.name"'
+> ```
+>
+> Çıkan ürünlerin satış fiyatı elle düzeltilmeli — doğru fiyat yalnızca
+> müşterinin Excel'inde var, sistem onu geri getiremez.
+
 ### Sıradaki adım
 
-> **v1.21.1 hem fişi hem Harem kurunu taşır.** Müşteri kararıyla
+> **v1.21.2 fiş, Harem kuru ve 7 hata düzeltmesini taşır.** Müşteri kararıyla
 > (11 Eylül) kur Cumartesi'ye bırakılmadı; v1.20.0 ve v1.21.0 provaya hiç
 > kurulmadan v1.21.1'e geçildi; A4 çıktısı da aynı düzene alındı.
 > İki değişiklik birden devreye giriyor: yeni fiş düzeni ve para hesabına
@@ -171,7 +214,7 @@ kurla para işlemi yapıldığı gizlenmiyor.
 1. **Excel'deki 5 mükerrer adı incele** — renk/kalite farklıysa bırak,
    birebir aynıysa stoksuz olanı sil (uygulamadan, kalıcı sil).
 2. **Provaya kur:**
-   `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.21.1 shenzhen-test`
+   `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.21.2 shenzhen-test`
    Bu adım provada `prisma migrate deploy` çalıştırır, şema orada değişir
    (`Invoice.tryRate`, `Transaction.tryRate`).
 3. **Kur geldi mi:** `/api/exchange-rates` çıktısında

@@ -255,6 +255,18 @@ export default function CustomerPayment({
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [shouldPrint, setShouldPrint] = useState(false);
   const [printReceipt, setPrintReceipt] = useState<PaymentReceipt | null>(null);
+  /**
+   * MUKERRER ODEME KORUMASI (11 Eylul 2026).
+   *
+   * Eskiden "Odeme Al"a ikinci kez basmak IKINCI BIR TAHSILAT aciyordu ve
+   * kutular da sifirlaniyordu. Artik ilk kayittan sonra olusan hareketin
+   * id'si burada tutulur, kutular DOLU KALIR ve sonraki her basis AYNI
+   * hareketi gunceller: 1 dolar girip iki kez basmak 1 dolar birakir,
+   * rakami 2 yapip basmak ayni kaydi 2 dolara cevirir.
+   *
+   * Yeni bir tahsilat icin "Yeni Odeme" dugmesine basilir.
+   */
+  const [savedPaymentId, setSavedPaymentId] = useState<number | null>(null);
 
   const customerSearchRef = useRef<HTMLInputElement>(null);
 
@@ -343,6 +355,21 @@ export default function CustomerPayment({
   const selectCustomer = useCallback((customer: Customer) => {
     setSelectedCustomer(customer);
     setCustomerSearch(`${customer.code} — ${customer.name}`);
+    /*
+     * Baska musteriye gecilince kayitli hareket BIRAKILIR. Aksi halde yeni
+     * musteri icin "Odeme Al"a basmak, onceki musterinin kaydini gunceller
+     * ve o hareketi sessizce bu musteriye tasirdi.
+     */
+    setSavedPaymentId(null);
+  }, []);
+
+  /** Kutulari bosaltip yeni bir tahsilat/odeme kaydina gecer. */
+  const yeniOdeme = useCallback(() => {
+    setSavedPaymentId(null);
+    setAmount('');
+    setAmountCurrency('USD');
+    setDescription('');
+    setPrintReceipt(null);
   }, []);
 
   const refreshSelectedCustomer = useCallback(async (customerId: number) => {
@@ -463,6 +490,38 @@ export default function CustomerPayment({
 
     setSubmitting(true);
     try {
+      if (savedPaymentId != null) {
+        /*
+         * AYNI HAREKETI GUNCELLE. Backend once eski tutari bakiyeden ve
+         * kasadan GERI ALIR, sonra yeni tutari isler; tekrar tekrar basmak
+         * bakiyeyi katlamaz.
+         */
+        const guncelleme = await axios.put(
+          `${API_BASE}/api/customers/payment/${savedPaymentId}`,
+          {
+            amount: storedAmount,
+            type,
+            method: paymentMethod,
+            description: description.trim() || undefined,
+            safeId: Number(selectedSafe),
+            customerId: customer.id,
+          }
+        );
+        if (guncelleme.data.success) {
+          onNotify?.(
+            'success',
+            `Kayıt güncellendi: ${formatUsd(storedAmount)}`
+          );
+          await Promise.all([
+            refreshSelectedCustomer(customer.id),
+            loadSafes(),
+            loadPayments(),
+          ]);
+          onDataChange?.();
+        }
+        return;
+      }
+
       const response = await axios.post(`${API_BASE}/api/customers/payment`, {
         customerId: customer.id,
         safeId: Number(selectedSafe),
@@ -508,10 +567,17 @@ export default function CustomerPayment({
               : roundPrice(customer.balance + storedAmount),
         };
 
+        const olusanId = response.data.data?.id;
+        if (typeof olusanId === 'number' && olusanId > 0) {
+          setSavedPaymentId(olusanId);
+        }
+
+        /*
+         * KUTULAR TEMIZLENMEZ (musteri istegi, 11 Eylul). Tutar, para
+         * birimi ve aciklama yerinde kalir; kullanici rakami duzeltip
+         * tekrar basarsa ayni kayit guncellenir.
+         */
         const finishPayment = async () => {
-          setAmount('');
-          setAmountCurrency('USD');
-          setDescription('');
           setShouldPrint(false);
           await Promise.all([
             refreshSelectedCustomer(customer.id),
@@ -869,6 +935,21 @@ export default function CustomerPayment({
             <Printer className="w-4 h-4" />
             Kayıttan sonra fiş yazdır
           </label>
+
+          {savedPaymentId != null && (
+            <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              <strong>Kayıt yapıldı.</strong> Kutular dolu kaldı; rakamı
+              değiştirip tekrar basarsan <strong>aynı kayıt güncellenir</strong>,
+              yeni bir tahsilat açılmaz.
+              <button
+                type="button"
+                onClick={yeniOdeme}
+                className="ml-2 rounded-md border border-emerald-400 bg-white px-2 py-0.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                + Yeni Ödeme
+              </button>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-3 pt-2">
             <button
