@@ -98,6 +98,58 @@ Kur kaynaklarının ikisi de erişilemez hâle getirilip tekrar denendi:
 satış **1.611 ms**'de bitti, `tryRate` null kaldı, **tutar ve bakiye
 etkilenmedi**.
 
+**Harem kuru yazıldı (v1.21.0 — HENÜZ ÇIKMADI, imaja girmedi).**
+
+Müşteri isteği: kurlar Harem Altın'dan gelsin, üzerine 0,20 eklensin.
+Kararlar: **satış kuru + 0,20**, hem fişte hem TL tahsilat çevriminde,
+Harem düşerse **son bilinen Harem kuru** görünür uyarıyla kullanılsın.
+
+> **Bu yalnızca bir gösterim ayarı değildir.** TL ile girilen tahsilat bu
+> kurdan dolara çevrilip cariye yazılır (`amountToStoredUsd`). Farkı
+> artırmak müşteriye yazılan dolar tutarını azaltır — ölçüldü: 10.000 TL
+> ödeme 206,19 $ yerine **205,35 $** olarak düşüyor.
+
+Harem'in açık API'si YOK. Eski ucu (`/dashboard/ajax/doviz`) 404 ve
+kendi kodlarında yorum satırına alınmış. Site canlı veriyi
+`wss://hrmsocketonly.haremaltin.com:443` üzerinden socket.io ile çekiyor;
+polling reddediliyor. Biz de aynı akışı dinliyoruz —
+`backend/src/lib/haremKuru.ts`, protokol elle konuşuluyor, `ws` paketi
+eklendi (imajdaki Node 20'de yerleşik WebSocket yok).
+
+**Bunun riski açıktır:** belgelenmemiş, sözleşmesiz bir akış. Harem biçimi
+değiştirirse durur. Ücretli alternatif incelendi: `altinapi.com`, aynı
+sağlayıcıdan besleniyor, `X-API-Key` ile REST, Starter **$19/ay**
+(ücretsiz kademe 500 istek/ay — bize yetmez). Socket bizi bırakırsa
+oraya geçilir.
+
+Fark koda gömülü değil: `tenant.kurFarki` → `KUR_FARKI`. Varsayılan **0**,
+yani ayar unutulursa sessizce marj uygulanmaz. `tenants/shenzhen.yaml`'da
+`0.20` yazılı. **`update-all-tenants.sh` `--reuse-values` kullandığı için
+bu değer güncellemede kendiliğinden gelmez**, bir kez açıkça verilmeli:
+
+```bash
+helm upgrade teknikerp charts/teknikerp -n tenant-shenzhen --reuse-values --set tenant.kurFarki=0.20
+```
+
+Yerelde doğrulandı — `backend/prisma/harem-kur-test.ts`:
+
+```
+kaynak: Harem +0,20   ham satis 48,498 -> uc 48,698   (fark tam 0,200)
+faturaya yazilan kur = tahsilatta kullanilan kur = 48,698
+tutar/bakiye USD kaldi: 100 $
+10.000 TL:  farksiz 206,19 $   farkli 205,35 $
+```
+
+Arıza yolları da denendi:
+
+| Senaryo | Sonuç |
+|---|---|
+| Harem hiç ulaşılamıyor | `TCMB +0,20` + "Harem kuru alınamadı" uyarısı |
+| Harem bağlandı, veri bayat | Kur Harem'de kalır, "N dakikadır güncellenmedi" uyarısı |
+
+Tahsilat ekranında TL/EUR seçiliyken uyarı sarı kutuda görünür — bayat
+kurla para işlemi yapıldığı gizlenmiyor.
+
 ### Sıradaki adım
 
 1. **Excel'deki 5 mükerrer adı incele** — renk/kalite farklıysa bırak,
@@ -110,6 +162,9 @@ etkilenmedi**.
 5. Sorun yoksa aynı komut `shenzhen` ile.
 6. Deneme satışı kes → sil (stok geri dönüyor mu), fiyat listesi sitesini
    aç (iki dakika sonra ürünler geliyor mu).
+7. **Cumartesi geçtikten sonra v1.21.0** — Harem kuru. Derlemeden önce
+   `tenant.kurFarki` değerinin provada verildiğini doğrula; sonra provada
+   `/api/exchange-rates` çıktısında `"source": "Harem +0,20"` gör.
 
 ### Yapıldı (10 Eylül)
 
