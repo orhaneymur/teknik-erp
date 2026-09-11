@@ -266,7 +266,7 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 
 ### Sıradaki adım
 
-> **v1.21.3 fiş, Harem kuru, 7 hata düzeltmesi ve Excel başlıklarını taşır.** Müşteri kararıyla
+> **v1.21.4 fiş, Harem kuru, 7 hata düzeltmesi, Excel başlıkları ve fiyat listesi açıklamasını taşır.** Müşteri kararıyla
 > (11 Eylül) kur Cumartesi'ye bırakılmadı; v1.20.0 ve v1.21.0 provaya hiç
 > kurulmadan v1.21.1'e geçildi; A4 çıktısı da aynı düzene alındı.
 > İki değişiklik birden devreye giriyor: yeni fiş düzeni ve para hesabına
@@ -275,7 +275,7 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 1. **Excel'deki 5 mükerrer adı incele** — renk/kalite farklıysa bırak,
    birebir aynıysa stoksuz olanı sil (uygulamadan, kalıcı sil).
 2. **Provaya kur:**
-   `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.21.3 shenzhen-test`
+   `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.21.4 shenzhen-test`
    Bu adım provada `prisma migrate deploy` çalıştırır, şema orada değişir
    (`Invoice.tryRate`, `Transaction.tryRate`).
 3. **Kur geldi mi:** `/api/exchange-rates` çıktısında
