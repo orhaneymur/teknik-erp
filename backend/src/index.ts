@@ -7135,6 +7135,21 @@ interface FiyatListesiUrunu {
   kalite: string;
   gorunum: string;
   renk: string;
+  /**
+   * Urun aciklamasi — Excel'deki "Aciklama" sutunu.
+   *
+   * Musteri karari 11 Eylul 2026: listede stok kodunun yerinde aciklama
+   * gosterilecek. Aciklamasi olmayan urunlerde satir BOS kalir; stok kodu
+   * artik hic yazilmaz.
+   *
+   * DIKKAT: bu uc HERKESE ACIK. Aciklamaya yazilan her sey disariya
+   * gorunur — tedarikci adi, dahili not gibi seyler yazilmamali.
+   */
+  aciklama: string;
+  /**
+   * Stok kodu. Listede ARTIK GOSTERILMIYOR ama ucta duruyor: satirlarin
+   * tekil anahtari ve ileride gerekebilir.
+   */
   kod: string;
   /**
    * Muadil model adlari, virgulle ayrilmis. Ayni parca birden fazla
@@ -7193,6 +7208,7 @@ app.get(
         quality: true,
         appearance: true,
         color: true,
+        description: true,
         compatibleWith: true,
         priceUsd: true,
         priceUsd2: true,
@@ -7240,6 +7256,7 @@ app.get(
         kalite: qualityLabel(kayit.quality),
         gorunum: appearanceLabel(kayit.appearance),
         renk: kayit.color?.trim() ?? '',
+        aciklama: kayit.description?.trim() ?? '',
         kod: kayit.sku,
         uyumlu: normalizeCompatibleList(kayit.compatibleWith) ?? '',
         toptan: kayit.priceUsd > 0 ? kayit.priceUsd : null,

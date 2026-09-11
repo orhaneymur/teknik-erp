@@ -229,6 +229,41 @@ SatisAdedi · Bakiye · Uyumlu · GelenAdet
 Zorunlu tek sütun `StokAdi`. `Satis1` toptan, `Satis2` perakende,
 `Bakiye` merkez depo stoğu, `GelenAdet` mevcut stoğa **eklenir**.
 
+**Fiyat listesinde stok kodu yerine açıklama (fiyat v1.6.0 + ERP v1.21.4).**
+
+Müşteri isteği: listede ürünün açıklaması görünsün, stok kodunun yerine
+gelsin; açıklaması olmayan üründe hiçbir şey yazmasın.
+
+İki depoda birden değişiklik gerekti — açıklama açık uçtan hiç
+gönderilmiyordu:
+
+- **ERP** (`index.ts`, `/api/public/fiyat-listesi`): yanıta `aciklama`
+  alanı eklendi. `kod` hâlâ gönderiliyor (satır anahtarı).
+- **Fiyat listesi** (`FiyatTablosu.tsx`): satırın ikinci satırı artık
+  açıklamayı gösteriyor, mono yazı tipi kalktı. Açıklama yoksa satır hiç
+  çizilmiyor.
+
+> **Bu uç HERKESE AÇIK.** Açıklamaya yazılan her şey dışarıya görünür —
+> tedarikçi adı, dahili not gibi şeyler yazılmamalı. Excel'deki
+> `Aciklama` sütunu artık müşterinin müşterisinin gördüğü bir alan.
+
+Sıra serbest: ERP güncellenmeden fiyat listesi kurulursa açıklama
+görünmez, hata olmaz (`temizle(undefined)` boş dizgi verir).
+
+**WhatsApp numarası — ülke kodu normalleştirmesi.**
+
+Yeni numara `0549 497 47 47`. `whatsappLinki` yalnızca rakam dışını
+atıyordu; `05494974747` verilseydi bağlantı `wa.me/05494974747` olur ve
+**sessizce çalışmazdı** — wa.me ülke kodu ister, baştaki sıfırı kabul
+etmez. Artık üç yaygın biçim düzeltiliyor (`00…`, `0…`, sıfırsız 10
+hane); yabancı numaralara dokunulmuyor.
+
+Numara **ConfigMap'ten** gelir, sürüm gerektirmez:
+
+```bash
+helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen --reuse-values --set-string tenant.whatsapp="0549 497 47 47"
+```
+
 ### Sıradaki adım
 
 > **v1.21.3 fiş, Harem kuru, 7 hata düzeltmesi ve Excel başlıklarını taşır.** Müşteri kararıyla
