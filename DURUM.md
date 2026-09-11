@@ -47,7 +47,8 @@ dokunulmayacak, birebir aynıysa stoksuz olan silinecek.
 > o tek seferliktir.
 
 **Fiş yeniden tasarlandı.** İmajlar v1.20.0 olarak çıkarıldı, sonra
-Harem kuruyla birlikte v1.21.0'a toplandı.
+Harem kuru v1.21.0'a, A4 düzeni v1.21.1'e eklendi. Kurulacak sürüm
+**v1.21.1** — öncekiler provaya hiç kurulmadı.
 
 Müşteri isteği: puntolar büyüsün, müşteri adresi çıkmasın, üstte logo
 alanı olsun, açıklama yazılmışsa görünsün, net toplam ve iki bakiyede TL
@@ -103,7 +104,7 @@ Kur kaynaklarının ikisi de erişilemez hâle getirilip tekrar denendi:
 satış **1.611 ms**'de bitti, `tryRate` null kaldı, **tutar ve bakiye
 etkilenmedi**.
 
-**Harem kuru yazıldı — v1.21.0.**
+**Harem kuru yazıldı — v1.21.1.**
 
 Müşteri isteği: kurlar Harem Altın'dan gelsin, üzerine 0,20 eklensin.
 Kararlar: **satış kuru + 0,20**, hem fişte hem TL tahsilat çevriminde,
@@ -161,25 +162,28 @@ kurla para işlemi yapıldığı gizlenmiyor.
 
 ### Sıradaki adım
 
-> **v1.21.0 hem fişi hem Harem kurunu taşır.** Müşteri kararıyla
-> (11 Eylül) kur Cumartesi'ye bırakılmadı; v1.20.0 provaya hiç
-> kurulmadan v1.21.0'a geçildi. Yani açılış günü iki değişiklik birden
-> devreye giriyor — provada ikisi de denenmeden canlıya GEÇİLMEMELİ.
+> **v1.21.1 hem fişi hem Harem kurunu taşır.** Müşteri kararıyla
+> (11 Eylül) kur Cumartesi'ye bırakılmadı; v1.20.0 ve v1.21.0 provaya hiç
+> kurulmadan v1.21.1'e geçildi; A4 çıktısı da aynı düzene alındı.
+> İki değişiklik birden devreye giriyor: yeni fiş düzeni ve para hesabına
+> dokunan kur. Provada ikisi de denenmeden canlıya geçilmemeli.
 
 1. **Excel'deki 5 mükerrer adı incele** — renk/kalite farklıysa bırak,
    birebir aynıysa stoksuz olanı sil (uygulamadan, kalıcı sil).
 2. **Provaya kur:**
-   `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.21.0 shenzhen-test`
+   `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.21.1 shenzhen-test`
    Bu adım provada `prisma migrate deploy` çalıştırır, şema orada değişir
    (`Invoice.tryRate`, `Transaction.tryRate`).
 3. **Kur geldi mi:** `/api/exchange-rates` çıktısında
    `"source": "Harem +0,20"` ve `"uyari": null` görünmeli. Fark varsayılan
    olduğu için ayrıca `--set` gerekmez. Görünmüyorsa backend logunda
    `[harem]` satırlarına bak — `baglanti kuruldu` yazmalı.
-4. **Provada fiş bas** — punto okunuyor mu, kağıt boyu makul mü, `LOGO`
-   kutusu ve alttaki firma adı yerinde mi, `≈ ... TL` satırları ve kur
-   dipnotu doğru mu, AÇIKLAMA çerçevesi çıkıyor mu, müşteri adresi
-   gitmiş mi. Ölçü bozulduysa canlıya GEÇME.
+4. **Provada fiş bas — hem termal hem A4.** Punto okunuyor mu, kağıt boyu
+   makul mü, `LOGO` kutusu ve alttaki firma adı yerinde mi, `≈ ... TL`
+   satırları ve kur dipnotu doğru mu, AÇIKLAMA çerçevesi çıkıyor mu,
+   müşteri adresi gitmiş mi. Ölçü bozulduysa canlıya GEÇME.
+   Baskıdan önce masaüstünde denemek için: scratchpad klasöründeki
+   `fis-onizleme.html` ve `a4-onizleme.html` (index.css'ten birebir kopya).
 5. **TL ile bir tahsilat gir** — bu sürümün para hesabına dokunan tek
    yeri burası. 10.000 TL girip cariye yazılan doları kontrol et:
    `10000 / 48,698` ≈ 205,35 $ olmalı, `10000 / 48,498` ≈ 206,19 $ DEĞİL.
