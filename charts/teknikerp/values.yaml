@@ -19,11 +19,15 @@ tenant:
   # tahsilat bu kurdan dolara çevrilip cariye yazılır; farkı artırmak
   # müşteriye yazılan dolar tutarını azaltır.
   #
-  # Varsayılan 0: ayar unutulursa sessizce bir marj uygulanmaz.
-  # update-all-tenants.sh `--reuse-values` kullandığı için bu değer
-  # güncellemede KENDİLİĞİNDEN GELMEZ; bir kez açıkça verilmelidir:
-  #   helm upgrade teknikerp charts/teknikerp -n tenant-shenzhen --reuse-values --set tenant.kurFarki=0.20
-  kurFarki: 0
+  # VARSAYILAN 0.20 — proje kararı (11 Eylül 2026): bütün müşteriler bu
+  # farkla çalışsın. Marj istemeyen bir müşteri açıkça `kurFarki: 0`
+  # yazmalıdır; sessizce sıfırlanmaz.
+  #
+  # Backend'in kendi varsayılanı da 0.20'dir (KUR_FARKI ortam değişkeni
+  # gelmezse). Sebebi: update-all-tenants.sh `--reuse-values` kullanıyor
+  # ve yeni chart varsayılanlarını her zaman almıyor; iki taraf da aynı
+  # rakamı savunsun ki ayar yolda kaybolsa bile marj uygulansın.
+  kurFarki: 0.20
 
   # Fişin en üstüne basılan logo (isteğe bağlı). Boşsa logo alanı çizilmez.
   #

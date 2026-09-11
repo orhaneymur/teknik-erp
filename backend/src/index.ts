@@ -2227,13 +2227,22 @@ app.get('/api/auth/me', async (request, reply) => {
 /*
  * KUR FARKI — Harem'den gelen SATIS kurunun uzerine eklenen tutar (TL).
  *
- * Koda gomulmez: marj bir is karari ve degisebilir. Chart degeri
- * tenant.kurFarki -> KUR_FARKI ortam degiskeni. Tanimsizsa 0'dir; yani
- * ayar unutulursa sessizce bir marj UYGULANMAZ, kur oldugu gibi kalir.
+ * Deger chart'tan gelir: tenant.kurFarki -> KUR_FARKI ortam degiskeni.
+ * Musteri bazinda degistirilebilir, bunun icin surum cikmaz.
+ *
+ * VARSAYILAN 0.20 — proje karari (11 Eylul 2026): butun musteriler bu
+ * farkla calissin. Ortam degiskeni gelmezse de bu rakam uygulanir;
+ * update-all-tenants.sh `--reuse-values` kullandigi icin yeni chart
+ * varsayilanlari her zaman podlara ulasmiyor ve ayarin yolda kaybolmasi
+ * sessizce marjsiz calismaya yol acardi.
+ *
+ * Marj istemeyen musteri ACIKCA `kurFarki: 0` yazar.
  */
+const VARSAYILAN_KUR_FARKI = 0.2;
+
 const KUR_FARKI = (() => {
   const ham = Number.parseFloat(process.env.KUR_FARKI ?? '');
-  return Number.isFinite(ham) && ham >= 0 ? ham : 0;
+  return Number.isFinite(ham) && ham >= 0 ? ham : VARSAYILAN_KUR_FARKI;
 })();
 
 type CozulmusKur = {

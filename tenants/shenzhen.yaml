@@ -11,8 +11,9 @@ tenant:
   id: shenzhen
   companyName: "Shenzhen Market"
   # Doviz kuru farki (TL) — Harem Altin SATIS kurunun uzerine eklenir.
-  # Musteri istegi, 11 Eylul 2026. TL tahsilatin dolara cevrilmesini de
-  # etkiler; bkz. charts/teknikerp/values.yaml.
+  # Musteri istegi, 11 Eylul 2026. Chart varsayilaniyla AYNI (0.20); yine
+  # de acikca yaziliyor ki varsayilan ileride degisirse bu musterinin
+  # marji sessizce kaymasin. TL tahsilatin dolara cevrilmesini de etkiler.
   kurFarki: 0.20
 
 image:

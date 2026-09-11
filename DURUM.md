@@ -122,14 +122,18 @@ sağlayıcıdan besleniyor, `X-API-Key` ile REST, Starter **$19/ay**
 (ücretsiz kademe 500 istek/ay — bize yetmez). Socket bizi bırakırsa
 oraya geçilir.
 
-Fark koda gömülü değil: `tenant.kurFarki` → `KUR_FARKI`. Varsayılan **0**,
-yani ayar unutulursa sessizce marj uygulanmaz. `tenants/shenzhen.yaml`'da
-`0.20` yazılı. **`update-all-tenants.sh` `--reuse-values` kullandığı için
-bu değer güncellemede kendiliğinden gelmez**, bir kez açıkça verilmeli:
+Fark ayarlanabilir: `tenant.kurFarki` → `KUR_FARKI`. **Varsayılan 0,20 —
+proje kararı (11 Eylül 2026): bütün müşteriler bu farkla çalışsın.**
+Marj istemeyen müşteri açıkça `kurFarki: 0` yazar.
 
-```bash
-helm upgrade teknikerp charts/teknikerp -n tenant-shenzhen --reuse-values --set tenant.kurFarki=0.20
-```
+Varsayılan İKİ YERDE savunulur — chart'ta ve backend kodunda
+(`VARSAYILAN_KUR_FARKI`). Sebep: `update-all-tenants.sh` `--reuse-values`
+kullanıyor ve yeni chart varsayılanları her zaman pod'lara ulaşmıyor;
+ayar yolda kaybolursa sessizce marjsız çalışılırdı. Ortam değişkeni hiç
+verilmeden denendi, fark yine uygulandı (`"source": "Harem +0,20"`).
+
+`tenants/shenzhen.yaml`'da da açıkça `0.20` yazılı: varsayılan ileride
+değişirse bu müşterinin marjı sessizce kaymasın diye.
 
 Yerelde doğrulandı — `backend/prisma/harem-kur-test.ts`:
 
@@ -162,9 +166,11 @@ kurla para işlemi yapıldığı gizlenmiyor.
 5. Sorun yoksa aynı komut `shenzhen` ile.
 6. Deneme satışı kes → sil (stok geri dönüyor mu), fiyat listesi sitesini
    aç (iki dakika sonra ürünler geliyor mu).
-7. **Cumartesi geçtikten sonra v1.21.0** — Harem kuru. Derlemeden önce
-   `tenant.kurFarki` değerinin provada verildiğini doğrula; sonra provada
-   `/api/exchange-rates` çıktısında `"source": "Harem +0,20"` gör.
+7. **Cumartesi geçtikten sonra v1.21.0** — Harem kuru. Kurulumdan sonra
+   provada `/api/exchange-rates` çıktısında `"source": "Harem +0,20"`
+   görünmeli. Fark artık varsayılan olduğu için ayrıca `--set` gerekmez;
+   görünmüyorsa pod'a `KUR_FARKI` ulaşmamış ve kod varsayılanı da
+   devrede değil demektir — logda `[harem]` satırlarına bak.
 
 ### Yapıldı (10 Eylül)
 
