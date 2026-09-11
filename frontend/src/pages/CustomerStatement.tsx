@@ -17,12 +17,14 @@ import {
 import { printDocument } from '../lib/printMode';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import InvoiceDetailModal from '../components/InvoiceDetailModal';
+import { ReceiptSlip, ReceiptMoneyRow } from '../components/ReceiptSlip';
 import InvoiceInlineEditor, {
   isEditableInvoiceType,
   type EditableInvoiceRef,
 } from '../components/InvoiceInlineEditor';
 import { useAppNavigationOptional } from '../context/AppNavigationContext';
-import { buildReceiptPartyLines, RECEIPT_DISCLAIMER } from '../lib/receiptParty';
+import { useExchangeRates } from '../hooks/useExchangeRates';
+import { buildReceiptPartyLines } from '../lib/receiptParty';
 import {
   API_BASE,
   authFetch,
@@ -415,6 +417,18 @@ export default function CustomerStatement({
    * `balanceByKey` eskiden yeniye yürüyen bakiyedir; en yeni satırın değeri
    * "güncel", en eski satırın kendi etkisi düşülmüş değeri "önceki" olur.
    */
+  const { rates } = useExchangeRates();
+  /*
+   * Ekstrede kur ANLIK alınır — satış/tahsilat fişlerindeki gibi kayda
+   * yazılmış kur kullanılmaz.
+   *
+   * Sebep: ekstrenin TL basılan üç rakamı da BUGÜNE ait toplamlardır
+   * (genel toplam, önceki ve güncel bakiye). Aylara yayılmış hareketlerin
+   * her birinin kendi kuru vardır; onları tek bir eski kurla çarpmak
+   * yanlış olurdu. Satır bazında TL zaten basılmıyor.
+   */
+  const receiptTryRate = rates.usd > 0 ? rates.usd : null;
+
   const printBalance = useMemo(() => {
     if (printLines.length === 0) return null;
     const withBalance = printLines
@@ -548,25 +562,15 @@ export default function CustomerStatement({
         </div>
       </div>
 
-      <div className="receipt-slip hidden">
-        {/* Firma bilgisi EN USTTE — fis duzeninde once kimin kestigi,
-            sonra fis numarasi gelir. */}
-        {receiptPartyLines.length > 0 && (
-          <div className="receipt-slip-party">
-            {receiptPartyLines.map((line) => (
-              <p key={line} className="receipt-slip-party-line">
-                {line}
-              </p>
-            ))}
-          </div>
-        )}
-        <p className="receipt-slip-title">
-          {printLines.length > 1 ? 'Toplu Fiş' : 'Fiş'}
-        </p>
-        <p className="receipt-slip-meta">
-          {printLines.length} hareket · {new Date().toLocaleDateString('tr-TR')}
-        </p>
-
+      {/* Termal fiş — ortak çerçeve: components/ReceiptSlip.tsx */}
+      <ReceiptSlip
+        partyLines={receiptPartyLines}
+        title={printLines.length > 1 ? 'Toplu Fiş' : 'Fiş'}
+        metaLines={[
+          `${printLines.length} hareket · ${new Date().toLocaleDateString('tr-TR')}`,
+        ]}
+        tryRate={receiptTryRate}
+      >
         {printLines.map((line) => (
           <div key={lineKey(line)}>
             <div className="receipt-slip-divider" />
@@ -580,7 +584,7 @@ export default function CustomerStatement({
                   {line.paymentMethod ? ` · ${line.paymentMethod}` : ''}
                 </p>
                 {line.orderNotes?.trim() && (
-                  <p className="receipt-slip-notes">{line.orderNotes.trim()}</p>
+                  <p className="receipt-slip-subnote">{line.orderNotes.trim()}</p>
                 )}
                 <div className="receipt-item-row receipt-item-head">
                   <span className="receipt-item-name">Ürün</span>
@@ -619,7 +623,7 @@ export default function CustomerStatement({
                   {line.safeName ? ` · ${line.safeName}` : ''}
                 </p>
                 {line.description && (
-                  <p className="receipt-slip-notes">{line.description}</p>
+                  <p className="receipt-slip-subnote">{line.description}</p>
                 )}
                 <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
                   <span className="receipt-item-name">Tutar</span>
@@ -635,34 +639,32 @@ export default function CustomerStatement({
         {printLines.length > 1 && (
           <>
             <div className="receipt-slip-divider" />
-            <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
-              <span className="receipt-item-name">GENEL TOPLAM</span>
-              <span className="receipt-item-total">{formatMoney(printTotal)}</span>
-            </div>
+            <ReceiptMoneyRow
+              label="GENEL TOPLAM"
+              amountUsd={printTotal}
+              tryRate={receiptTryRate}
+              grand
+            />
           </>
         )}
 
         {printBalance && (
           <>
             <div className="receipt-slip-divider" />
-            <div className="receipt-item-row receipt-slip-summary">
-              <span className="receipt-item-name">Önceki bakiye</span>
-              <span className="receipt-item-total">
-                {formatMoney(printBalance.before)}
-              </span>
-            </div>
-            <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
-              <span className="receipt-item-name">Güncel bakiye</span>
-              <span className="receipt-item-total">
-                {formatMoney(printBalance.after)}
-              </span>
-            </div>
+            <ReceiptMoneyRow
+              label="Önceki bakiye"
+              amountUsd={printBalance.before}
+              tryRate={receiptTryRate}
+            />
+            <ReceiptMoneyRow
+              label="Güncel bakiye"
+              amountUsd={printBalance.after}
+              tryRate={receiptTryRate}
+              grand
+            />
           </>
         )}
-
-        <div className="receipt-slip-divider" />
-        <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
-      </div>
+      </ReceiptSlip>
 
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div className="flex items-center gap-3">

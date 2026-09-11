@@ -220,6 +220,16 @@ model Invoice {
   trackingNumber    String?
   totalAmountTl     Float         @default(0.0)
   totalAmountUsd    Float         @default(0.0)
+
+  /// Fis uzerinde TL karsiligi yazmak icin, fatura kesilirken kaydedilen
+  /// TCMB USD satis kuru.
+  ///
+  /// MUHASEBEYE GIRMEZ. Tutarlar USD'dir; bakiye, kar ve raporlar bu alandan
+  /// hesaplanmaz. Yalnizca fisin uzerine "≈ 12.450,00 TL" yazmak icindir.
+  /// `exchangeRate` ile KARISTIRILMAMALI: o alan totalAmountTl/totalAmountUsd
+  /// donusumunu tanimlar ve her zaman 1'dir (tutarlar zaten USD tutulur).
+  /// Bos ise (eski kayitlar) fise TL satiri basilmaz.
+  tryRate           Float?
   originalInvoiceId Int?
   originalInvoice   Invoice?      @relation("InvoiceReturns", fields: [originalInvoiceId], references: [id], onDelete: SetNull)
   returnInvoices    Invoice[]     @relation("InvoiceReturns")
@@ -249,6 +259,11 @@ model Transaction {
   /// Fatura kaynaklı kasa hareketlerinde null kalır.
   receiptNo   String?         @unique
   description String
+
+  /// Tahsilat/tediye fisine TL karsiligi yazmak icin kaydedilen TCMB USD
+  /// satis kuru. Invoice.tryRate ile ayni kural: gosterim icindir, `amount`
+  /// USD'dir ve bakiye bu alandan hesaplanmaz.
+  tryRate     Float?
   safe        Safe            @relation(fields: [safeId], references: [id])
   customer    Customer?       @relation(fields: [customerId], references: [id])
   createdAt   DateTime        @default(now())

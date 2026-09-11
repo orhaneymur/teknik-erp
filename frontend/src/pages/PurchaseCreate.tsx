@@ -6,6 +6,12 @@ import SavedBanner from '../components/SavedBanner';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import InvoiceTrashButton from '../components/InvoiceTrashButton';
+import {
+  ReceiptSlip,
+  ReceiptMoneyRow,
+  ReceiptPlainRow,
+  ReceiptItemsHead,
+} from '../components/ReceiptSlip';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList, {
   resolvePurchaseUnitPriceUsd,
@@ -13,6 +19,7 @@ import F2ProductList, {
 import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
 import { useCartGridKeyboardNav } from '../hooks/useCartGridKeyboardNav';
+import { useExchangeRates } from '../hooks/useExchangeRates';
 import {
   API_BASE,
   ensureArray,
@@ -137,6 +144,8 @@ export default function PurchaseCreate({
   const [removedItemIds, setRemovedItemIds] = useState<number[]>([]);
   const [shouldPrint, setShouldPrint] = useState(false);
   const [printParty, setPrintParty] = useState<ReceiptParty | null>(null);
+  /** Fişteki TL karşılığının kuru — bkz. SalesCreate'teki aynı alan */
+  const [printTryRate, setPrintTryRate] = useState<number | null>(null);
   /** Kayıt sonrası sunucudan gelen kesin bakiye — fişe basılan değer */
   const [printBalance, setPrintBalance] = useState<{
     before: number;
@@ -204,6 +213,9 @@ export default function PurchaseCreate({
       ),
     [cart]
   );
+
+  const { rates } = useExchangeRates();
+  const receiptTryRate = printTryRate ?? (rates.usd > 0 ? rates.usd : null);
 
   const receiptParty = printParty ?? selectedSupplier;
   const receiptPartyLines = useMemo(
@@ -548,6 +560,11 @@ export default function PurchaseCreate({
             : '';
         if (savedInvoiceNo) setDisplayInvoiceNo(savedInvoiceNo);
         setPrintParty(selectedSupplier);
+        setPrintTryRate(
+          typeof response.data.data?.tryRate === 'number'
+            ? response.data.data.tryRate
+            : null
+        );
 
         const balanceBefore =
           typeof response.data.data?.balanceBefore === 'number'
@@ -578,6 +595,7 @@ export default function PurchaseCreate({
           afterPurchaseDone = true;
           setShouldPrint(false);
           setPrintParty(null);
+          setPrintTryRate(null);
           setPrintBalance(null);
           onDataChange?.();
           void loadInitData();
@@ -686,40 +704,22 @@ export default function PurchaseCreate({
         <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
 
-      <div className="receipt-slip hidden">
-        {/* Firma bilgisi EN USTTE — fis duzeninde once kimin kestigi,
-            sonra fis numarasi gelir. */}
-        {receiptPartyLines.length > 0 && (
-          <div className="receipt-slip-party">
-            {receiptPartyLines.map((line) => (
-              <p key={line} className="receipt-slip-party-line">
-                {line}
-              </p>
-            ))}
-          </div>
-        )}
-        <p className="receipt-slip-title">
-          {displayInvoiceNo || initData.nextInvoiceNo || 'Alış Fişi'}
-        </p>
-        <p className="receipt-slip-meta">
-          {invoiceDate}
-          {processedBy ? ` · ${processedBy}` : ''}
-        </p>
-        <p className="receipt-slip-meta">
-          {[settlementLabel, paymentType].filter(Boolean).join(' · ')}
-        </p>
-        {orderNotes.trim() && (
-          <p className="receipt-slip-notes">{orderNotes.trim()}</p>
-        )}
-
+      {/* Termal fiş — ortak çerçeve: components/ReceiptSlip.tsx */}
+      <ReceiptSlip
+        partyLines={receiptPartyLines}
+        title={displayInvoiceNo || initData.nextInvoiceNo || 'Alış Fişi'}
+        metaLines={[
+          [invoiceDate, processedBy ? `Alış: ${processedBy}` : '']
+            .filter(Boolean)
+            .join(' · '),
+          [settlementLabel, paymentType].filter(Boolean).join(' · '),
+        ]}
+        notes={orderNotes}
+        tryRate={receiptTryRate}
+      >
         <div className="receipt-slip-divider" />
 
-        <div className="receipt-item-row receipt-item-head">
-          <span className="receipt-item-name">Ürün</span>
-          <span className="receipt-item-qty">Ad</span>
-          <span className="receipt-item-price">Fiyat</span>
-          <span className="receipt-item-total">Top.</span>
-        </div>
+        <ReceiptItemsHead />
 
         {receiptCart.map((item) => {
           const lineTotal = roundPrice(item.quantity * item.unitPriceUsd);
@@ -737,36 +737,31 @@ export default function PurchaseCreate({
 
         <div className="receipt-slip-divider" />
 
-        <div className="receipt-item-row receipt-slip-summary">
-          <span className="receipt-item-name">Toplam adet</span>
-          <span className="receipt-item-total">{totalQuantity}</span>
-        </div>
-        <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
-          <span className="receipt-item-name">NET TOPLAM</span>
-          <span className="receipt-item-total">{formatUsd(totalUsd)}</span>
-        </div>
+        <ReceiptPlainRow label="Toplam adet" value={totalQuantity} />
+        <ReceiptMoneyRow
+          label="NET TOPLAM"
+          amountUsd={totalUsd}
+          tryRate={receiptTryRate}
+          grand
+        />
 
         {receiptBalance && (
           <>
             <div className="receipt-slip-divider" />
-            <div className="receipt-item-row receipt-slip-summary">
-              <span className="receipt-item-name">Önceki bakiye</span>
-              <span className="receipt-item-total">
-                {formatMoney(receiptBalance.before)}
-              </span>
-            </div>
-            <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
-              <span className="receipt-item-name">Güncel bakiye</span>
-              <span className="receipt-item-total">
-                {formatMoney(receiptBalance.after)}
-              </span>
-            </div>
+            <ReceiptMoneyRow
+              label="Önceki bakiye"
+              amountUsd={receiptBalance.before}
+              tryRate={receiptTryRate}
+            />
+            <ReceiptMoneyRow
+              label="Güncel bakiye"
+              amountUsd={receiptBalance.after}
+              tryRate={receiptTryRate}
+              grand
+            />
           </>
         )}
-
-        <div className="receipt-slip-divider" />
-        <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
-      </div>
+      </ReceiptSlip>
 
       <div className="mb-2 flex items-center gap-3 print:hidden">
         {isEditMode && onCancelEdit && (

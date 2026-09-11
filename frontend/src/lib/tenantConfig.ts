@@ -18,6 +18,18 @@ export type TenantConfig = {
   documentTitle: string;
   /** Fiş/etiket altında görünen iletişim satırı (boş olabilir) */
   companyContact: string;
+  /**
+   * Fişin en üstüne basılan logo. Boş bırakılırsa logo alanı hiç çizilmez,
+   * fiş kısalır — eksik logo boşluk bırakmaz.
+   *
+   * İki biçim de çalışır:
+   *   · `data:image/png;base64,...`  ConfigMap'e gömülü (ek mount gerekmez)
+   *   · `/logo.png`                  nginx'e mount edilmiş dosya
+   *
+   * Termal kafa 1 bit basar: gri tonlu logo lekeli çıkar. Saf siyah-beyaz,
+   * ~512 piksel genişlikte PNG verilmelidir.
+   */
+  logoUrl: string;
   /** Varsayılan para birimi kodu */
   currency: string;
   /**
@@ -32,6 +44,7 @@ const FALLBACK: TenantConfig = {
   companyName: 'TeknikERP',
   documentTitle: 'TeknikERP',
   companyContact: '',
+  logoUrl: '',
   currency: 'TRY',
   fileTag: '',
 };
@@ -55,6 +68,7 @@ export async function loadTenantConfig(): Promise<TenantConfig> {
       companyName,
       documentTitle: raw.documentTitle?.trim() || `${companyName} ERP`,
       companyContact: raw.companyContact?.trim() || '',
+      logoUrl: raw.logoUrl?.trim() || '',
       currency: raw.currency?.trim() || FALLBACK.currency,
       fileTag: raw.fileTag?.trim() || '',
     };

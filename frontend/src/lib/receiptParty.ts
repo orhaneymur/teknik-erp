@@ -34,11 +34,15 @@ export function buildReceiptPartyLines(party: ReceiptParty | null | undefined): 
     if (party.taxOffice?.trim()) taxParts.push(party.taxOffice.trim());
     lines.push(taxParts.join(' · '));
   }
-  const place = [party.address, party.district, party.city]
-    .map((part) => part?.trim())
-    .filter(Boolean)
-    .join(', ');
-  if (place) lines.push(place);
+  /*
+   * ADRES BASILMAZ (11 Eylül 2026 kararı).
+   *
+   * Adres + ilçe + il satırı 68mm fişte iki-üç satır yer kaplıyor, fişi
+   * uzatıyor ve müşterinin zaten bildiği bir bilgiyi tekrar ediyordu.
+   * `address`/`district`/`city` alanları ReceiptParty tipinde DURUYOR:
+   * müşteri kartında ve A4 çıktısında kullanılmaya devam ediyor, yalnızca
+   * fişe basılmıyor.
+   */
 
   return lines;
 }

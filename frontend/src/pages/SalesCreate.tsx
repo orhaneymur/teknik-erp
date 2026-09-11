@@ -9,6 +9,12 @@ import AlternativeSuggestions, {
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import InvoiceTrashButton from '../components/InvoiceTrashButton';
+import {
+  ReceiptSlip,
+  ReceiptMoneyRow,
+  ReceiptPlainRow,
+  ReceiptItemsHead,
+} from '../components/ReceiptSlip';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList, {
   resolveSalesUnitPriceUsd,
@@ -18,6 +24,7 @@ import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch'
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
 import { useHoldKeyReveal } from '../hooks/useHoldKeyReveal';
 import { useCartGridKeyboardNav } from '../hooks/useCartGridKeyboardNav';
+import { useExchangeRates } from '../hooks/useExchangeRates';
 import {
   API_BASE,
   ensureArray,
@@ -188,6 +195,13 @@ export default function SalesCreate({
   const [isPreOrder, setIsPreOrder] = useState(false);
   const [shouldPrint, setShouldPrint] = useState(false);
   const [printParty, setPrintParty] = useState<ReceiptParty | null>(null);
+  /**
+   * Fişteki TL karşılığının kuru. Kaydedilmiş faturada kur KAYITTA durur
+   * (backend `Invoice.tryRate`), böylece fiş aylar sonra yeniden
+   * yazdırıldığında da kesildiği günün rakamını gösterir. Henüz
+   * kaydedilmemiş fişte kayıt yoktur; o an anlık TCMB kuru kullanılır.
+   */
+  const [printTryRate, setPrintTryRate] = useState<number | null>(null);
   const [processedBy, setProcessedBy] = useState('');
   /**
    * Fiyat kademesi. Varsayilan TOPTAN (Satis 1) — is modeli toptanci
@@ -308,6 +322,13 @@ export default function SalesCreate({
     [cart]
   );
 
+  const { rates } = useExchangeRates();
+  /**
+   * Fişe basılacak kur: kaydedilmiş faturanınki öncelikli, yoksa anlık kur.
+   * İkisi de yoksa null döner ve fişe TL satırı hiç basılmaz.
+   */
+  const receiptTryRate = printTryRate ?? (rates.usd > 0 ? rates.usd : null);
+
   const receiptParty = printParty ?? selectedCustomer;
   const receiptPartyLines = useMemo(
     () => buildReceiptPartyLines(receiptParty),
@@ -404,6 +425,8 @@ export default function SalesCreate({
             deliveryType: string;
             dueDate: string | null;
             exchangeRate: number;
+            /** Fişteki TL karşılığı için — eski faturalarda boş olabilir */
+            tryRate: number | null;
             createdAt: string;
             customer: { id: number; code: string; name: string; balance?: number };
             branch: { id: number };
@@ -458,6 +481,7 @@ export default function SalesCreate({
         if (data.paymentType === 'Peşin' || data.paymentType === 'Vadeli') {
           setPaymentType(data.paymentType);
         }
+        setPrintTryRate(typeof data.tryRate === 'number' ? data.tryRate : null);
         setProcessedBy(data.processedBy ?? '');
         setOrderNotes(data.orderNotes ?? '');
         const dt = data.deliveryType as DeliveryType;
@@ -865,6 +889,11 @@ export default function SalesCreate({
         );
 
         setPrintParty(customer);
+        setPrintTryRate(
+          typeof response.data.data?.tryRate === 'number'
+            ? response.data.data.tryRate
+            : null
+        );
 
         let afterSaleDone = false;
         const afterSale = () => {
@@ -874,6 +903,7 @@ export default function SalesCreate({
           setShouldPrint(false);
           setPrintBalance(null);
           setPrintParty(null);
+          setPrintTryRate(null);
           onDataChange?.();
           void loadInitData();
         };
@@ -993,43 +1023,28 @@ export default function SalesCreate({
         <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
       </div>
 
-      {/* Termal fiş (72.1mm) — yalnızca fiş yazıcısı */}
-      <div className="receipt-slip hidden">
-        {/* Firma bilgisi EN USTTE — fis duzeninde once kimin kestigi,
-            sonra fis numarasi gelir. */}
-        {receiptPartyLines.length > 0 && (
-          <div className="receipt-slip-party">
-            {receiptPartyLines.map((line) => (
-              <p key={line} className="receipt-slip-party-line">
-                {line}
-              </p>
-            ))}
-          </div>
-        )}
-        <p className="receipt-slip-title">
-          {displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}
-        </p>
-        <p className="receipt-slip-meta">
-          {invoiceDate}
-          {processedBy ? ` · ${processedBy}` : ''}
-        </p>
-        <p className="receipt-slip-meta">
-          {[paymentMethod, paymentType, deliveryType, isPreOrder ? 'Ön Sipariş' : '']
+      {/*
+        Termal fiş (72,1mm rulo / 68mm baskı alanı).
+        Çerçeve components/ReceiptSlip.tsx'te — logo, müşteri bloğu, açıklama
+        ve alttaki firma adı beş fişte ortaktır. Burada yalnızca gövde var.
+      */}
+      <ReceiptSlip
+        partyLines={receiptPartyLines}
+        title={displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}
+        metaLines={[
+          [invoiceDate, processedBy ? `Satış: ${processedBy}` : '']
             .filter(Boolean)
-            .join(' · ')}
-        </p>
-        {orderNotes.trim() && (
-          <p className="receipt-slip-notes">{orderNotes.trim()}</p>
-        )}
-
+            .join(' · '),
+          [paymentMethod, paymentType, deliveryType, isPreOrder ? 'Ön Sipariş' : '']
+            .filter(Boolean)
+            .join(' · '),
+        ]}
+        notes={orderNotes}
+        tryRate={receiptTryRate}
+      >
         <div className="receipt-slip-divider" />
 
-        <div className="receipt-item-row receipt-item-head">
-          <span className="receipt-item-name">Ürün</span>
-          <span className="receipt-item-qty">Ad</span>
-          <span className="receipt-item-price">Fiyat</span>
-          <span className="receipt-item-total">Top.</span>
-        </div>
+        <ReceiptItemsHead />
 
         {receiptCart.map((item) => {
           const lineTotal = calcLineTotalUsd(item);
@@ -1048,36 +1063,31 @@ export default function SalesCreate({
 
         <div className="receipt-slip-divider" />
 
-        <div className="receipt-item-row receipt-slip-summary">
-          <span className="receipt-item-name">Toplam adet</span>
-          <span className="receipt-item-total">{totalQuantity}</span>
-        </div>
-        <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
-          <span className="receipt-item-name">NET TOPLAM</span>
-          <span className="receipt-item-total">{formatUsd(totalUsd)}</span>
-        </div>
+        <ReceiptPlainRow label="Toplam adet" value={totalQuantity} />
+        <ReceiptMoneyRow
+          label="NET TOPLAM"
+          amountUsd={totalUsd}
+          tryRate={receiptTryRate}
+          grand
+        />
 
         {receiptBalance && (
           <>
             <div className="receipt-slip-divider" />
-            <div className="receipt-item-row receipt-slip-summary">
-              <span className="receipt-item-name">Önceki bakiye</span>
-              <span className="receipt-item-total">
-                {formatMoney(receiptBalance.before)}
-              </span>
-            </div>
-            <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
-              <span className="receipt-item-name">Güncel bakiye</span>
-              <span className="receipt-item-total">
-                {formatMoney(receiptBalance.after)}
-              </span>
-            </div>
+            <ReceiptMoneyRow
+              label="Önceki bakiye"
+              amountUsd={receiptBalance.before}
+              tryRate={receiptTryRate}
+            />
+            <ReceiptMoneyRow
+              label="Güncel bakiye"
+              amountUsd={receiptBalance.after}
+              tryRate={receiptTryRate}
+              grand
+            />
           </>
         )}
-
-        <div className="receipt-slip-divider" />
-        <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
-      </div>
+      </ReceiptSlip>
 
       <div className="mb-2 flex items-center gap-3 print:hidden">
         {isEditMode && onCancelEdit && (

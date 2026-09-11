@@ -2212,6 +2212,54 @@ app.get('/api/auth/me', async (request, reply) => {
   }
 });
 
+/**
+ * Fis uzerine TL karsiligi yazmak icin kullanilan USD satis kuru.
+ *
+ * Fatura veya tahsilat KAYDEDILIRKEN bir kez okunur ve kayda yazilir; boylece
+ * ayni fis aylar sonra yeniden yazdirildiginda da kesildigi gunun rakamini
+ * gosterir. fetchTcmbRates() zaten onbellekli ve uc kademeli (TCMB -> ECB ->
+ * varsayilan), bu yuzden her zaman bir sayi doner.
+ *
+ * DIKKAT: prisma.$transaction ICINDE CAGIRILMAZ. Ag istegi 15 saniyeye kadar
+ * surebilir ve o sure boyunca satir kilitleri acik kalir.
+ */
+const RECEIPT_RATE_TIMEOUT_MS = 1500;
+
+async function receiptTryRate(): Promise<number | null> {
+  /*
+   * SATISI BEKLETME.
+   *
+   * fetchTcmbRates() onbellek tazeyse aninda doner, ama onbellek dolunca
+   * aga cikar: TCMB 15 sn, ardindan ECB 10 sn zaman asimi. Kaynaklar yavassa
+   * fatura kaydi 25 saniye asili kalirdi — tezgahta kuyruk varken kabul
+   * edilemez. Fis uzerindeki TL satiri bir kolaylik; satisin kendisini
+   * geciktirmeye degmez.
+   *
+   * Bu yuzden en fazla 1,5 saniye beklenir. Istek IPTAL EDILMEZ, arka planda
+   * surer ve onbellegi isitir; bir sonraki satis taze kuru hazir bulur.
+   * Sure dolarsa elde kalan son kur kullanilir, o da yoksa null doner ve
+   * fise TL satiri basilmaz.
+   */
+  const sonBilinen = ratesCache && ratesCache.usd > 0 ? ratesCache.usd : null;
+
+  let zamanlayici: ReturnType<typeof setTimeout> | undefined;
+  const zamanAsimi = new Promise<null>((resolve) => {
+    zamanlayici = setTimeout(() => resolve(null), RECEIPT_RATE_TIMEOUT_MS);
+  });
+
+  const istek = fetchTcmbRates().then(
+    (rates) => (rates.usd > 0 ? rates.usd : null),
+    () => null
+  );
+
+  try {
+    const sonuc = await Promise.race([istek, zamanAsimi]);
+    return sonuc ?? sonBilinen;
+  } finally {
+    if (zamanlayici) clearTimeout(zamanlayici);
+  }
+}
+
 app.get('/api/exchange-rates', async () => {
   const rates = await fetchTcmbRates();
   return {
@@ -3255,6 +3303,9 @@ app.post<{
   });
   const balanceBefore = roundMoney(supplierBefore?.balance ?? 0);
 
+  // Fis uzerindeki TL karsiligi icin — transaction disinda, bir kez.
+  const tryRate = await receiptTryRate();
+
   try {
     const invoice = await prisma.$transaction(async (tx) => {
       const invoiceNo = await generatePurchaseInvoiceNo(tx);
@@ -3281,6 +3332,7 @@ app.post<{
           orderNotes: orderNotes ?? null,
           totalAmountTl,
           totalAmountUsd,
+          tryRate,
           ...(invoiceDate ? { createdAt: new Date(invoiceDate) } : {}),
           items: {
             create: items.map((item) => {
@@ -3670,6 +3722,9 @@ app.post<{
     });
   }
 
+  // Fis uzerindeki TL karsiligi icin — transaction disinda, bir kez.
+  const tryRate = await receiptTryRate();
+
   try {
     const payment = await prisma.$transaction(async (tx) => {
       const [customer, safe] = await Promise.all([
@@ -3718,6 +3773,7 @@ app.post<{
           customerId,
           type,
           amount,
+          tryRate,
           method: method?.trim() || null,
           receiptNo,
           description:
@@ -4069,6 +4125,9 @@ app.post<{
   const totalAmountUsd = roundMoney(totalAmountTl / rate);
   const invoiceCreatedAt = buildInvoiceCreatedAt(invoiceDate);
 
+  // Fis uzerindeki TL karsiligi icin — transaction disinda, bir kez.
+  const tryRate = await receiptTryRate();
+
   try {
     const invoice = await prisma.$transaction(async (tx) => {
       const invoiceNo = await generateInvoiceNo(tx);
@@ -4095,6 +4154,7 @@ app.post<{
           orderNotes: orderNotes ?? null,
           totalAmountTl,
           totalAmountUsd,
+          tryRate,
           createdAt: invoiceCreatedAt,
           items: {
             create: normalizedItems.map((item) => {
@@ -4284,6 +4344,9 @@ app.post<{
     });
   }
 
+  // Fis uzerindeki TL karsiligi icin — transaction disinda, bir kez.
+  const tryRate = await receiptTryRate();
+
   try {
     const invoice = await prisma.$transaction(async (tx) => {
       const sourceInvoice = await tx.invoice.findUnique({
@@ -4357,6 +4420,7 @@ app.post<{
           deliveryType: 'Mağazadan Teslim',
           totalAmountTl,
           totalAmountUsd,
+          tryRate,
           originalInvoiceId: sourceInvoice.id,
           orderNotes: [bodyOrderNotes?.trim(), `Kaynak fatura: ${sourceInvoice.invoiceNo}`]
             .filter(Boolean)
@@ -4487,6 +4551,9 @@ app.post<{
     });
   }
 
+  // Fis uzerindeki TL karsiligi icin — transaction disinda, bir kez.
+  const tryRate = await receiptTryRate();
+
   try {
     const invoice = await prisma.$transaction(async (tx) => {
       const normalizedItems = items
@@ -4532,6 +4599,7 @@ app.post<{
           deliveryType: 'Mağazadan Teslim',
           totalAmountTl,
           totalAmountUsd,
+          tryRate,
           orderNotes:
             note?.trim() ||
             'İnsiyatif iade — satın alma kaydı doğrulanmadı veya süre dışı',

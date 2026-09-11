@@ -28,6 +28,10 @@ import {
   type Safe,
 } from '../lib/api';
 import { useExchangeRates } from '../hooks/useExchangeRates';
+import {
+  ReceiptSlip,
+  ReceiptMoneyRow,
+} from '../components/ReceiptSlip';
 import { printDocument } from '../lib/printMode';
 import { RECEIPT_DISCLAIMER, buildReceiptPartyLines } from '../lib/receiptParty';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
@@ -189,6 +193,8 @@ type PaymentRow = {
   createdAt: string;
   customer: { id: number; code: string; name: string; balance?: number } | null;
   safe: { id: number; name: string; currency: string; balance?: number };
+  /** Kayıtta saklanan USD/TL kuru — eski tahsilatlarda boş olabilir */
+  tryRate?: number | null;
 };
 
 type PaymentReceipt = {
@@ -204,6 +210,11 @@ type PaymentReceipt = {
   safeName: string;
   balanceBefore?: number | null;
   balanceAfter?: number | null;
+  /**
+   * Fişe basılacak USD/TL kuru. Tahsilat kaydedilirken yazılır; fiş yeniden
+   * basıldığında da o günün rakamı çıkar. Boşsa TL satırı basılmaz.
+   */
+  tryRate?: number | null;
 };
 
 export default function CustomerPayment({
@@ -417,6 +428,7 @@ export default function CustomerPayment({
           safeName: payment.safe.name,
           balanceBefore,
           balanceAfter,
+          tryRate: payment.tryRate ?? null,
         });
     },
     [printPaymentReceipt, selectedCustomer]
@@ -483,6 +495,10 @@ export default function CustomerPayment({
           customerLabel: `${customer.code} — ${customer.name}`,
           partyLines: buildReceiptPartyLines(customer),
           safeName: selectedSafeData?.name ?? '—',
+          tryRate:
+            typeof response.data.data?.tryRate === 'number'
+              ? response.data.data.tryRate
+              : null,
           balanceBefore: roundPrice(customer.balance),
           balanceAfter:
             type === 'GIRIS'
@@ -662,58 +678,49 @@ export default function CustomerPayment({
             </div>
             <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
           </div>
-          <div className="receipt-slip hidden">
-            <p className="receipt-slip-title">
-              {printReceipt.type === 'GIRIS' ? 'TAHSİLAT FİŞİ' : 'ÖDEME FİŞİ'}
-            </p>
-            {printReceipt.receiptNo?.trim() && (
-              <p className="receipt-slip-meta">Fiş No: {printReceipt.receiptNo.trim()}</p>
-            )}
-            {printReceipt.partyLines.length > 0 ? (
-              <div className="receipt-slip-party">
-                {printReceipt.partyLines.map((line) => (
-                  <p key={line} className="receipt-slip-party-line">
-                    {line}
-                  </p>
-                ))}
-              </div>
-            ) : (
-              <p className="receipt-slip-customer">{printReceipt.customerLabel}</p>
-            )}
-            <p className="receipt-slip-meta">{formatDate(printReceipt.createdAt)}</p>
-            <p className="receipt-slip-meta">Kasa: {printReceipt.safeName}</p>
-            {printReceipt.method && (
-              <p className="receipt-slip-meta">Ödeme yöntemi: {printReceipt.method}</p>
-            )}
-            {printReceipt.description && (
-              <p className="receipt-slip-notes">{printReceipt.description}</p>
-            )}
+          {/* Termal fiş — ortak çerçeve: components/ReceiptSlip.tsx */}
+          <ReceiptSlip
+            partyLines={
+              printReceipt.partyLines.length > 0
+                ? printReceipt.partyLines
+                : [printReceipt.customerLabel]
+            }
+            title={printReceipt.type === 'GIRIS' ? 'TAHSİLAT FİŞİ' : 'ÖDEME FİŞİ'}
+            metaLines={[
+              printReceipt.receiptNo?.trim()
+                ? `Fiş No: ${printReceipt.receiptNo.trim()}`
+                : '',
+              formatDate(printReceipt.createdAt),
+              `Kasa: ${printReceipt.safeName}`,
+              printReceipt.method ? `Ödeme yöntemi: ${printReceipt.method}` : '',
+            ]}
+            notes={printReceipt.description}
+            tryRate={printReceipt.tryRate}
+          >
             <div className="receipt-slip-divider" />
+
             {printReceipt.balanceBefore != null && (
-              <div className="receipt-item-row receipt-slip-summary">
-                <span className="receipt-item-name">Önceki bakiye</span>
-                <span className="receipt-item-total">
-                  {formatMoney(printReceipt.balanceBefore)}
-                </span>
-              </div>
+              <ReceiptMoneyRow
+                label="Önceki bakiye"
+                amountUsd={printReceipt.balanceBefore}
+                tryRate={printReceipt.tryRate}
+              />
             )}
-            <div className="receipt-item-row receipt-slip-summary receipt-slip-grand">
-              <span className="receipt-item-name">Tutar</span>
-              <span className="receipt-item-total">
-                {formatMoney(printReceipt.amount)}
-              </span>
-            </div>
+            <ReceiptMoneyRow
+              label="Tutar"
+              amountUsd={printReceipt.amount}
+              tryRate={printReceipt.tryRate}
+              grand
+            />
             {printReceipt.balanceAfter != null && (
-              <div className="receipt-item-row receipt-slip-summary">
-                <span className="receipt-item-name">Güncel bakiye</span>
-                <span className="receipt-item-total">
-                  {formatMoney(printReceipt.balanceAfter)}
-                </span>
-              </div>
+              <ReceiptMoneyRow
+                label="Güncel bakiye"
+                amountUsd={printReceipt.balanceAfter}
+                tryRate={printReceipt.tryRate}
+                grand
+              />
             )}
-            <div className="receipt-slip-divider" />
-            <p className="receipt-slip-disclaimer">{RECEIPT_DISCLAIMER}</p>
-          </div>
+          </ReceiptSlip>
         </>
       )}
 

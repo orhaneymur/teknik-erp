@@ -12,6 +12,16 @@ tenant:
   companyName: ""
   # Fiş altına basılan iletişim satırı (isteğe bağlı).
   contact: ""
+  # Fişin en üstüne basılan logo (isteğe bağlı). Boşsa logo alanı çizilmez.
+  #
+  # İki biçim de çalışır:
+  #   data:image/png;base64,iVBOR...   ConfigMap'e gömülü, ek mount gerekmez
+  #   /logo.png                        nginx'e mount edilmiş dosya
+  #
+  # Termal kafa 1 bit basar: gri tonlu logo lekeli çıkar. Saf siyah-beyaz,
+  # ~512 piksel genişlikte PNG verilmelidir. Fişte en fazla 18mm yükseklik
+  # ve %60 genişlik kaplar.
+  logoUrl: ""
   currency: "TRY"
   # İndirilen Excel dosyalarının başındaki kısaltma — ör. "SM".
   # Boş bırakılırsa firma adından türetilir ("Shenzhen Market" -> "SM").
