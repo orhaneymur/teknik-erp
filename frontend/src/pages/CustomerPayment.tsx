@@ -822,6 +822,27 @@ export default function CustomerPayment({
             inputClass={inputClass}
           />
 
+          {/*
+            KUR UYARISI — yalnizca bilgi degil, para uyarisi.
+            TL/EUR ile girilen tutar bu kurdan dolara cevrilip cariye
+            yazilir (amountToStoredUsd). Kur bayatsa veya Harem'den
+            gelmiyorsa personel bunu GORMELI; sessizce kaydedilirse
+            yanlis bakiye olusur ve kimse fark etmez.
+          */}
+          {rates.uyari && amountCurrency !== 'USD' && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <strong>Kur uyarısı:</strong> {rates.uyari}
+              <div className="mt-0.5 text-xs">
+                Kullanılan kur: {rates.source} · 1 USD ={' '}
+                {rates.usd.toLocaleString('tr-TR', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 4,
+                })}{' '}
+                TL. Tutar bu kurdan dolara çevrilip cariye yazılacak.
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Açıklama</label>
             <textarea

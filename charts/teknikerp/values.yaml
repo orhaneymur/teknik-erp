@@ -12,6 +12,19 @@ tenant:
   companyName: ""
   # Fiş altına basılan iletişim satırı (isteğe bağlı).
   contact: ""
+  # Döviz kuruna eklenen fark (TL). Harem Altın'ın USD/EUR SATIŞ kurunun
+  # üzerine bu tutar eklenir.
+  #
+  # DİKKAT — bu yalnızca bir gösterim ayarı DEĞİLDİR. TL ile girilen
+  # tahsilat bu kurdan dolara çevrilip cariye yazılır; farkı artırmak
+  # müşteriye yazılan dolar tutarını azaltır.
+  #
+  # Varsayılan 0: ayar unutulursa sessizce bir marj uygulanmaz.
+  # update-all-tenants.sh `--reuse-values` kullandığı için bu değer
+  # güncellemede KENDİLİĞİNDEN GELMEZ; bir kez açıkça verilmelidir:
+  #   helm upgrade teknikerp charts/teknikerp -n tenant-shenzhen --reuse-values --set tenant.kurFarki=0.20
+  kurFarki: 0
+
   # Fişin en üstüne basılan logo (isteğe bağlı). Boşsa logo alanı çizilmez.
   #
   # İki biçim de çalışır:

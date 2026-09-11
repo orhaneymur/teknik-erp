@@ -27,6 +27,14 @@ export type ExchangeRates = {
   eur: number;
   source: string;
   updatedAt: string;
+  /**
+   * Kur guvenilir degilse doldurulur — Harem akisi bayatladiginda veya
+   * hic veri gelmediginde. BOS DEGILSE KULLANICIYA GOSTERILMELIDIR:
+   * bu kur yalnizca fise yazilmiyor, TL tahsilati dolara cevirip cariye
+   * yaziyor (amountToStoredUsd). Bayat kurla para islemi yapildigi
+   * gizlenmemeli.
+   */
+  uyari?: string | null;
 };
 
 export async function fetchExchangeRates(): Promise<ExchangeRates> {
@@ -46,6 +54,7 @@ export async function fetchExchangeRates(): Promise<ExchangeRates> {
     eur: DEFAULT_EUR,
     source: 'varsayılan',
     updatedAt: new Date().toISOString(),
+    uyari: 'Kur sunucudan alınamadı, varsayılan kur kullanılıyor.',
   };
 }
 

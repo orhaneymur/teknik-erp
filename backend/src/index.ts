@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { haremBaslat, haremDurum } from './lib/haremKuru.js';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
@@ -2223,52 +2224,124 @@ app.get('/api/auth/me', async (request, reply) => {
  * DIKKAT: prisma.$transaction ICINDE CAGIRILMAZ. Ag istegi 15 saniyeye kadar
  * surebilir ve o sure boyunca satir kilitleri acik kalir.
  */
+/*
+ * KUR FARKI — Harem'den gelen SATIS kurunun uzerine eklenen tutar (TL).
+ *
+ * Koda gomulmez: marj bir is karari ve degisebilir. Chart degeri
+ * tenant.kurFarki -> KUR_FARKI ortam degiskeni. Tanimsizsa 0'dir; yani
+ * ayar unutulursa sessizce bir marj UYGULANMAZ, kur oldugu gibi kalir.
+ */
+const KUR_FARKI = (() => {
+  const ham = Number.parseFloat(process.env.KUR_FARKI ?? '');
+  return Number.isFinite(ham) && ham >= 0 ? ham : 0;
+})();
+
+type CozulmusKur = {
+  usd: number;
+  eur: number;
+  /** Kullaniciya gosterilecek kaynak yazisi */
+  source: string;
+  updatedAt: string;
+  /** Harem verisi yok veya bayat — arayuz uyari gostermeli */
+  uyari: string | null;
+};
+
+function farkEkle(deger: number): number {
+  return Math.round((deger + KUR_FARKI) * 10000) / 10000;
+}
+
+function farkYazisi(): string {
+  if (KUR_FARKI <= 0) return '';
+  return ` +${KUR_FARKI.toFixed(2).replace('.', ',')}`;
+}
+
+/**
+ * Uygulamanin KULLANDIGI kur — hem fisteki TL karsiligi hem TL tahsilatin
+ * dolara cevrilmesi buradan gecer.
+ *
+ * Oncelik Harem'dir. Baglanti koparsa SON BILINEN HAREM KURU kullanilmaya
+ * devam eder (proje karari, 11 Eylul 2026): sessizce baska bir kaynaga
+ * gecmek marji kaydirir ve bunu kimse fark etmez. Bayatlik gizlenmez,
+ * `uyari` alaniyla disari verilir.
+ *
+ * TCMB yalnizca HIC Harem verisi alinamadiginda devreye girer (ornegin
+ * pod yeni acildi ve socket henuz baglanmadi). O durumda kaynak yazisi
+ * bunu acikca soyler.
+ */
+async function cozulmusKur(): Promise<CozulmusKur> {
+  const harem = haremDurum();
+
+  if (harem.veriVar && harem.usd) {
+    const dakika = harem.yasSn != null ? Math.floor(harem.yasSn / 60) : null;
+    return {
+      usd: farkEkle(harem.usd),
+      eur: harem.eur ? farkEkle(harem.eur) : 0,
+      source: `Harem${farkYazisi()}`,
+      updatedAt: new Date(Date.now() - (harem.yasSn ?? 0) * 1000).toISOString(),
+      uyari: harem.bayat
+        ? `Harem kuru ${dakika ?? '?'} dakikadir guncellenmedi.`
+        : null,
+    };
+  }
+
+  // Hic Harem verisi yok — TCMB ile basla, ama bunu gizleme.
+  const tcmb = await fetchTcmbRates();
+  return {
+    usd: farkEkle(tcmb.usd),
+    eur: farkEkle(tcmb.eur),
+    source: `${tcmb.source}${farkYazisi()}`,
+    updatedAt: tcmb.updatedAt,
+    uyari: 'Harem kuru alinamadi, TCMB kuru kullaniliyor.',
+  };
+}
+
 const RECEIPT_RATE_TIMEOUT_MS = 1500;
 
 async function receiptTryRate(): Promise<number | null> {
   /*
    * SATISI BEKLETME.
    *
-   * fetchTcmbRates() onbellek tazeyse aninda doner, ama onbellek dolunca
-   * aga cikar: TCMB 15 sn, ardindan ECB 10 sn zaman asimi. Kaynaklar yavassa
-   * fatura kaydi 25 saniye asili kalirdi — tezgahta kuyruk varken kabul
-   * edilemez. Fis uzerindeki TL satiri bir kolaylik; satisin kendisini
-   * geciktirmeye degmez.
+   * Harem kuru bellekte durur, aninda doner. Ama hic Harem verisi yoksa
+   * cozulmusKur() TCMB'ye gider ve orasi yavas olabilir (TCMB 15 sn,
+   * ardindan ECB 10 sn zaman asimi). Fis uzerindeki TL satiri bir
+   * kolaylik; satisin kendisini geciktirmeye degmez.
    *
-   * Bu yuzden en fazla 1,5 saniye beklenir. Istek IPTAL EDILMEZ, arka planda
-   * surer ve onbellegi isitir; bir sonraki satis taze kuru hazir bulur.
-   * Sure dolarsa elde kalan son kur kullanilir, o da yoksa null doner ve
-   * fise TL satiri basilmaz.
+   * Bu yuzden en fazla 1,5 saniye beklenir. Istek IPTAL EDILMEZ, arka
+   * planda surup onbellegi isitir. Sure dolarsa fise TL satiri basilmaz.
    */
-  const sonBilinen = ratesCache && ratesCache.usd > 0 ? ratesCache.usd : null;
-
   let zamanlayici: ReturnType<typeof setTimeout> | undefined;
   const zamanAsimi = new Promise<null>((resolve) => {
     zamanlayici = setTimeout(() => resolve(null), RECEIPT_RATE_TIMEOUT_MS);
   });
 
-  const istek = fetchTcmbRates().then(
-    (rates) => (rates.usd > 0 ? rates.usd : null),
+  const istek = cozulmusKur().then(
+    (kur) => (kur.usd > 0 ? kur.usd : null),
     () => null
   );
 
   try {
-    const sonuc = await Promise.race([istek, zamanAsimi]);
-    return sonuc ?? sonBilinen;
+    return await Promise.race([istek, zamanAsimi]);
   } finally {
     if (zamanlayici) clearTimeout(zamanlayici);
   }
 }
 
 app.get('/api/exchange-rates', async () => {
-  const rates = await fetchTcmbRates();
+  /*
+   * Bu ucun donduğu kur SADECE gosterim degildir: TL ile girilen tahsilat
+   * bu kurdan dolara cevrilip cariye yazilir (frontend amountToStoredUsd).
+   * Bu yuzden `uyari` alani bos degilse arayuz bunu kullaniciya gostermek
+   * zorundadir — bayat kurla para islemi yapildigi gizlenmemeli.
+   */
+  const kur = await cozulmusKur();
   return {
     success: true,
     data: {
-      usd: rates.usd,
-      eur: rates.eur,
-      source: rates.source,
-      updatedAt: rates.updatedAt,
+      usd: kur.usd,
+      eur: kur.eur,
+      source: kur.source,
+      updatedAt: kur.updatedAt,
+      uyari: kur.uyari,
     },
     message: 'Exchange rates retrieved successfully.',
   };
@@ -7170,6 +7243,8 @@ app.get(
 async function start() {
   try {
     await ensureDepots();
+    // Harem kur akisi — baglanti arka planda kurulur, acilisi bekletmez.
+    haremBaslat();
     await app.listen({ port: PORT, host: '0.0.0.0' });
     app.log.info(`API sunucusu http://localhost:${PORT} adresinde çalışıyor`);
   } catch (error) {

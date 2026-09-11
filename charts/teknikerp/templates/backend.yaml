@@ -98,6 +98,9 @@ spec:
               value: {{ .Values.tenant.id | quote }}
             - name: TENANT_NAME
               value: {{ .Values.tenant.companyName | quote }}
+            # Harem kurunun uzerine eklenen fark (TL). Bkz. values.yaml.
+            - name: KUR_FARKI
+              value: {{ .Values.tenant.kurFarki | default 0 | quote }}
             - name: ADMIN_USERNAME
               value: {{ .Values.auth.adminUsername | quote }}
             - name: DATABASE_URL

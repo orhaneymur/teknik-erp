@@ -7,6 +7,7 @@ export function useExchangeRates(refreshMs = 30 * 60 * 1000) {
     eur: DEFAULT_EUR,
     source: 'varsayılan',
     updatedAt: new Date().toISOString(),
+    uyari: 'Kur yükleniyor.',
   });
   const [loading, setLoading] = useState(true);
 
