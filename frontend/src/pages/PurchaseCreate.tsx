@@ -11,6 +11,8 @@ import {
   ReceiptMoneyRow,
   ReceiptPlainRow,
   ReceiptItemsHead,
+  ReceiptPdf,
+  PdfMoneyLine,
 } from '../components/ReceiptSlip';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList, {
@@ -31,7 +33,6 @@ import {
 } from '../lib/api';
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
 import {
-  RECEIPT_DISCLAIMER,
   buildReceiptPartyLines,
   type ReceiptParty,
 } from '../lib/receiptParty';
@@ -643,29 +644,19 @@ export default function PurchaseCreate({
   return (
     <div className="space-y-4 print:space-y-0">
       <SavedBanner message={savedNotice} />
-      <div className="print-pdf-doc hidden">
-        <h1>{displayInvoiceNo || initData.nextInvoiceNo || 'Alış Fişi'}</h1>
-        {receiptPartyLines.length > 0 && (
-          <div className="pdf-party">
-            {receiptPartyLines.map((line) => (
-              <p key={line} className="pdf-party-line">
-                {line}
-              </p>
-            ))}
-          </div>
-        )}
-        <p className="pdf-meta">
-          {invoiceDate}
-          {processedBy ? ` · ${processedBy}` : ''}
-        </p>
-        <p className="pdf-meta">
-          {[settlementLabel, paymentType].filter(Boolean).join(' · ')}
-        </p>
-        {orderNotes.trim() && (
-          <div className="pdf-notes">
-            <strong>Açıklama:</strong> {orderNotes.trim()}
-          </div>
-        )}
+      {/* A4 / PDF — ortak çerçeve: components/ReceiptSlip.tsx */}
+      <ReceiptPdf
+        partyLines={receiptPartyLines}
+        title={displayInvoiceNo || initData.nextInvoiceNo || 'Alış Fişi'}
+        metaLines={[
+          [invoiceDate, processedBy ? `Alış: ${processedBy}` : '']
+            .filter(Boolean)
+            .join(' · '),
+          [settlementLabel, paymentType].filter(Boolean).join(' · '),
+        ]}
+        notes={orderNotes}
+        tryRate={receiptTryRate}
+      >
         <table>
           <thead>
             <tr>
@@ -691,18 +682,29 @@ export default function PurchaseCreate({
         </table>
         <div className="pdf-totals">
           <p>Toplam adet: {totalQuantity}</p>
-          <p className="pdf-grand">Net toplam: {formatUsd(totalUsd)}</p>
+          <PdfMoneyLine
+            label="Net toplam"
+            amountUsd={totalUsd}
+            tryRate={receiptTryRate}
+            grand
+          />
           {receiptBalance && (
             <>
-              <p>Önceki bakiye: {formatMoney(receiptBalance.before)}</p>
-              <p>
-                <strong>Güncel bakiye: {formatMoney(receiptBalance.after)}</strong>
-              </p>
+              <PdfMoneyLine
+                label="Önceki bakiye"
+                amountUsd={receiptBalance.before}
+                tryRate={receiptTryRate}
+              />
+              <PdfMoneyLine
+                label="Güncel bakiye"
+                amountUsd={receiptBalance.after}
+                tryRate={receiptTryRate}
+                grand
+              />
             </>
           )}
         </div>
-        <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
-      </div>
+      </ReceiptPdf>
 
       {/* Termal fiş — ortak çerçeve: components/ReceiptSlip.tsx */}
       <ReceiptSlip

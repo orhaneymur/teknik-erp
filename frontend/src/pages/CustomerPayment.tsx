@@ -31,9 +31,11 @@ import { useExchangeRates } from '../hooks/useExchangeRates';
 import {
   ReceiptSlip,
   ReceiptMoneyRow,
+  ReceiptPdf,
+  PdfMoneyLine,
 } from '../components/ReceiptSlip';
 import { printDocument } from '../lib/printMode';
-import { RECEIPT_DISCLAIMER, buildReceiptPartyLines } from '../lib/receiptParty';
+import { buildReceiptPartyLines } from '../lib/receiptParty';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
 
 type PaymentCurrency = 'USD' | 'TRY' | 'EUR';
@@ -638,46 +640,49 @@ export default function CustomerPayment({
     <div className="space-y-6 print:space-y-0">
       {printReceipt && (
         <>
-          <div className="print-pdf-doc hidden">
-            <h1>
-              {printReceipt.receiptNo?.trim() ||
-                (printReceipt.type === 'GIRIS' ? 'Tahsilat Fişi' : 'Ödeme Fişi')}
-            </h1>
-            <p className="pdf-meta">
-              {printReceipt.type === 'GIRIS' ? 'Tahsilat Fişi' : 'Ödeme Fişi'}
-            </p>
-            {printReceipt.partyLines.length > 0 ? (
-              <div className="pdf-party">
-                {printReceipt.partyLines.map((line) => (
-                  <p key={line} className="pdf-party-line">
-                    {line}
-                  </p>
-                ))}
-              </div>
-            ) : (
-              <p className="pdf-meta">{printReceipt.customerLabel}</p>
-            )}
-            <p className="pdf-meta">{formatDate(printReceipt.createdAt)}</p>
-            <p className="pdf-meta">Kasa: {printReceipt.safeName}</p>
-            {printReceipt.method && (
-              <p className="pdf-meta">Ödeme yöntemi: {printReceipt.method}</p>
-            )}
-            {printReceipt.description && (
-              <div className="pdf-notes">
-                <strong>Açıklama:</strong> {printReceipt.description}
-              </div>
-            )}
+          {/* A4 / PDF — ortak çerçeve: components/ReceiptSlip.tsx */}
+          <ReceiptPdf
+            partyLines={
+              printReceipt.partyLines.length > 0
+                ? printReceipt.partyLines
+                : [printReceipt.customerLabel]
+            }
+            title={printReceipt.type === 'GIRIS' ? 'Tahsilat Fişi' : 'Ödeme Fişi'}
+            metaLines={[
+              printReceipt.receiptNo?.trim()
+                ? `Fiş No: ${printReceipt.receiptNo.trim()}`
+                : '',
+              formatDate(printReceipt.createdAt),
+              `Kasa: ${printReceipt.safeName}`,
+              printReceipt.method ? `Ödeme yöntemi: ${printReceipt.method}` : '',
+            ]}
+            notes={printReceipt.description}
+            tryRate={printReceipt.tryRate}
+          >
             <div className="pdf-totals">
               {printReceipt.balanceBefore != null && (
-                <p>Önceki bakiye: {formatMoney(printReceipt.balanceBefore)}</p>
+                <PdfMoneyLine
+                  label="Önceki bakiye"
+                  amountUsd={printReceipt.balanceBefore}
+                  tryRate={printReceipt.tryRate}
+                />
               )}
-              <p className="pdf-grand">Tutar: {formatMoney(printReceipt.amount)}</p>
+              <PdfMoneyLine
+                label="Tutar"
+                amountUsd={printReceipt.amount}
+                tryRate={printReceipt.tryRate}
+                grand
+              />
               {printReceipt.balanceAfter != null && (
-                <p>Güncel bakiye: {formatMoney(printReceipt.balanceAfter)}</p>
+                <PdfMoneyLine
+                  label="Güncel bakiye"
+                  amountUsd={printReceipt.balanceAfter}
+                  tryRate={printReceipt.tryRate}
+                  grand
+                />
               )}
             </div>
-            <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
-          </div>
+          </ReceiptPdf>
           {/* Termal fiş — ortak çerçeve: components/ReceiptSlip.tsx */}
           <ReceiptSlip
             partyLines={

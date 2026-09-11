@@ -17,7 +17,12 @@ import {
 import { printDocument } from '../lib/printMode';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import InvoiceDetailModal from '../components/InvoiceDetailModal';
-import { ReceiptSlip, ReceiptMoneyRow } from '../components/ReceiptSlip';
+import {
+  ReceiptSlip,
+  ReceiptMoneyRow,
+  ReceiptPdf,
+  PdfMoneyLine,
+} from '../components/ReceiptSlip';
 import InvoiceInlineEditor, {
   isEditableInvoiceType,
   type EditableInvoiceRef,
@@ -471,20 +476,15 @@ export default function CustomerStatement({
 
   return (
     <div className="space-y-4 print:space-y-0">
-      <div className="print-pdf-doc hidden">
-        <h1>{printLines.length > 1 ? 'Toplu Ekstre Fişi' : 'Ekstre Fişi'}</h1>
-        {receiptPartyLines.length > 0 && (
-          <div className="pdf-party">
-            {receiptPartyLines.map((line) => (
-              <p key={line} className="pdf-party-line">
-                {line}
-              </p>
-            ))}
-          </div>
-        )}
-        <p className="pdf-meta">
-          {printLines.length} hareket · {new Date().toLocaleDateString('tr-TR')}
-        </p>
+      {/* A4 / PDF — ortak çerçeve: components/ReceiptSlip.tsx */}
+      <ReceiptPdf
+        partyLines={receiptPartyLines}
+        title={printLines.length > 1 ? 'Toplu Ekstre Fişi' : 'Ekstre Fişi'}
+        metaLines={[
+          `${printLines.length} hareket · ${new Date().toLocaleDateString('tr-TR')}`,
+        ]}
+        tryRate={receiptTryRate}
+      >
         {printLines.map((line) => (
           <div key={lineKey(line)} style={{ marginTop: 14 }}>
             {line.kind === 'invoice' ? (
@@ -549,18 +549,30 @@ export default function CustomerStatement({
         ))}
         <div className="pdf-totals">
           {printLines.length > 1 && (
-            <p className="pdf-grand">Genel toplam: {formatMoney(printTotal)}</p>
+            <PdfMoneyLine
+              label="Genel toplam"
+              amountUsd={printTotal}
+              tryRate={receiptTryRate}
+              grand
+            />
           )}
           {printBalance && (
             <>
-              <p>Önceki bakiye: {formatMoney(printBalance.before)}</p>
-              <p>
-                <strong>Güncel bakiye: {formatMoney(printBalance.after)}</strong>
-              </p>
+              <PdfMoneyLine
+                label="Önceki bakiye"
+                amountUsd={printBalance.before}
+                tryRate={receiptTryRate}
+              />
+              <PdfMoneyLine
+                label="Güncel bakiye"
+                amountUsd={printBalance.after}
+                tryRate={receiptTryRate}
+                grand
+              />
             </>
           )}
         </div>
-      </div>
+      </ReceiptPdf>
 
       {/* Termal fiş — ortak çerçeve: components/ReceiptSlip.tsx */}
       <ReceiptSlip

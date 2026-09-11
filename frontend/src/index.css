@@ -297,6 +297,66 @@
       line-height: 1.4;
     }
 
+    /*
+     * LOGO — A4'un en ustu. Termal fisteki ile ayni kaynak
+     * (tenant.logoUrl); dosya gelmediyse kesik cizgili yer tutucu.
+     */
+    .print-pdf-doc .pdf-logo {
+      margin: 0 0 6px;
+      text-align: center;
+    }
+
+    .print-pdf-doc .pdf-logo img {
+      display: inline-block;
+      max-width: 55mm;
+      max-height: 22mm;
+    }
+
+    .print-pdf-doc .pdf-logo-placeholder {
+      display: inline-block;
+      padding: 4px 18px;
+      border: 1px dashed #94a3b8;
+      font-size: 10pt;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      color: #64748b;
+    }
+
+    /*
+     * ALT BILGI — firmanin adi en altta, termal fisle ayni duzen.
+     * Musteri elindeki kagida bakinca kimden aldigini gorsun.
+     */
+    .print-pdf-doc .pdf-company {
+      margin: 20px 0 0;
+      text-align: center;
+      font-size: 13pt;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+
+    .print-pdf-doc .pdf-company-contact {
+      margin: 2px 0 0;
+      text-align: center;
+      font-size: 10pt;
+      color: #334155;
+    }
+
+    /* Kur dipnotu — TL rakamlarinin nereden ciktigini gosterir */
+    .print-pdf-doc .pdf-rate {
+      margin: 4px 0 0;
+      text-align: center;
+      font-size: 9pt;
+      color: #475569;
+    }
+
+    /* TL karsiligi — USD satirinin altinda, daha sonuk */
+    .print-pdf-doc .pdf-totals .pdf-tl {
+      margin: 0 0 6px;
+      font-size: 10pt;
+      color: #475569;
+      font-variant-numeric: tabular-nums;
+    }
+
     .print-pdf-doc h1 {
       margin: 0 0 4px;
       text-align: center;
@@ -386,9 +446,11 @@
     }
 
     .print-pdf-doc .pdf-disclaimer {
-      margin-top: 18px;
-      padding-top: 10px;
-      border-top: 1px dashed #94a3b8;
+      /*
+       * Ust cizgi kalkti: artik firma adi blogunun hemen altinda duruyor,
+       * cizgi araya girince alt bilgi ikiye bolunmus gorunuyordu.
+       */
+      margin-top: 8px;
       text-align: center;
       font-size: 9pt;
       font-weight: 600;

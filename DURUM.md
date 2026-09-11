@@ -61,6 +61,10 @@ karşılığı yazsın, en altta firma adı dursun, satış yapan kalsın.
 - Logo `tenant.logoUrl` ile gelir (ConfigMap). **Dosya henüz gelmedi**,
   şimdilik kesik çizgili `LOGO` yer tutucusu basılıyor; dosya gelince
   ConfigMap güncellenir, kod değişmez, sürüm çıkmaz.
+- **A4/PDF çıktısı da aynı düzene getirildi** (`ReceiptPdf`): logo, alttaki
+  firma adı, toplamların altında TL karşılığı, kur dipnotu. Önceden yalnızca
+  termal fiş elden geçmişti ve iki çıktı farklı görünüyordu. Bu arada iade
+  fişinin A4'ünde hiç basılmayan müşteri bloğu da eklendi.
 
 **TL karşılığı — `exchangeRate` alanına YAZILMADI, ayrı alan açıldı.**
 
@@ -422,10 +426,6 @@ Ayrıntı ve kalan işler: bu belgenin 8. bölümü.
       girer. Artık bu rakam müşterinin eline geçen fişe basılıyor. Fişte
       kur dipnot olarak yazdığı için gözden kaçmaz ama sabitin zamanla
       kayacağı akılda tutulmalı.
-- [ ] **A4/PDF çıktısı fiş düzeniyle eşitlenmedi** — 11 Eylül'de yalnızca
-      termal fiş elden geçti (müşterinin isteği oydu). Adres kaldırma A4'e
-      de yansıdı çünkü ortak fonksiyondan geliyor, ama logo, alttaki firma
-      adı ve TL karşılığı A4'te yok. İki çıktı şu an farklı görünüyor.
 - [ ] **`YEDEK PARÇA` kovası** — 1755 ürün (%33) bu genel kategoride;
       parça tipi söylemiyor. Fiyat listesinde bu dala girince tek uzun
       liste çıkar. Bölmek işi durdurmaz, sonra yapılabilir.

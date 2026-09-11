@@ -38,7 +38,6 @@ import {
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
 import {
-  RECEIPT_DISCLAIMER,
   buildReceiptPartyLines,
   type ReceiptParty,
 } from '../lib/receiptParty';
@@ -49,6 +48,8 @@ import {
   ReceiptMoneyRow,
   ReceiptPlainRow,
   ReceiptItemsHead,
+  ReceiptPdf,
+  PdfMoneyLine,
 } from '../components/ReceiptSlip';
 import { productDisplayName } from '../lib/productDisplayName';
 import { buildPageUrl } from '../lib/navigation';
@@ -947,28 +948,19 @@ export default function SalesReturn({
     return (
       <div className="space-y-4 print:space-y-0">
         <SavedBanner message={savedNotice} />
-        <div className="print-pdf-doc hidden">
-          <h1>{displayInvoiceNo || 'İade Fişi'}</h1>
-          {receiptPartyLines.length > 0 ? (
-            <div className="pdf-party">
-              {receiptPartyLines.map((line) => (
-                <p key={line} className="pdf-party-line">
-                  {line}
-                </p>
-              ))}
-            </div>
-          ) : (
-            editCustomerLabel && <p className="pdf-meta">{editCustomerLabel}</p>
-          )}
-          <p className="pdf-meta">
-            {editInvoiceDate}
-            {editProcessedBy ? ` · ${editProcessedBy}` : ''}
-          </p>
-          {editNotes.trim() && (
-            <div className="pdf-notes">
-              <strong>Açıklama:</strong> {editNotes.trim()}
-            </div>
-          )}
+        {/* A4 / PDF — ortak çerçeve: components/ReceiptSlip.tsx */}
+        <ReceiptPdf
+          partyLines={receiptPartyLines}
+          title={displayInvoiceNo || 'İade Fişi'}
+          metaLines={[
+            receiptPartyLines.length === 0 ? editCustomerLabel : '',
+            [editInvoiceDate, editProcessedBy ? `İşlem: ${editProcessedBy}` : '']
+              .filter(Boolean)
+              .join(' · '),
+          ]}
+          notes={editNotes}
+          tryRate={receiptTryRate}
+        >
           <table>
             <thead>
               <tr>
@@ -994,18 +986,29 @@ export default function SalesReturn({
           </table>
           <div className="pdf-totals">
             <p>Toplam adet: {editTotalQty}</p>
-            <p className="pdf-grand">Net toplam: {formatUsd(editTotalTl)}</p>
+            <PdfMoneyLine
+              label="Net toplam"
+              amountUsd={editTotalTl}
+              tryRate={receiptTryRate}
+              grand
+            />
             {editReceiptBalance && (
               <>
-                <p>Önceki bakiye: {formatMoney(editReceiptBalance.before)}</p>
-                <p>
-                  <strong>Güncel bakiye: {formatMoney(editReceiptBalance.after)}</strong>
-                </p>
+                <PdfMoneyLine
+                  label="Önceki bakiye"
+                  amountUsd={editReceiptBalance.before}
+                  tryRate={receiptTryRate}
+                />
+                <PdfMoneyLine
+                  label="Güncel bakiye"
+                  amountUsd={editReceiptBalance.after}
+                  tryRate={receiptTryRate}
+                  grand
+                />
               </>
             )}
           </div>
-          <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
-        </div>
+        </ReceiptPdf>
 
         {/*
           Termal fiş — ortak çerçeve: components/ReceiptSlip.tsx
@@ -1362,14 +1365,17 @@ export default function SalesReturn({
   return (
     <div className="space-y-4 print:space-y-0">
       <SavedBanner message={savedNotice} />
-      <div className="print-pdf-doc hidden">
-        <h1>{displayInvoiceNo || 'İade Fişi'}</h1>
-        <p className="pdf-meta">Satış iade · {settlementLabel}</p>
-        {orderNotes.trim() && (
-          <div className="pdf-notes">
-            <strong>Açıklama:</strong> {orderNotes.trim()}
-          </div>
-        )}
+      {/*
+        A4 / PDF — ortak çerçeve: components/ReceiptSlip.tsx
+        Müşteri bloğu eklendi: termal fişte vardı, A4'te unutulmuştu.
+      */}
+      <ReceiptPdf
+        partyLines={receiptPartyLines}
+        title={displayInvoiceNo || 'İade Fişi'}
+        metaLines={[`Satış iade · ${settlementLabel}`]}
+        notes={orderNotes}
+        tryRate={receiptTryRate}
+      >
         <table>
           <thead>
             <tr>
@@ -1395,18 +1401,29 @@ export default function SalesReturn({
         </table>
         <div className="pdf-totals">
           <p>Toplam adet: {totalQuantity}</p>
-          <p className="pdf-grand">Net toplam: {formatUsd(totalUsd)}</p>
+          <PdfMoneyLine
+            label="Net toplam"
+            amountUsd={totalUsd}
+            tryRate={receiptTryRate}
+            grand
+          />
           {receiptBalance && (
             <>
-              <p>Önceki bakiye: {formatMoney(receiptBalance.before)}</p>
-              <p>
-                <strong>Güncel bakiye: {formatMoney(receiptBalance.after)}</strong>
-              </p>
+              <PdfMoneyLine
+                label="Önceki bakiye"
+                amountUsd={receiptBalance.before}
+                tryRate={receiptTryRate}
+              />
+              <PdfMoneyLine
+                label="Güncel bakiye"
+                amountUsd={receiptBalance.after}
+                tryRate={receiptTryRate}
+                grand
+              />
             </>
           )}
         </div>
-        <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
-      </div>
+      </ReceiptPdf>
 
       {/* Termal fiş — ortak çerçeve: components/ReceiptSlip.tsx */}
       <ReceiptSlip

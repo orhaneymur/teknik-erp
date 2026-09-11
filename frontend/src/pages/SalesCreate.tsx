@@ -14,6 +14,8 @@ import {
   ReceiptMoneyRow,
   ReceiptPlainRow,
   ReceiptItemsHead,
+  ReceiptPdf,
+  PdfMoneyLine,
 } from '../components/ReceiptSlip';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList, {
@@ -37,7 +39,6 @@ import {
 import { recordF2ProductSelection } from '../lib/f2LastProduct';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
 import {
-  RECEIPT_DISCLAIMER,
   buildReceiptPartyLines,
   type ReceiptParty,
 } from '../lib/receiptParty';
@@ -958,32 +959,21 @@ export default function SalesCreate({
           onDismiss={() => setAlternatives(null)}
         />
       )}
-      {/* PDF / A4 — geniş düzen */}
-      <div className="print-pdf-doc hidden">
-        <h1>{displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}</h1>
-        {receiptPartyLines.length > 0 && (
-          <div className="pdf-party">
-            {receiptPartyLines.map((line) => (
-              <p key={line} className="pdf-party-line">
-                {line}
-              </p>
-            ))}
-          </div>
-        )}
-        <p className="pdf-meta">
-          {invoiceDate}
-          {processedBy ? ` · ${processedBy}` : ''}
-        </p>
-        <p className="pdf-meta">
-          {[paymentMethod, paymentType, deliveryType, isPreOrder ? 'Ön Sipariş' : '']
+      {/* A4 / PDF — ortak çerçeve: components/ReceiptSlip.tsx */}
+      <ReceiptPdf
+        partyLines={receiptPartyLines}
+        title={displayInvoiceNo || initData.nextInvoiceNo || 'Satış Fişi'}
+        metaLines={[
+          [invoiceDate, processedBy ? `Satış: ${processedBy}` : '']
             .filter(Boolean)
-            .join(' · ')}
-        </p>
-        {orderNotes.trim() && (
-          <div className="pdf-notes">
-            <strong>Açıklama:</strong> {orderNotes.trim()}
-          </div>
-        )}
+            .join(' · '),
+          [paymentMethod, paymentType, deliveryType, isPreOrder ? 'Ön Sipariş' : '']
+            .filter(Boolean)
+            .join(' · '),
+        ]}
+        notes={orderNotes}
+        tryRate={receiptTryRate}
+      >
         <table>
           <thead>
             <tr>
@@ -1010,18 +1000,29 @@ export default function SalesCreate({
         </table>
         <div className="pdf-totals">
           <p>Toplam adet: {totalQuantity}</p>
-          <p className="pdf-grand">Net toplam: {formatUsd(totalUsd)}</p>
+          <PdfMoneyLine
+            label="Net toplam"
+            amountUsd={totalUsd}
+            tryRate={receiptTryRate}
+            grand
+          />
           {receiptBalance && (
             <>
-              <p>Önceki bakiye: {formatMoney(receiptBalance.before)}</p>
-              <p>
-                <strong>Güncel bakiye: {formatMoney(receiptBalance.after)}</strong>
-              </p>
+              <PdfMoneyLine
+                label="Önceki bakiye"
+                amountUsd={receiptBalance.before}
+                tryRate={receiptTryRate}
+              />
+              <PdfMoneyLine
+                label="Güncel bakiye"
+                amountUsd={receiptBalance.after}
+                tryRate={receiptTryRate}
+                grand
+              />
             </>
           )}
         </div>
-        <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
-      </div>
+      </ReceiptPdf>
 
       {/*
         Termal fiş (72,1mm rulo / 68mm baskı alanı).

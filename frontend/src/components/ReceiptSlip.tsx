@@ -158,3 +158,104 @@ export function ReceiptItemsHead() {
     </div>
   );
 }
+
+/**
+ * A4 / PDF ciktisinin ORTAK CERCEVESI.
+ *
+ * Termal fisin (ReceiptSlip) genis sayfa karsiligi. Ayni bes ekran ayni
+ * anda iki cikti uretir: kullanici yazdirma diyalogunda fis yazicisini
+ * secerse ReceiptSlip, A4/PDF secerse bu basilir (bkz. index.css'teki
+ * genislik esigi, 120mm).
+ *
+ * Ikisi AYNI BILGIYI tasimali. 11 Eylul 2026'da once yalnizca termal fis
+ * elden gecirilmisti; A4'te logo, alttaki firma adi ve TL karsiligi
+ * eksik kalmis, ayni musteri iki farkli gorunumde kagit alir olmustu.
+ */
+export function ReceiptPdf({
+  partyLines,
+  title,
+  metaLines,
+  notes,
+  tryRate,
+  children,
+}: {
+  partyLines: string[];
+  title: string;
+  metaLines: Array<string | null | undefined>;
+  notes?: string | null;
+  tryRate?: number | null;
+  children: ReactNode;
+}) {
+  const tenant = getTenantConfig();
+  const meta = metaLines.map((line) => line?.trim()).filter(Boolean) as string[];
+  const note = notes?.trim();
+  const rateNote = tryRateNote(tryRate);
+
+  return (
+    <div className="print-pdf-doc hidden">
+      <div className="pdf-logo">
+        {tenant.logoUrl ? (
+          <img src={tenant.logoUrl} alt="" />
+        ) : (
+          <span className="pdf-logo-placeholder">LOGO</span>
+        )}
+      </div>
+
+      <h1>{title}</h1>
+
+      {partyLines.length > 0 && (
+        <div className="pdf-party">
+          {partyLines.map((line) => (
+            <p key={line} className="pdf-party-line">
+              {line}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {meta.map((line) => (
+        <p key={line} className="pdf-meta">
+          {line}
+        </p>
+      ))}
+
+      {note && (
+        <div className="pdf-notes">
+          <strong>Açıklama:</strong> {note}
+        </div>
+      )}
+
+      {children}
+
+      <p className="pdf-company">{tenant.companyName}</p>
+      {tenant.companyContact && (
+        <p className="pdf-company-contact">{tenant.companyContact}</p>
+      )}
+      {rateNote && <p className="pdf-rate">{rateNote}</p>}
+      <p className="pdf-disclaimer">{RECEIPT_DISCLAIMER}</p>
+    </div>
+  );
+}
+
+/** A4 toplam satiri — altinda TL karsiligi (kur varsa). */
+export function PdfMoneyLine({
+  label,
+  amountUsd,
+  tryRate,
+  grand = false,
+}: {
+  label: string;
+  amountUsd: number;
+  tryRate?: number | null;
+  grand?: boolean;
+}) {
+  const tl = tryEquivalent(amountUsd, tryRate);
+  return (
+    <>
+      <p className={grand ? 'pdf-grand' : undefined}>
+        {label}: {formatUsd(amountUsd)}
+      </p>
+      {tl && <p className="pdf-tl">≈ {tl}</p>}
+    </>
+  );
+}
