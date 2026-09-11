@@ -266,35 +266,40 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 
 ### Sıradaki adım
 
-> **v1.21.4 fiş, Harem kuru, 7 hata düzeltmesi, Excel başlıkları ve fiyat listesi açıklamasını taşır.** Müşteri kararıyla
-> (11 Eylül) kur Cumartesi'ye bırakılmadı; v1.20.0 ve v1.21.0 provaya hiç
-> kurulmadan v1.21.1'e geçildi; A4 çıktısı da aynı düzene alındı.
-> İki değişiklik birden devreye giriyor: yeni fiş düzeni ve para hesabına
-> dokunan kur. Provada ikisi de denenmeden canlıya geçilmemeli.
+> **11 Eylül akşamı itibarıyla prova ve canlı v1.21.4 + fiyat v1.6.0.**
+> İki ortam da sıfırlanıp Excel yeniden yüklendi. 12 Eylül sabahı gerçek
+> kullanım başlıyor.
 
-1. **Excel'deki 5 mükerrer adı incele** — renk/kalite farklıysa bırak,
-   birebir aynıysa stoksuz olanı sil (uygulamadan, kalıcı sil).
-2. **Provaya kur:**
-   `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.21.4 shenzhen-test`
-   Bu adım provada `prisma migrate deploy` çalıştırır, şema orada değişir
-   (`Invoice.tryRate`, `Transaction.tryRate`).
-3. **Kur geldi mi:** `/api/exchange-rates` çıktısında
-   `"source": "Harem +0,20"` ve `"uyari": null` görünmeli. Fark varsayılan
-   olduğu için ayrıca `--set` gerekmez. Görünmüyorsa backend logunda
-   `[harem]` satırlarına bak — `baglanti kuruldu` yazmalı.
-4. **Provada fiş bas — hem termal hem A4.** Punto okunuyor mu, kağıt boyu
-   makul mü, `LOGO` kutusu ve alttaki firma adı yerinde mi, `≈ ... TL`
-   satırları ve kur dipnotu doğru mu, AÇIKLAMA çerçevesi çıkıyor mu,
-   müşteri adresi gitmiş mi. Ölçü bozulduysa canlıya GEÇME.
-   Baskıdan önce masaüstünde denemek için: scratchpad klasöründeki
-   `fis-onizleme.html` ve `a4-onizleme.html` (index.css'ten birebir kopya).
-5. **TL ile bir tahsilat gir** — bu sürümün para hesabına dokunan tek
-   yeri burası. 10.000 TL girip cariye yazılan doları kontrol et:
-   `10000 / 48,698` ≈ 205,35 $ olmalı, `10000 / 48,498` ≈ 206,19 $ DEĞİL.
-   Tutmuyorsa fark uygulanmamış demektir.
-6. Sorun yoksa aynı komut `shenzhen` ile.
-7. Deneme satışı kes → sil (stok geri dönüyor mu), fiyat listesi sitesini
-   aç (iki dakika sonra ürünler geliyor mu).
+**İlk gün izlenecekler** — bunlar denendi ama gerçek kullanımda tekrar
+görülmeli:
+
+1. **Mükerrer fiş** — "Kaydet"e ikinci kez basınca ikinci fatura
+   açılmamalı; üstte "kaydedildi · tekrar Kaydet aynı fişi günceller"
+   yazmalı. Yeni satış için **"Yeni Fiş"** düğmesi kullanılır. Personele
+   bunun söylenmesi gerekir: alışkanlık eski davranışa göre.
+2. **TL tahsilat** — 10.000 TL girişi cariye ≈ **205,3 $** yazmalı
+   (kur Harem satış + 0,20). 206,2 $ çıkıyorsa fark uygulanmamış demektir.
+3. **Kur akışı** — `kubectl logs -n tenant-shenzhen deploy/teknikerp-backend | grep harem`
+   içinde `baglanti kuruldu` olmalı. Harem belgelenmemiş bir akış;
+   susarsa fiş TL'siz basılır ve ekranda "kur güncellenmedi" uyarısı
+   çıkar. O noktada `altinapi.com` ($19/ay) yedek plan.
+4. **Alış sonrası satış fiyatı** — bir ürün alıp satış fiyatına bak,
+   değişmemeli. Eski hatanın tekrarı en pahalı olanı.
+
+### Bekleyen küçük işler
+
+- [ ] **5 mükerrer ad** — Excel dosyasının kendi içinde aynı adla iki kez
+      yazılmış satırlardan geliyor. Sorgu bu belgede; renk/kalite
+      farklıysa bırak, birebir aynıysa stoksuz olanı kalıcı sil.
+- [ ] **Logo dosyası** — fişte ve A4'te yeri hazır, şimdilik kesik
+      çizgili `LOGO` yer tutucusu basılıyor. Dosya gelince yalnızca
+      ConfigMap güncellenir, sürüm çıkmaz:
+      `helm upgrade teknikerp charts/teknikerp -n tenant-shenzhen --reuse-values --set-string tenant.logoUrl="data:image/png;base64,..."`
+      İstenen: saf siyah-beyaz PNG, ~512 piksel genişlik.
+- [ ] **Excel `Bakiye` sütunu tuzağı** — sütun dosyada YOKSA bütün
+      stoklar sıfırlanır (`Marka`/`Model`'deki "sütun yoksa dokunma"
+      koruması burada yok). Müşteri kararıyla şimdilik böyle bırakıldı.
+      Kısmi dosya yüklenecekse akılda tutulmalı.
 
 ### Yapıldı (10 Eylül)
 
@@ -373,10 +378,10 @@ Doğrulama: `backend/prisma/excel-kod-test.ts` (yerel MySQL kabıyla).
 
 | Adres | Ortam | Sürüm | Ne için |
 |---|---|---|---|
-| `teknik.shenzhenmarket.com.tr` | **CANLI MÜŞTERİ** | **v1.19.0** (kurulum teyit edilmeli) | Shenzhen Market — 12 Eylül'de gerçek kullanım başlıyor |
-| `liste.shenzhenmarket.com.tr` | **CANLI** | fiyat **v1.5.0** | Müşterinin kendi müşterilerine gönderdiği açık fiyat listesi |
-| `test.shenzhenmarket.com.tr` | Prova | v1.19.0 | Güncellemeler önce burada denenir |
-| `shenzhen-test-liste.derneklab.com` | Prova | fiyat **v1.4.0** — canlının GERİSİNDE | Fiyat listesi provası |
+| `teknik.shenzhenmarket.com.tr` | **CANLI MÜŞTERİ** | **v1.21.4** | Shenzhen Market — 12 Eylül'de gerçek kullanım başladı |
+| `liste.shenzhenmarket.com.tr` | **CANLI** | fiyat **v1.6.0** | Müşterinin kendi müşterilerine gönderdiği açık fiyat listesi |
+| `test.shenzhenmarket.com.tr` | Prova | v1.21.4 | Güncellemeler önce burada denenir |
+| `shenzhen-test-liste.derneklab.com` | Prova | fiyat **v1.6.0** | Fiyat listesi provası |
 | `demo-erp.derneklab.com` | Vitrin | v1.9.2 | Müşteriye ürün gösterme |
 
 Namespace'ler ayrı: ayrı veritabanı, ayrı disk, ayrı şifre. ERP ve fiyat
