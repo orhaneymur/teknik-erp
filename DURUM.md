@@ -46,7 +46,8 @@ dokunulmayacak, birebir aynıysa stoksuz olan silinecek.
 > hâlde geri yükle. Boş tabloya yüklerken sütunların boş olması doğrudur —
 > o tek seferliktir.
 
-**Fiş yeniden tasarlandı (v1.20.0 — HENÜZ ÇIKMADI).**
+**Fiş yeniden tasarlandı.** İmajlar v1.20.0 olarak çıkarıldı, sonra
+Harem kuruyla birlikte v1.21.0'a toplandı.
 
 Müşteri isteği: puntolar büyüsün, müşteri adresi çıkmasın, üstte logo
 alanı olsun, açıklama yazılmışsa görünsün, net toplam ve iki bakiyede TL
@@ -98,7 +99,7 @@ Kur kaynaklarının ikisi de erişilemez hâle getirilip tekrar denendi:
 satış **1.611 ms**'de bitti, `tryRate` null kaldı, **tutar ve bakiye
 etkilenmedi**.
 
-**Harem kuru yazıldı (v1.21.0 — HENÜZ ÇIKMADI, imaja girmedi).**
+**Harem kuru yazıldı — v1.21.0.**
 
 Müşteri isteği: kurlar Harem Altın'dan gelsin, üzerine 0,20 eklensin.
 Kararlar: **satış kuru + 0,20**, hem fişte hem TL tahsilat çevriminde,
@@ -156,21 +157,32 @@ kurla para işlemi yapıldığı gizlenmiyor.
 
 ### Sıradaki adım
 
+> **v1.21.0 hem fişi hem Harem kurunu taşır.** Müşteri kararıyla
+> (11 Eylül) kur Cumartesi'ye bırakılmadı; v1.20.0 provaya hiç
+> kurulmadan v1.21.0'a geçildi. Yani açılış günü iki değişiklik birden
+> devreye giriyor — provada ikisi de denenmeden canlıya GEÇİLMEMELİ.
+
 1. **Excel'deki 5 mükerrer adı incele** — renk/kalite farklıysa bırak,
    birebir aynıysa stoksuz olanı sil (uygulamadan, kalıcı sil).
-2. **v1.20.0 imajlarını çıkar:** `bash k8s/build-images.sh v1.20.0`
-3. **Provaya kur:** `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.20.0 shenzhen-test`
-   Bu adım provada `prisma migrate deploy` çalıştırır, şema orada değişir.
-4. **Provada fiş bas** — punto okunuyor mu, TL satırı doğru mu, kağıt boyu
-   makul mü. Ölçü bozulduysa canlıya GEÇME.
-5. Sorun yoksa aynı komut `shenzhen` ile.
-6. Deneme satışı kes → sil (stok geri dönüyor mu), fiyat listesi sitesini
+2. **Provaya kur:**
+   `cd /root/teknikerp && git pull && bash k8s/update-all-tenants.sh v1.21.0 shenzhen-test`
+   Bu adım provada `prisma migrate deploy` çalıştırır, şema orada değişir
+   (`Invoice.tryRate`, `Transaction.tryRate`).
+3. **Kur geldi mi:** `/api/exchange-rates` çıktısında
+   `"source": "Harem +0,20"` ve `"uyari": null` görünmeli. Fark varsayılan
+   olduğu için ayrıca `--set` gerekmez. Görünmüyorsa backend logunda
+   `[harem]` satırlarına bak — `baglanti kuruldu` yazmalı.
+4. **Provada fiş bas** — punto okunuyor mu, kağıt boyu makul mü, `LOGO`
+   kutusu ve alttaki firma adı yerinde mi, `≈ ... TL` satırları ve kur
+   dipnotu doğru mu, AÇIKLAMA çerçevesi çıkıyor mu, müşteri adresi
+   gitmiş mi. Ölçü bozulduysa canlıya GEÇME.
+5. **TL ile bir tahsilat gir** — bu sürümün para hesabına dokunan tek
+   yeri burası. 10.000 TL girip cariye yazılan doları kontrol et:
+   `10000 / 48,698` ≈ 205,35 $ olmalı, `10000 / 48,498` ≈ 206,19 $ DEĞİL.
+   Tutmuyorsa fark uygulanmamış demektir.
+6. Sorun yoksa aynı komut `shenzhen` ile.
+7. Deneme satışı kes → sil (stok geri dönüyor mu), fiyat listesi sitesini
    aç (iki dakika sonra ürünler geliyor mu).
-7. **Cumartesi geçtikten sonra v1.21.0** — Harem kuru. Kurulumdan sonra
-   provada `/api/exchange-rates` çıktısında `"source": "Harem +0,20"`
-   görünmeli. Fark artık varsayılan olduğu için ayrıca `--set` gerekmez;
-   görünmüyorsa pod'a `KUR_FARKI` ulaşmamış ve kod varsayılanı da
-   devrede değil demektir — logda `[harem]` satırlarına bak.
 
 ### Yapıldı (10 Eylül)
 
