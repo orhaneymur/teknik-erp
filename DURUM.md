@@ -291,11 +291,22 @@ görülmeli:
 - [ ] **5 mükerrer ad** — Excel dosyasının kendi içinde aynı adla iki kez
       yazılmış satırlardan geliyor. Sorgu bu belgede; renk/kalite
       farklıysa bırak, birebir aynıysa stoksuz olanı kalıcı sil.
-- [ ] **Logo dosyası** — fişte ve A4'te yeri hazır, şimdilik kesik
-      çizgili `LOGO` yer tutucusu basılıyor. Dosya gelince yalnızca
-      ConfigMap güncellenir, sürüm çıkmaz:
-      `helm upgrade teknikerp charts/teknikerp -n tenant-shenzhen --reuse-values --set-string tenant.logoUrl="data:image/png;base64,..."`
-      İstenen: saf siyah-beyaz PNG, ~512 piksel genişlik.
+- [x] ~~**Logo dosyası**~~ — **kuruldu (12 Eylül sabahı, canlı revision 12).**
+      Müşterinin verdiği dosya 288×288 ama **24 bit renkli, kromlu
+      degradeli** bir "A" idi (17.542 renk, piksellerin %15'i orta gri) —
+      termal kafa 1 bit bastığı için fişte benek bulutu olurdu.
+      Siluete çevrildi: kenardan taşan beyaz arka plan sayıldı, içeride
+      hapsolmuş 52 ince parlama dolduruldu, A'nın göbeğindeki boşluk
+      korundu. Sonuç **71 KB → 1,6 KB**, data URI 95 KB → 2 KB.
+      Üretim betiği yok; gerekirse Pillow ile eşikleme + kenar taşma
+      dolgusu yeniden yapılır. Kaynak: `~/Desktop/logo.png` (renkli
+      orijinal) ve `~/Desktop/logo-fis.png` (siluet).
+
+      Logo KODA GİRMEZ, ConfigMap'te yaşar:
+      `helm upgrade teknikerp charts/teknikerp -n <ns> --reuse-values --set-file tenant.logoUrl=/root/logo-datauri.txt`
+      ardından `kubectl rollout restart deploy/teknikerp-frontend -n <ns>`.
+      Kaldırmak için `--set-string tenant.logoUrl=""`.
+
 - [ ] **Excel `Bakiye` sütunu tuzağı** — sütun dosyada YOKSA bütün
       stoklar sıfırlanır (`Marka`/`Model`'deki "sütun yoksa dokunma"
       koruması burada yok). Müşteri kararıyla şimdilik böyle bırakıldı.
