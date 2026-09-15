@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **v1.22.2 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
-> (v1.22.0 da Docker Hub'da; v1.22.1 onu kapsar, doğrudan v1.22.1 kurulur.)
+> **v1.22.3 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
+> (v1.22.0–v1.22.2 de Docker Hub'da; v1.22.3 hepsini kapsar, doğrudan o kurulur.)
 
 ### Yapıldı (14–15 Eylül)
 
@@ -71,6 +71,31 @@ Doğrulama: `anasayfa-f2-test.ts` (12 kontrol — 00:30'daki satış bugüne
 yazılıyor, 15 gün önceki haftaya girmiyor). Koşucu artık `TZ` verir;
 Git Bash bunu Windows süreçlerine geçirmez, orada makinenin saat dilimi
 (Türkiye, UTC+3) geçerlidir.
+
+**v1.22.2 / v1.22.3 — provada çıkan yükleme sorunu.** Prova v1.22.1'de
+5.439 satırlık Excel yüklemesi tarayıcıya hiç "bitti" diyemedi; sunucuda
+istek 40 dakika açık kaldı, hiçbir satır yazılmadı (`updatedAt` 0), pod
+sağ (RESTARTS 0), MySQL boş, log'da hata yok. Yerelde aynı dosya 57 sn'de
+sorunsuz (tepe bellek 396 MB — chart sınırı 256 MB, ama OOM olmadı).
+Kesin sebep sunucuda görülemedi; kesinleşen şey **Cloudflare'in 100 sn
+sınırı**: dakikalar süren istek o yoldan sonuç döndüremez.
+
+Çözüm mimari: yükleme **arka plana** alındı. `POST …/import/excel` dosyayı
+alıp hemen `202 + jobId` döner; iş sunucuda sürer;
+`GET …/import/excel/durum/:id` aşama / işlenen / toplam / süre verir. Ekran
+2 sn'de bir sorar, "kayıtlar yazılıyor · 1.250 / 5.439 satır · 48 sn"
+gösterir, sonucu kalıcı kutuda tutar (v1.22.2'de eklendi; üst bildirim 4
+sn'de kaybolduğu için sonuç görülmüyordu). Aynı anda tek yükleme (409).
+Sunucu logu `[excel <id>] asama n/m` yazar — bir daha "nerede takıldı"
+sorusu kör kalmaz. İş bellekte 1 saat durur; pod yeniden başlarsa durum
+404 döner, ekran "sonucu listeden doğrula" der.
+
+Doğrulama: `excel-arkaplan-test.ts` (11 kontrol). Yerelde gerçek boyut
+(5.480 satır, 3,6 MB indirilen dosya): boş tabloya 51 sn, dolu tabloya
+57 sn, ön kontrol 1,4 sn. Sunucu ~10× yavaş (ön kontrol 13 sn ölçüldü).
+
+> Sunucuda yükleme yine takılırsa log artık nerede durduğunu söyler:
+> `kubectl logs -n <ns> deploy/teknikerp-backend --since=1h | grep "\[excel"`
 
 **Kasa — açılış kayıtları.** 11 Eylül akşamı 50 adet "ESKİ SİSTEMDEN
 AKTARILDI" kaydı: borçlu müşteriler tediye (ÇIKIŞ, 26.372 $), alacaklılar
@@ -335,12 +360,12 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 
 ### Sıradaki adım
 
-> **v1.22.2 provaya, sonra canlıya.** Canlı ve prova şu an v1.21.4.
+> **v1.22.3 provaya, sonra canlıya.** Canlı v1.21.4, prova v1.22.2.
 > Prova 15 Eylül 07:30'da canlının kopyasıyla dolduruldu (BIREBIR TUTTU).
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.2 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.3 shenzhen-test`
 4. Provada dene:
    - Stok Listesi → Excel İndir → **değiştirmeden** Excel Yükle → katman
      farkı sorgusu (aşağıda) **0** olmalı
@@ -352,7 +377,7 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
    - Satış ekranında F2 → "iph 11" yaz: önce ekranlar, sonra piller;
      Net Toplam'ın altında TL satırı
    - Anasayfa: "Bugün satış" bugünün fişlerini toplamalı, "Bu hafta" kartı
-5. Canlıya: `bash k8s/update-all-tenants.sh v1.22.2 shenzhen`, ardından
+5. Canlıya: `bash k8s/update-all-tenants.sh v1.22.3 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):
