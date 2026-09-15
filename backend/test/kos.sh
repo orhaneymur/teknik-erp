@@ -46,6 +46,7 @@ BETIKLER=(
   "kasa-hareket-test:evet"
   "anasayfa-f2-test:evet"
   "musteri-kodu-test:evet"
+  "on-siparis-test:evet"
   "duzeltmeler-test:evet"
   "fis-kur-test:evet"
   "harem-kur-test:evet"

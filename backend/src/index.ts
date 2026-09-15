@@ -3324,6 +3324,13 @@ app.post<{ Params: { id: string } }>(
 
         const merkezDepoId = await getDepotBranchId(tx, 'MERKEZ');
 
+        /*
+         * Stokla birlikte FIFO katmani da tuketilir ve satirin maliyeti o
+         * anda dondurulur — duzenleme ucundaki (on siparis -> satis)
+         * donusumle ayni kural. 15 Eylul 2026'ya kadar burada yalnizca stok
+         * dusuyordu: tamamlanan on siparisler kar raporunda MALIYETSIZ
+         * gorunuyor, urunlerde stok ile katman ayrisiyordu.
+         */
         for (const item of existing.items) {
           await adjustStockQuantity(
             tx,
@@ -3331,6 +3338,20 @@ app.post<{ Params: { id: string } }>(
             merkezDepoId,
             -item.quantity
           );
+          const urun = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { costPrice: true },
+          });
+          const birimMaliyet = await lotTuket(tx, {
+            productId: item.productId,
+            branchId: merkezDepoId,
+            quantity: item.quantity,
+            varsayilanMaliyet: urun?.costPrice ?? 0,
+          });
+          await tx.invoiceItem.update({
+            where: { id: item.id },
+            data: { unitCost: birimMaliyet },
+          });
         }
 
         /*
