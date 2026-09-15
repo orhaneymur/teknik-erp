@@ -12,6 +12,11 @@ import { useCallback, useRef, type KeyboardEvent } from 'react';
  *   Sol / Sağ        aynı satırda sütun değiştirir, satır sonunda
  *                    komşu satıra geçer
  *
+ * Yön tuşları HER ZAMAN hücre değiştirir, kutunun içinde imleç gezdirmez
+ * (müşteri isteği, 16 Eylül 2026: "9,17 yazdım, sol tuşu adet kutusuna
+ * götürsün"). Gelinen hücrenin değeri tümüyle seçilir; yazılan ilk rakam
+ * eskisini siler. Metin içinde düzeltme gerekiyorsa fare ya da Home/End.
+ *
  * Sütun listesi ekrana göre değişir (satışta iskonto/adet/fiyat, alışta
  * adet/fiyat) ve bir satırda o sütun hiç çizilmemiş olabilir — iade
  * ekranında birim fiyat yalnızca elle girilen satırlarda vardır. Bu yüzden
@@ -22,19 +27,6 @@ import { useCallback, useRef, type KeyboardEvent } from 'react';
 export type CartGridField = string;
 
 const ARROW_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
-
-/**
- * İmleç metnin ucunda mı? Tümü seçiliyse (hücreye yeni gelinmiştir) de
- * uçta sayılır, yön tuşu ilk basışta komşu hücreye geçsin.
- */
-function atTextEdge(input: HTMLInputElement, key: string) {
-  const start = input.selectionStart;
-  const end = input.selectionEnd;
-  if (start == null || end == null) return true;
-  const length = input.value.length;
-  if (start === 0 && end === length) return true;
-  return key === 'ArrowLeft' ? start === 0 && end === 0 : start === length && end === length;
-}
 
 function fieldKey(rowId: string, field: CartGridField) {
   return `${rowId}:${field}`;
@@ -63,6 +55,14 @@ export function useCartGridKeyboardNav(
     if (!el || el.disabled || el.readOnly) return false;
     el.focus();
     el.select();
+    /*
+     * Terk edilen hücre blur'da taslağını bırakıp yeniden çizilir; o çizim
+     * bazen bu hücrenin seçimini düşürüyordu ve yazılan rakam eskisinin
+     * ucuna ekleniyordu ("9,179,18"). Bir kare sonra seçimi yenile.
+     */
+    requestAnimationFrame(() => {
+      if (document.activeElement === el) el.select();
+    });
     return true;
   }, []);
 
@@ -124,13 +124,6 @@ export function useCartGridKeyboardNav(
       const rowIndex = rowIds.indexOf(rowId);
       const fieldIndex = fieldOrder.indexOf(field);
       if (rowIndex < 0 || fieldIndex < 0) return;
-
-      if (!isEnter && (key === 'ArrowLeft' || key === 'ArrowRight')) {
-        // Yazının içinde imleç gezebilsin: hücre değiştirme yalnızca imleç
-        // metnin ucundayken ya da değer tümüyle seçiliyken (hücreye yeni
-        // gelindiğinde olduğu gibi) devreye girer.
-        if (!atTextEdge(e.currentTarget, key)) return;
-      }
 
       e.preventDefault();
 

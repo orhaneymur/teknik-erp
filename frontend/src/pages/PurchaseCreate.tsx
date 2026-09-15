@@ -455,32 +455,24 @@ export default function PurchaseCreate({
       Boolean(selectedSupplier)
     );
 
-    // Odaklanacak satırı önceden belirle: ürün sepette varsa onun satırı,
-    // yoksa şimdi üretilen yeni satır. rowId'yi setCart dışında üretiyoruz ki
-    // güncelleyici iki kez çağrılsa bile aynı kimlik kullanılsın.
-    const existingRow = cart.find((item) => item.product.id === product.id);
-    const newRowId = `row-${product.id}-${Date.now()}`;
-    const targetRowId = existingRow ? existingRow.rowId : newRowId;
+    /*
+     * ALIS: ayni urun ikinci kez secilince HER ZAMAN yeni satir (musteri
+     * istegi, 16 Eylul 2026). Satis ve iade birlestirir; aliste ayni mal
+     * farkli fiyat/partiyle gelebildigi icin satirlar ayri kalir ve her
+     * satir kendi maliyetiyle katman acar.
+     */
+    const newRowId = `row-${product.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const targetRowId = newRowId;
 
-    setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        );
-      }
-      return [
-        ...prev,
-        {
-          rowId: newRowId,
-          product: product as Product,
-          quantity: 1,
-          unitPriceUsd,
-        },
-      ];
-    });
+    setCart((prev) => [
+      ...prev,
+      {
+        rowId: newRowId,
+        product: product as Product,
+        quantity: 1,
+        unitPriceUsd,
+      },
+    ]);
     closeSearchModal();
     // Adet kutusu odaklı ve seçili gelsin — kullanıcı doğrudan sayı tuşlasın
     focusCartFieldSoon(targetRowId, 'quantity');

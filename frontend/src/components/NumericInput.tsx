@@ -83,7 +83,12 @@ const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(
           // alandan çıkınca geri gelir.
         }}
         onFocus={(e: FocusEvent<HTMLInputElement>) => {
-          e.target.select();
+          const el = e.target;
+          el.select();
+          // Yeniden çizim seçimi düşürebilir; bir kare sonra yinele
+          requestAnimationFrame(() => {
+            if (document.activeElement === el) el.select();
+          });
           onFocus?.(e);
         }}
         onBlur={(e: FocusEvent<HTMLInputElement>) => {
