@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **v1.22.4 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
-> (v1.22.0–v1.22.3 de Docker Hub'da; v1.22.4 hepsini kapsar, doğrudan o kurulur.)
+> **v1.22.5 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
+> (v1.22.0–v1.22.4 de Docker Hub'da; v1.22.5 hepsini kapsar, doğrudan o kurulur.)
 > **Canlıya geçiş müşterinin kararıyla ertelendi (15 Eylül): "şimdi değil."**
 
 ### Yapıldı (14–15 Eylül)
@@ -118,6 +118,20 @@ bakiye değişmez. Hareket açıklamasındaki `<eski kod> cari tahsilat`
 etiketi yeni koda çevrilir (metin, tutar değil). `musteri-kodu-test.ts`
 (15 kontrol): satış + tahsilat kesilmiş müşterinin kodu değişince bakiye
 70 → 70, fatura 1 → 1, hareket 1 → 1, açıklama `187 cari tahsilat`.
+
+**v1.22.5 — ön sipariş tamamlama hatası (kod okunurken bulundu, 15
+Eylül).** Müşteri ön sipariş sürecini sordu; `/fulfill` ("Stok Düş —
+Ön Siparişi Tamamla") yalnızca stoğu düşürüyor, **FIFO katmanını
+tüketmiyor ve kalemin maliyetini yazmıyordu**. Düzenleme yoluyla (kutuyu
+kaldırıp Kaydet) dönüştürme doğruydu, düğme değildi. Sonuç: tamamlanan
+ön siparişler kâr raporunda maliyetsiz, ürünlerde stok–katman ayrık.
+Düzeltildi; `on-siparis-test.ts` (20 kontrol).
+
+Ön sipariş akışı (doğrulanmış): kayıtta stok, cari, kasa, katman
+değişmez, ekstrede görünmez, yalnızca Faturalar → Ön Siparişler'de
+(kırmızı). Tamamlanınca stok + katman düşer, maliyet yazılır, Cari ise
+bakiyeye / nakit ise kasaya işlenir, ekstrede görünür. Tamamlanmış fiş
+tekrar tamamlanamaz.
 
 **Kasa — açılış kayıtları.** 11 Eylül akşamı 50 adet "ESKİ SİSTEMDEN
 AKTARILDI" kaydı: borçlu müşteriler tediye (ÇIKIŞ, 26.372 $), alacaklılar
@@ -382,12 +396,12 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 
 ### Sıradaki adım
 
-> **v1.22.4 provaya; canlı müşterinin kararıyla bekliyor.** Canlı v1.21.4, prova v1.22.3.
+> **v1.22.5 provaya; canlı müşterinin kararıyla bekliyor.** Canlı v1.21.4, prova v1.22.3.
 > Prova 15 Eylül 07:30'da canlının kopyasıyla dolduruldu (BIREBIR TUTTU).
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.4 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.5 shenzhen-test`
 4. Provada dene:
    - Stok Listesi → Excel İndir → **değiştirmeden** Excel Yükle → katman
      farkı sorgusu (aşağıda) **0** olmalı
@@ -402,9 +416,11 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
    - Müşteri Listesi: "Eski kodları düzelt (N müşteri)" düğmesi → bas →
      M… kodlular sıradaki sayıyı almalı, bakiyeleri değişmemeli; yeni
      müşteri açınca kod seriden devam etmeli
+   - Ön sipariş kaydet → "Stok Düş" → Kâr raporunda o fişin maliyeti
+     dolu olmalı; katman sorgusunda o ürün görünmemeli
    - **Provada Excel indir-yükle turu yapıldı (15 Eylül):** 5.439 ürün
      güncellendi, katman farkı yalnızca 15 eksi stokluda kaldı (beklenen)
-5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.4 shenzhen`, ardından
+5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.5 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):
