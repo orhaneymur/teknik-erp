@@ -77,6 +77,8 @@ type RecentPayment = {
 
 type DashboardInsights = {
   dailySales: { label: string; total: number }[];
+  /** Son 7 gun (bugun dahil) ve ondan onceki 7 gun — backend hesaplar */
+  weeklySales: { thisWeek: number; lastWeek: number };
   monthlySales: { label: string; total: number }[];
   topProducts: { name: string; quantity: number; sku?: string }[];
   topCustomers: {
@@ -239,6 +241,7 @@ export default function Dashboard({
         const payload = response.data.data;
         const insights = payload.insights ?? {
           dailySales: [],
+          weeklySales: { thisWeek: 0, lastWeek: 0 },
           monthlySales: [],
           topProducts: [],
           topCustomers: [],
@@ -250,6 +253,7 @@ export default function Dashboard({
           recentPayments: ensureArray(payload.recentPayments).slice(0, 10),
           insights: {
             dailySales: ensureArray(insights.dailySales),
+            weeklySales: insights.weeklySales ?? { thisWeek: 0, lastWeek: 0 },
             monthlySales: ensureArray(insights.monthlySales),
             topProducts: ensureArray(insights.topProducts),
             topCustomers: ensureArray(insights.topCustomers),
@@ -406,6 +410,8 @@ export default function Dashboard({
    */
   const bugunSatis = insights.dailySales.at(-1)?.total ?? 0;
   const dunSatis = insights.dailySales.at(-2)?.total ?? 0;
+  const buHaftaSatis = insights.weeklySales.thisWeek;
+  const gecenHaftaSatis = insights.weeklySales.lastWeek;
   const buAySatis = insights.monthlySales.at(-1)?.total ?? 0;
   const gecenAySatis = insights.monthlySales.at(-2)?.total ?? 0;
 
@@ -489,12 +495,19 @@ export default function Dashboard({
       </section>
 
       {/* Ozet — sayfanin en cok bakilan satiri, en buyuk rakamlar burada */}
-      <section className="order-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section className="order-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <OzetKart
           etiket="Bugün satış"
           deger={formatMoney(bugunSatis)}
           degisim={degisim(bugunSatis, dunSatis)}
           altBilgi="düne göre"
+          Ikon={TrendingUp}
+        />
+        <OzetKart
+          etiket="Bu hafta satış"
+          deger={formatMoney(buHaftaSatis)}
+          degisim={degisim(buHaftaSatis, gecenHaftaSatis)}
+          altBilgi="son 7 gün · önceki 7 güne göre"
           Ikon={TrendingUp}
         />
         <OzetKart

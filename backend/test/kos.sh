@@ -27,6 +27,10 @@ KAP="erp-test-mysql"
 export DATABASE_URL="mysql://root:test@127.0.0.1:${MYSQL_PORT}/teknikerp"
 export ADMIN_USERNAME=admin ADMIN_PASSWORD=test JWT_SECRET=yerel-deneme
 export KUR_FARKI="${KUR_FARKI:-0.20}"
+# Canliyla ayni saat dilimi — gun sinirlari (anasayfa "bugun") buna bagli.
+# Git Bash bunu Windows sureclerine GECIRMEZ; orada makinenin kendi saat
+# dilimi gecerlidir (Turkiye'de zaten UTC+3). Linux'ta calisir.
+export TZ=Europe/Istanbul
 export PORT="$API_PORT" TEST_API="http://127.0.0.1:${API_PORT}"
 
 # Betik listesi: ad, backend gerekiyor mu
@@ -39,6 +43,7 @@ BETIKLER=(
   "excel-onkontrol-test:evet"
   "elle-stok-katman-test:evet"
   "kasa-hareket-test:evet"
+  "anasayfa-f2-test:evet"
   "duzeltmeler-test:evet"
   "fis-kur-test:evet"
   "harem-kur-test:evet"

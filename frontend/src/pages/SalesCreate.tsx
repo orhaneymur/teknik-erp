@@ -27,6 +27,7 @@ import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
 import { useHoldKeyReveal } from '../hooks/useHoldKeyReveal';
 import { useCartGridKeyboardNav } from '../hooks/useCartGridKeyboardNav';
 import { useExchangeRates } from '../hooks/useExchangeRates';
+import { tryEquivalent, tryRateNote } from '../lib/receiptTl';
 import {
   API_BASE,
   ensureArray,
@@ -1640,6 +1641,19 @@ export default function SalesCreate({
             <p className="text-3xl font-black text-red-600 tabular-nums">
               {formatUsd(totalUsd)}
             </p>
+            {/*
+              TL karşılığı — müşteri isteği (15 Eylül 2026): fişte yazan
+              rakam ekranda da görünsün. Fişle aynı kur (receiptTryRate);
+              kur yoksa satır hiç çizilmez. Gösterim içindir, hesaba girmez.
+            */}
+            {tryEquivalent(totalUsd, receiptTryRate) ? (
+              <p className="text-base font-semibold text-slate-600 tabular-nums">
+                ≈ {tryEquivalent(totalUsd, receiptTryRate)}
+                <span className="ml-1 text-xs font-normal text-slate-400">
+                  ({tryRateNote(receiptTryRate)})
+                </span>
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-2 border-t border-slate-200 pt-2">

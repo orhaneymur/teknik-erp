@@ -36,7 +36,7 @@ import {
   getIstanbulYear,
   roundMoney,
 } from './utils/datetime.js';
-import { nextSkuForCategory } from './utils/sku.js';
+import { categoryPrefix, nextSkuForCategory } from './utils/sku.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const APP_VERSION = process.env.APP_VERSION ?? 'dev';
@@ -1136,6 +1136,7 @@ type ProductRankRow = {
   color: string | null;
   appearance: string | null;
   quality: string | null;
+  category: { name: string } | null;
 };
 
 const PRODUCT_RANK_SELECT = {
@@ -1148,7 +1149,26 @@ const PRODUCT_RANK_SELECT = {
   color: true,
   appearance: true,
   quality: true,
+  category: { select: { name: true } },
 } as const;
+
+/**
+ * F2 listesinde kategori sirasi — musteri istegi (15 Eylul 2026):
+ * "Ekran hep en ustte, sonra batarya, sonra diger kategoriler; her kategori
+ * kendi icinde alfabetik." Onek kategori adindan turetilir (sku.ts ile
+ * ayni kural), boylece "EKRAN & LCD" de "Ekranlar" da EKR'ye duser.
+ * Listede olmayan kategoriler alfabetik, kategorisiz urun en sonda.
+ */
+const F2_KATEGORI_ONCELIGI = ['EKR', 'BAT'];
+
+function f2KategoriSirasi(row: ProductRankRow): string {
+  const ad = row.category?.name?.trim();
+  if (!ad) return '~~~'; // kategorisiz: her harften sonra
+  const onek = categoryPrefix(ad);
+  const oncelik = F2_KATEGORI_ONCELIGI.indexOf(onek);
+  // "0EKR", "1BAT" sabit siradakiler; digerleri "9" + ad ile alfabetik
+  return oncelik >= 0 ? `${oncelik}${onek}` : `9${foldSearchText(ad)}`;
+}
 
 /** Kelime sınırında eşleşme — "8" ifadesi "18" içinde sayılmaz */
 function hasWordBoundary(haystack: string, needle: string): boolean {
@@ -1237,11 +1257,6 @@ function scoreProductMatch(
  * Marka alanı boş ürünlerde ürün adının ilk kelimesi marka yerine geçer
  * (adlar "INFINIX ...", "SAMSUNG ..." biçiminde markayla başlıyor).
  */
-function rankBrandKey(row: ProductRankRow): string {
-  const brand = row.brand?.trim();
-  if (brand) return foldSearchText(brand);
-  return foldSearchText(row.name.trim().split(/\s+/)[0] ?? '');
-}
 
 function rankProductCandidates(
   rows: ProductRankRow[],
@@ -1250,15 +1265,27 @@ function rankProductCandidates(
   const phrase = foldSearchText(search);
   const words = phrase.split(/\s+/).filter(Boolean);
 
+  /*
+   * Siralama (15 Eylul 2026, musteri istegi):
+   *   1. kategori — ekran, batarya, digerleri alfabetik, kategorisiz sonda
+   *   2. isabet kademesi — adin/kodun icinde gecen (>= 600) once, yalnizca
+   *      kelime ortasinda / nitelikte / aciklamada gecen (< 600) sonra.
+   *      Ince puan farki artik siralamaya girmez: "Note 8" aramasinda N980
+   *      yine altta kalir ama ayni kademedekiler alfabetik dizilir.
+   *   3. ad — DOGAL sira: IPH-8 < IPH-11 < IPH-12 (duz alfabetik 11'i 8'in
+   *      onune koyuyordu)
+   *   4. id — kararli sayfalama
+   */
   return rows
-    .map((row) => ({ row, score: scoreProductMatch(row, phrase, words) }))
+    .map((row) => ({
+      row,
+      kademe: scoreProductMatch(row, phrase, words) >= 600 ? 0 : 1,
+      kategori: f2KategoriSirasi(row),
+    }))
     .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      // Aynı puanda: marka alfabetik → ad alfabetik → id (kararlı sayfalama)
-      const brandA = rankBrandKey(a.row);
-      const brandB = rankBrandKey(b.row);
-      if (brandA !== brandB) return brandA.localeCompare(brandB, 'tr');
-      const byName = a.row.name.localeCompare(b.row.name, 'tr');
+      if (a.kategori !== b.kategori) return a.kategori < b.kategori ? -1 : 1;
+      if (a.kademe !== b.kademe) return a.kademe - b.kademe;
+      const byName = a.row.name.localeCompare(b.row.name, 'tr', { numeric: true });
       return byName !== 0 ? byName : a.row.id - b.row.id;
     })
     .map((entry) => entry.row);
@@ -1808,6 +1835,9 @@ async function buildAnalyticsReport() {
 
   const sevenDaysAgo = new Date(startOfDay);
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  // Haftalik karsilastirma icin bir onceki 7 gun de cekilir
+  const fourteenDaysAgo = new Date(startOfDay);
+  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 13);
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
   const thirtyDaysAgo = new Date(now);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -1815,7 +1845,7 @@ async function buildAnalyticsReport() {
   const [chartSales, chartPurchases, topProductRows, topCustomerInvoices, lowStockRows] =
     await Promise.all([
       prisma.invoice.findMany({
-        where: { type: 'SATIS', createdAt: { gte: sevenDaysAgo }, ...ACTIVE_INVOICE_FILTER },
+        where: { type: 'SATIS', createdAt: { gte: fourteenDaysAgo }, ...ACTIVE_INVOICE_FILTER },
         select: { totalAmountUsd: true, totalAmountTl: true, exchangeRate: true, createdAt: true },
       }),
       prisma.invoice.findMany({
@@ -1859,17 +1889,37 @@ async function buildAnalyticsReport() {
         }),
     ]);
 
+  /*
+   * Gun anahtari YEREL saatle (TZ=Europe/Istanbul). Eskiden toISOString()
+   * kullaniliyordu, o UTC verir: yerel 00:00 UTC'de bir onceki gun 21:00'e
+   * duser, anahtar dizisi "dun"de bitiyordu ve bugunun satislari hicbir
+   * kovaya girmiyordu — anasayfadaki "Bugun satis" aslinda DUNU gosteriyordu
+   * (musteri bildirdi, 15 Eylul 2026). Gece 00:00-03:00 arasi satislar da
+   * onceki gune yaziliyordu.
+   */
+  const yerelGunAnahtari = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const dailySalesMap = new Map<string, number>();
-  for (let i = 0; i < 7; i += 1) {
-    const d = new Date(sevenDaysAgo);
+  for (let i = 0; i < 14; i += 1) {
+    const d = new Date(fourteenDaysAgo);
     d.setDate(d.getDate() + i);
-    dailySalesMap.set(d.toISOString().slice(0, 10), 0);
+    dailySalesMap.set(yerelGunAnahtari(d), 0);
   }
   for (const inv of chartSales) {
-    const key = inv.createdAt.toISOString().slice(0, 10);
+    const key = yerelGunAnahtari(inv.createdAt);
     if (dailySalesMap.has(key)) {
       dailySalesMap.set(key, (dailySalesMap.get(key) ?? 0) + invoiceUsdAmount(inv));
     }
+  }
+  // Son 7 gun grafige, onceki 7 gun yalnizca haftalik karsilastirmaya
+  const ondortGun = Array.from(dailySalesMap.values());
+  const weeklySales = {
+    thisWeek: ondortGun.slice(7).reduce((t, v) => t + v, 0),
+    lastWeek: ondortGun.slice(0, 7).reduce((t, v) => t + v, 0),
+  };
+  for (const key of Array.from(dailySalesMap.keys()).slice(0, 7)) {
+    dailySalesMap.delete(key);
   }
   const dailySales = Array.from(dailySalesMap.entries()).map(([date, total]) => ({
     date,
@@ -1984,6 +2034,7 @@ async function buildAnalyticsReport() {
     staffTurnover,
     charts: {
       dailySales,
+      weeklySales,
       monthlySales,
       topProducts,
       bottomProducts,
@@ -2443,6 +2494,7 @@ app.get('/api/sales/dashboard', async () => {
       recentPayments,
       insights: {
         dailySales: analytics.charts.dailySales,
+        weeklySales: analytics.charts.weeklySales,
         monthlySales: analytics.charts.monthlySales,
         topProducts: analytics.charts.topProducts,
         topCustomers: analytics.charts.topCustomers,
