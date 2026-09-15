@@ -550,6 +550,25 @@ export default function SalesReturn({
         recordF2ProductSelection('return', product.id, selectedCustomer.id);
       }
       const unitPriceTl = roundPrice(product.priceUsd);
+      // Aynı ürünün elle satırı varsa yeni satır açma, adedi artır
+      // (müşteri isteği, 15 Eylül 2026). "Ayrı kalem" düğmesi bilerek
+      // ayrı satır açar — Çin iade tiki satır bazlı olduğu için — o kalır.
+      const existing = cart.find(
+        (line) => line.productId === product.id && line.sourceInvoiceItemId === 0
+      );
+      if (existing) {
+        setCart((prev) =>
+          prev.map((line) =>
+            line.rowId === existing.rowId
+              ? { ...line, returnQty: line.returnQty + 1 }
+              : line
+          )
+        );
+        setWarning(null);
+        focusCartFieldSoon(existing.rowId, 'returnQty');
+        setSavedNotice(null);
+        return;
+      }
       const rowId = newRowId('manual', product.id);
       setCart((prev) => [
         ...prev,
@@ -574,7 +593,7 @@ export default function SalesReturn({
       focusCartFieldSoon(rowId, 'returnQty');
       setSavedNotice(null);
     },
-    [notify, selectedCustomer, focusCartFieldSoon]
+    [cart, notify, selectedCustomer, focusCartFieldSoon]
   );
 
   const duplicateReturnLine = useCallback(
@@ -627,6 +646,23 @@ export default function SalesReturn({
 
         recordF2ProductSelection('return', product.id, selectedCustomer.id);
 
+        // Aynı fatura kalemi sepette varsa yeni satır açma, adedi artır
+        const existing = cart.find(
+          (line) => line.sourceInvoiceItemId === data.sourceInvoiceItemId
+        );
+        if (existing) {
+          setCart((prev) =>
+            prev.map((line) =>
+              line.rowId === existing.rowId
+                ? { ...line, returnQty: line.returnQty + 1 }
+                : line
+            )
+          );
+          focusCartFieldSoon(existing.rowId, 'returnQty');
+          setSavedNotice(null);
+          return;
+        }
+
         const rowId = newRowId('ret', data.product.id);
         setCart((prev) => [
           ...prev,
@@ -666,7 +702,7 @@ export default function SalesReturn({
         setPickingProduct(false);
       }
     },
-    [selectedCustomer, closeSearchModal, notify, focusCartFieldSoon]
+    [cart, selectedCustomer, closeSearchModal, notify, focusCartFieldSoon]
   );
 
   const handleSearchKeyDown = useF2KeyboardNav({
@@ -706,8 +742,21 @@ export default function SalesReturn({
    */
   const addProductToEditLines = useCallback(
     (product: F2Product) => {
-      const rowId = newRowId('new', product.id);
       setSavedNotice(null);
+      const existing = editLines.find((line) => line.productId === product.id);
+      if (existing) {
+        setEditLines((prev) =>
+          prev.map((line) =>
+            line.rowId === existing.rowId
+              ? { ...line, quantity: line.quantity + 1 }
+              : line
+          )
+        );
+        closeSearchModal();
+        focusEditFieldSoon(existing.rowId, 'quantity');
+        return;
+      }
+      const rowId = newRowId('new', product.id);
       setEditLines((prev) => [
         ...prev,
         {
@@ -728,7 +777,7 @@ export default function SalesReturn({
       notify('success', `${productDisplayName(product)} eklendi — adet ve fiyatı satırda düzenleyin.`);
       focusEditFieldSoon(rowId, 'quantity');
     },
-    [closeSearchModal, notify, editCustomerId, focusEditFieldSoon]
+    [closeSearchModal, editLines, notify, editCustomerId, focusEditFieldSoon]
   );
 
   const handleEditSearchKeyDown = useF2KeyboardNav({

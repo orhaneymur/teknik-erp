@@ -10,8 +10,11 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **Prova v1.22.5; v1.22.6 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
-> (v1.22.0–v1.22.5 de Docker Hub'da; v1.22.6 hepsini kapsar, doğrudan o kurulur.)
+> **Prova v1.22.5; v1.22.7 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
+> (v1.22.0–v1.22.6 de Docker Hub'da; v1.22.7 hepsini kapsar, doğrudan o kurulur.)
+> **Müşterinin kararı (15 Eylül akşamı):** önce provada dene → dükkan
+> kapanınca canlı kopyasını provaya yükle, her şeyi gerçek veriyle gör →
+> sonra canlı. Canlı veriye dokunan hiçbir adım onaysız atılmaz.
 > **Canlıya geçiş müşterinin kararıyla ertelendi (15 Eylül): "şimdi değil."**
 
 ### Yapıldı (14–15 Eylül)
@@ -148,6 +151,15 @@ Doğrulama: `rapor-test.ts` (31 kontrol — fiş sırası, kalem sırası, ürü
 toplamları, iade adedi, ön sipariş hariç/tamamlanınca dahil, tarih
 penceresi, altı kaynak sınıfı, kasa bakiyesi = gerçek bakiye, safeId
 süzgeci). Ekrandan henüz bakılmadı — provada bakılacak.
+
+**v1.22.7 — aynı ürün ikinci kez seçilince ayrı kalem açılmasın
+(müşteri isteği, 15 Eylül akşamı).** Satış (ön sipariş ve düzenleme de
+aynı ekran) ve İade ekranları aynı ürün tekrar seçilince yeni satır
+açıyordu; artık mevcut satırın adedi 1 artar ve adet kutusu seçili gelir
+(Alış ekranı zaten böyleydi). İadede eşleşme: faturadan gelen satırda
+aynı fatura kalemi, elle satırda aynı ürün; "Ayrı kalem" düğmesi
+bilerek ayrı satır açmaya devam eder (Çin iade tiki satır bazlı).
+Yalnızca ekran davranışı, sunucu değişmedi; `tsc` + `vite build` temiz.
 
 **Kasa — açılış kayıtları.** 11 Eylül akşamı 50 adet "ESKİ SİSTEMDEN
 AKTARILDI" kaydı: borçlu müşteriler tediye (ÇIKIŞ, 26.372 $), alacaklılar
@@ -412,7 +424,7 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 
 ### TAM ŞU AN — 15 Eylül akşamı, kaldığımız yer
 
-**Prova v1.22.5 kurulu (v1.22.6 derlendi, kurulacak), canlı v1.21.4.** Canlıya geçiş müşterinin
+**Prova v1.22.5 kurulu (v1.22.7 derlendi, kurulacak), canlı v1.21.4.** Canlıya geçiş müşterinin
 kararıyla bekliyor ("şimdi değil"). Müşteriye bugünün tam dökümü
 verildi (ne değişti, canlıda ne olur, sırada ne var); "canlıya geçelim"
 derse aşağıdaki 1–5 sırası uygulanır.
@@ -444,13 +456,15 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
 
 ### Sıradaki adım
 
-> **v1.22.6 derlendi, provaya kurulacak; canlı müşterinin kararıyla bekliyor.** Canlı v1.21.4.
+> **v1.22.7 derlendi, provaya kurulacak; canlı müşterinin kararıyla bekliyor.** Canlı v1.21.4.
 > Prova 15 Eylül 07:30'da canlının kopyasıyla dolduruldu (BIREBIR TUTTU).
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.6 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.7 shenzhen-test`
 4. Provada dene:
+   - **v1.22.7:** Satış ve İade ekranında aynı ürünü iki kez seç → tek
+     satır, adet 2, adet kutusu seçili
    - **v1.22.6:** Anasayfa Kasa kartı dolar bakiyesini göstermeli (0 değil);
      Raporlar → Satış Kırılımı → "Ürün Bazlı" ve "Satış Fişleri" sekmeleri,
      fiş satırı açılınca kalemler; Raporlar → Kasa Raporu → açıklama kutusu,
@@ -473,7 +487,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
      dolu olmalı; katman sorgusunda o ürün görünmemeli
    - **Provada Excel indir-yükle turu yapıldı (15 Eylül):** 5.439 ürün
      güncellendi, katman farkı yalnızca 15 eksi stokluda kaldı (beklenen)
-5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.6 shenzhen`, ardından
+5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.7 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):

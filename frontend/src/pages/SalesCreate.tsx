@@ -671,9 +671,30 @@ export default function SalesCreate({
     (product: F2Product | Product) => {
       recordF2ProductSelection('sales', product.id, selectedCustomer?.id ?? null);
       const { unitPriceUsd, costUsd } = resolveProductUsd(product);
+      setSavedNotice(null);
+
+      /*
+       * Ürün sepette zaten varsa yeni satır AÇILMAZ, o satırın adedi bir
+       * artar ve adet kutusu seçili gelir (müşteri isteği, 15 Eylül 2026:
+       * aynı ürün ikinci kez seçilince ayrı kaleme düşüyordu). Alış
+       * ekranıyla aynı davranış. Fiyat/iskonto satırda ne ise o kalır.
+       */
+      const existingRow = cart.find((item) => item.product.id === product.id);
+      if (existingRow) {
+        lastAddedRowId.current = existingRow.rowId;
+        setCart((prev) =>
+          prev.map((item) =>
+            item.rowId === existingRow.rowId
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
+          )
+        );
+        closeF2Modal();
+        return;
+      }
+
       const rowId = `row-${product.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       lastAddedRowId.current = rowId;
-      setSavedNotice(null);
 
       setCart((prev) => [
         ...prev,
@@ -700,7 +721,7 @@ export default function SalesCreate({
 
       closeF2Modal();
     },
-    [closeF2Modal, loadAlternatives, resolveProductUsd, selectedCustomer]
+    [cart, closeF2Modal, loadAlternatives, resolveProductUsd, selectedCustomer]
   );
 
   const handleModalKeyDown = useF2KeyboardNav({
