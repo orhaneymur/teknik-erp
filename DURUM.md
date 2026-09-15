@@ -183,7 +183,7 @@ kodla 9 kontrolde kalıyor** — hata gerçekti, düzeltme gerçek. Veriye
 yazan tek değişiklik iade reddi (yani bir yazmayı **engelliyor**).
 
 **Canlıda iz var mı?** Kontrol sorgusu (salt okuma, tek satır) —
-sonucu 0 değilse o iadeler elle incelenir:
+sonucu 0 değilse o iadeler elle incelenir. **15 Eylül 20:40'ta canlıda çalıştırıldı: 0 — temiz, düzeltilecek iz yok.**
 
 ```bash
 kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "SELECT COUNT(*) on_siparise_iade FROM InvoiceItem ii JOIN InvoiceItem src ON src.id=ii.sourceInvoiceItemId JOIN Invoice s ON s.id=src.invoiceId WHERE s.isPreOrder=1 AND s.deletedAt IS NULL"'
