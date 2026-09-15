@@ -45,3 +45,19 @@ export function qualityLabel(value: string | null | undefined): string {
   if (!value) return '';
   return QUALITY_OPTIONS.find((o) => o.value === value)?.label ?? value;
 }
+
+/**
+ * Ekranda yazılan kalite metnini kayıt değerine çevirir: bilinen 6 etiket
+ * koduna ("A Kalite" -> A_KALITE, Excel ile aynı kural), diğerleri olduğu
+ * gibi metin ("Cof Orijinal"). Kalite serbest alandır; Excel'den gelen
+ * değerler de böyle saklanıyor.
+ */
+export function qualityValueFromLabel(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+  const key = trimmed.toLocaleLowerCase('tr-TR');
+  const known = QUALITY_OPTIONS.find(
+    (o) => o.label.toLocaleLowerCase('tr-TR') === key || o.value === trimmed
+  );
+  return known ? known.value : trimmed;
+}

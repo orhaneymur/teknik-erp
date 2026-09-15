@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Package, PlusCircle, Save } from 'lucide-react';
 import { API_BASE, ensureArray, formatUsd, roundPrice, toIntegerQty } from '../lib/api';
-import { APPEARANCE_OPTIONS, COLOR_OPTIONS, QUALITY_OPTIONS } from '../lib/productOptions';
+import TypeaheadField from '../components/TypeaheadField';
+import {
+  APPEARANCE_OPTIONS,
+  COLOR_OPTIONS,
+  QUALITY_OPTIONS,
+  qualityValueFromLabel,
+} from '../lib/productOptions';
 
 type Category = {
   id: number;
@@ -43,6 +49,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
   const [appearance, setAppearance] = useState('');
   const [colorText, setColorText] = useState('');
   const [dbColors, setDbColors] = useState<string[]>([]);
+  const [dbQualities, setDbQualities] = useState<string[]>([]);
   const [quality, setQuality] = useState('');
   const [rbmPrice, setRbmPrice] = useState('');
   const [costPriceUsd, setCostPriceUsd] = useState('');
@@ -68,11 +75,15 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
       axios.get<{ success: boolean; data: string[] }>(
         `${API_BASE}/api/settings/color-suggestions`
       ),
+      axios.get<{ success: boolean; data: string[] }>(
+        `${API_BASE}/api/settings/quality-suggestions`
+      ),
     ])
-      .then(([catRes, brandRes, colorRes]) => {
+      .then(([catRes, brandRes, colorRes, qualityRes]) => {
         if (catRes.data.success) setCategories(ensureArray(catRes.data.data));
         if (brandRes.data.success) setBrandModels(ensureArray(brandRes.data.data));
         if (colorRes.data.success) setDbColors(ensureArray(colorRes.data.data));
+        if (qualityRes.data.success) setDbQualities(ensureArray(qualityRes.data.data));
       })
       .catch(() => {
         /* tanımlar opsiyonel */
@@ -90,6 +101,19 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
     }
     return merged.map((name, index) => ({ id: index + 1, label: name }));
   }, [dbColors]);
+
+  // Kalite: varsayilan 6 + sistemde kayitli olanlar (Excel'den gelenler dahil)
+  const qualityOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const name of [...QUALITY_OPTIONS.map((o) => o.label), ...dbQualities]) {
+      const key = name.toLocaleLowerCase('tr-TR');
+      if (!name.trim() || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(name.trim());
+    }
+    return merged.map((name, index) => ({ id: index + 1, label: name }));
+  }, [dbQualities]);
 
   const resolvedCategoryId = useMemo((): number | '' => {
     if (categoryId !== '') return categoryId;
@@ -293,7 +317,7 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
         brandModelId: resolvedBrandModelId,
         color: colorText.trim() || undefined,
         appearance: appearance || undefined,
-        quality: quality || undefined,
+        quality: qualityValueFromLabel(quality) || undefined,
         rbmPrice: parsedRbm,
         description: description.trim() || undefined,
         compatibleWith: compatibleWith.trim() || undefined,
@@ -449,18 +473,13 @@ export default function ProductCreate({ onNotify }: ProductCreateProps) {
 
             <div>
               <label className={labelClass}>Kalite</label>
-              <select
+              <TypeaheadField
                 value={quality}
-                onChange={(e) => setQuality(e.target.value)}
-                className={fieldClass}
-              >
-                <option value="">Seçiniz</option>
-                {QUALITY_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                onChange={setQuality}
+                options={qualityOptions}
+                placeholder="Yazmaya başlayın veya seçin..."
+                inputClassName={fieldClass}
+              />
             </div>
 
             <div>

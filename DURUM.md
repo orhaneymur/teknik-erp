@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.9 derlendi, provaya kurulacak.**
-> (v1.22.0–v1.22.8 de Docker Hub'da; v1.22.9 hepsini kapsar, doğrudan o kurulur.)
+> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.10 derlendi, provaya kurulacak.**
+> (v1.22.0–v1.22.9 de Docker Hub'da; v1.22.10 hepsini kapsar, doğrudan o kurulur.)
 > **Müşterinin kararı (15 Eylül akşamı):** önce provada dene → dükkan
 > kapanınca canlı kopyasını provaya yükle, her şeyi gerçek veriyle gör →
 > sonra canlı. Canlı veriye dokunan hiçbir adım onaysız atılmaz.
@@ -188,6 +188,15 @@ sonucu 0 değilse o iadeler elle incelenir. **15 Eylül 20:40'ta canlıda çalı
 ```bash
 kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "SELECT COUNT(*) on_siparise_iade FROM InvoiceItem ii JOIN InvoiceItem src ON src.id=ii.sourceInvoiceItemId JOIN Invoice s ON s.id=src.invoiceId WHERE s.isPreOrder=1 AND s.deletedAt IS NULL"'
 ```
+
+**v1.22.10 — kalite listesi (müşteri bildirdi, 16 Eylül gecesi).** Stok
+Kartı'nda Kalite 6 sabit seçenekli listeydi; Excel'den gelen "Cof Orijinal",
+"Soft Oled", "New Orijinal" gibi değerler veritabanında duruyor ama
+seçilemiyordu. Stok Listesi'nin düzenleme formunda Kalite alanı **hiç
+yoktu**. Artık ikisi de renk gibi yazılabilir alan; öneriler = varsayılan
+6 + sistemdeki farklı değerler (`GET /api/settings/quality-suggestions`).
+Bilinen 6 etiket koda çevrilerek saklanır (Excel ile aynı kural), diğerleri
+metin. Stok listesi satırında kalite de görünür. `kalite-test.ts` (5).
 
 **v1.22.9 — müşterinin beş isteği (16 Eylül gecesi).**
 
@@ -540,9 +549,11 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.9 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.10 shenzhen-test`
    (veriyi tazelemeye gerek yok — kopya duruyor, sürüm değişince veri değişmez)
 4. Provada dene:
+   - **v1.22.10:** Stok Kartı → Kalite'ye "cof" yaz → "Cof Orijinal" önerilmeli;
+     Stok Listesi → düzenle → Kalite alanı var
    - **v1.22.9:** Sol menü Ana Sayfa aynı sekmede; anasayfada "Bugün fiş / adet";
      fiş düzenle → anasayfada en üstte "düzenlendi"; kayıtlı fişi aç → yeşil
      "KAYITLI FİŞ" rozeti; Kaydet → ödeme onay penceresi (Enter geçmez)
@@ -573,7 +584,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
      dolu olmalı; katman sorgusunda o ürün görünmemeli
    - **Provada Excel indir-yükle turu yapıldı (15 Eylül):** 5.439 ürün
      güncellendi, katman farkı yalnızca 15 eksi stokluda kaldı (beklenen)
-5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.9 shenzhen`, ardından
+5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.10 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):

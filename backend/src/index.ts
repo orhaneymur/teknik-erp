@@ -6756,6 +6756,39 @@ app.get('/api/settings/color-suggestions', async () => {
   };
 });
 
+/**
+ * Kalite onerileri: urunlerde kayitli farkli degerler (Excel'den gelen
+ * serbest metinler dahil — "Cof Orijinal", "Soft Oled", "New Orijinal").
+ * Stok karti eskiden 6 sabit secenek gosteriyordu; Excel'le gelen
+ * kaliteler secilemiyordu (musteri bildirdi, 16 Eylul 2026).
+ * Kodlu degerler (A_KALITE...) etiketiyle doner; ekran etiketi gosterir.
+ */
+app.get('/api/settings/quality-suggestions', async () => {
+  const rows = await prisma.product.findMany({
+    where: { quality: { not: null }, ...AKTIF_URUN_FILTRESI },
+    select: { quality: true },
+    distinct: ['quality'],
+    take: 300,
+  });
+
+  const seen = new Set<string>();
+  const qualities: string[] = [];
+  for (const row of rows) {
+    const label = qualityLabel(row.quality).trim();
+    const key = label.toLocaleLowerCase('tr-TR');
+    if (!label || seen.has(key)) continue;
+    seen.add(key);
+    qualities.push(label);
+  }
+  qualities.sort((a, b) => a.localeCompare(b, 'tr'));
+
+  return {
+    success: true,
+    data: qualities,
+    message: 'Quality suggestions retrieved successfully.',
+  };
+});
+
 app.get<{ Querystring: { categoryId?: string; brand?: string; strict?: string } }>(
   '/api/settings/model-suggestions',
   async (request) => {

@@ -49,6 +49,7 @@ BETIKLER=(
   "on-siparis-test:evet"
   "rapor-test:evet"
   "on-siparis-rapor-test:evet"
+  "kalite-test:evet"
   "duzeltmeler-test:evet"
   "fis-kur-test:evet"
   "harem-kur-test:evet"

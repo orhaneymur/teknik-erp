@@ -25,7 +25,14 @@ import {
   type Product,
 } from '../lib/api';
 import { depotLabel } from '../lib/depots';
-import { APPEARANCE_OPTIONS, COLOR_OPTIONS, appearanceLabel } from '../lib/productOptions';
+import {
+  APPEARANCE_OPTIONS,
+  COLOR_OPTIONS,
+  QUALITY_OPTIONS,
+  appearanceLabel,
+  qualityLabel,
+  qualityValueFromLabel,
+} from '../lib/productOptions';
 
 type CategoryOption = { id: number; name: string };
 type BrandModelOption = {
@@ -63,6 +70,7 @@ export default function StockList({
   /** Filtrede seçili markayla kullanılmış model adları (sunucudan) */
   const [brandModelHints, setBrandModelHints] = useState<string[]>([]);
   const [dbColors, setDbColors] = useState<string[]>([]);
+  const [dbQualities, setDbQualities] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   /** Sunucu tarafı kolon filtreleri — serbest arama ile birlikte (AND) çalışır */
   const [filters, setFilters] = useState({
@@ -88,6 +96,7 @@ export default function StockList({
     model: '',
     color: '',
     appearance: '',
+    quality: '',
     description: '',
     compatibleWith: '',
     costPrice: '',
@@ -176,8 +185,12 @@ export default function StockList({
       axios.get<{ success: boolean; data: string[] }>(
         `${API_BASE}/api/settings/color-suggestions`
       ),
+      axios.get<{ success: boolean; data: string[] }>(
+        `${API_BASE}/api/settings/quality-suggestions`
+      ),
     ])
-      .then(([catRes, brandRes, colorRes]) => {
+      .then(([catRes, brandRes, colorRes, qualityRes]) => {
+        if (qualityRes.data.success) setDbQualities(ensureArray(qualityRes.data.data));
         if (catRes.data.success) setCategories(ensureArray(catRes.data.data));
         if (brandRes.data.success) setBrandModels(ensureArray(brandRes.data.data));
         if (colorRes.data.success) setDbColors(ensureArray(colorRes.data.data));
@@ -198,6 +211,19 @@ export default function StockList({
     }
     return merged.map((name, index) => ({ id: index + 1, label: name }));
   }, [dbColors]);
+
+  // Kalite: varsayilan 6 + sistemde kayitli olanlar (Excel'den gelenler dahil)
+  const qualityOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const name of [...QUALITY_OPTIONS.map((o) => o.label), ...dbQualities]) {
+      const key = name.toLocaleLowerCase('tr-TR');
+      if (!name.trim() || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(name.trim());
+    }
+    return merged.map((name, index) => ({ id: index + 1, label: name }));
+  }, [dbQualities]);
 
   useEffect(() => {
     setPage(1);
@@ -329,6 +355,7 @@ export default function StockList({
       model: product.model ?? '',
       color: product.color ?? '',
       appearance: product.appearance ?? '',
+      quality: qualityLabel(product.quality),
       description: product.description ?? '',
       compatibleWith: product.compatibleWith ?? '',
       costPrice: String(product.costPrice),
@@ -366,6 +393,7 @@ export default function StockList({
         model: form.model.trim() || null,
         color: form.color.trim() || null,
         appearance: form.appearance.trim() || null,
+        quality: qualityValueFromLabel(form.quality) || null,
         description: form.description.trim() || null,
         compatibleWith: form.compatibleWith.trim() || null,
         costPrice: Number(form.costPrice),
@@ -710,6 +738,7 @@ export default function StockList({
                               product.model,
                               product.color,
                               appearanceLabel(product.appearance),
+                              qualityLabel(product.quality),
                             ]
                               .filter(Boolean)
                               .join(' · ') || 'Kategori / marka / model yok'}
@@ -968,13 +997,23 @@ export default function StockList({
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="text-xs font-medium text-slate-600">Renk</label>
                   <TypeaheadField
                     value={form.color}
                     onChange={(value) => setForm((f) => ({ ...f, color: value }))}
                     options={colorOptions}
+                    placeholder="Yazmaya başlayın..."
+                    inputClassName="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Kalite</label>
+                  <TypeaheadField
+                    value={form.quality}
+                    onChange={(value) => setForm((f) => ({ ...f, quality: value }))}
+                    options={qualityOptions}
                     placeholder="Yazmaya başlayın..."
                     inputClassName="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                   />
