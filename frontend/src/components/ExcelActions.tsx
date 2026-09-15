@@ -58,6 +58,18 @@ export default function ExcelActions({
   const fileRef = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  /*
+   * Yukleme sonucu KALICI kutuda durur. Ust bildirim 4 saniyede kayboluyor;
+   * 5.000 satirlik yukleme 1-2 dakika surdugu icin kullanici o an ekrana
+   * bakmiyorsa "yuklendi mi?" sorusu cevapsiz kaliyordu (15 Eylul 2026,
+   * provada yasandi). Kullanici kapatana ya da yeni yukleme baslayana
+   * kadar kalir.
+   */
+  const [sonuc, setSonuc] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const bildir = (type: 'success' | 'error', message: string) => {
+    setSonuc({ type, message });
+    onNotify?.(type, message);
+  };
 
   const handleExport = async () => {
     setExporting(true);
@@ -88,6 +100,7 @@ export default function ExcelActions({
     if (!file) return;
 
     setImporting(true);
+    setSonuc(null);
     const formData = new FormData();
     formData.append('file', file);
 
@@ -118,7 +131,7 @@ export default function ExcelActions({
               `\n\nYine de yüklensin mi?`
           );
           if (!devam) {
-            onNotify?.('error', 'Excel yüklemesi iptal edildi; hiçbir şey değişmedi.');
+            bildir('error', 'Excel yüklemesi iptal edildi; hiçbir şey değişmedi.');
             return;
           }
         }
@@ -139,7 +152,7 @@ export default function ExcelActions({
         const preview = result.errors.slice(0, 3).join(' · ');
         message += ` Uyarı: ${preview}${result.errors.length > 3 ? '…' : ''}`;
       }
-      onNotify?.('success', message);
+      bildir('success', message);
       onImported?.();
     } catch (error) {
       const message =
@@ -150,7 +163,7 @@ export default function ExcelActions({
             : axios.isAxiosError(error) && error.response?.status === 504
               ? 'Sunucu zaman aşımı (504). Deploy sonrası nginx timeout güncellemesi gerekebilir.'
               : 'Excel yüklenemedi.';
-      onNotify?.('error', message);
+      bildir('error', message);
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -186,6 +199,31 @@ export default function ExcelActions({
           onChange={handleImport}
         />
       </div>
+      {sonuc ? (
+        <div
+          role="status"
+          className={`flex items-start gap-2 rounded-xl border px-3 py-2 text-sm ${
+            sonuc.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-red-200 bg-red-50 text-red-900'
+          }`}
+        >
+          <span className="flex-1">{sonuc.message}</span>
+          <button
+            type="button"
+            onClick={() => setSonuc(null)}
+            className="shrink-0 rounded px-1 text-xs font-semibold opacity-70 hover:opacity-100"
+            aria-label="Kapat"
+          >
+            ✕
+          </button>
+        </div>
+      ) : null}
+      {importing ? (
+        <p className="text-xs text-amber-700">
+          Yükleniyor… Büyük dosyada 1–2 dakika sürebilir; sonuç bittiğinde burada yazar.
+        </p>
+      ) : null}
       {hint ? <p className="text-xs text-slate-400">{hint}</p> : null}
     </div>
   );
