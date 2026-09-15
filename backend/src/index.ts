@@ -21,6 +21,7 @@ import {
   qualityLabel,
   syncBrandModelsFromProducts,
 } from './utils/excelExchange.js';
+import type { ImportResult } from './utils/excelExchange.js';
 import {
   compatWords,
   isCompatibleMatch,
@@ -5157,6 +5158,48 @@ app.post('/api/products/import/excel/kontrol', async (request, reply) => {
   return { success: true, data: sonuc, message: null };
 });
 
+/*
+ * STOK EXCEL YUKLEMESI — ARKA PLANDA.
+ *
+ * 15 Eylul 2026, provada: 5.439 satirlik yukleme tarayiciya hic "bitti"
+ * diyemedi. Sunucu ile tarayici arasinda Cloudflare var ve 100 saniyede
+ * yanit gelmezse baglantiyi kesiyor; sunucuda dakikalar suren bir is o
+ * yoldan sonuc donduremez. Kullanici "yuklendi mi?" diye sorup duruyordu.
+ *
+ * Artik istek dosyayi alir, isi kuyruga koyar ve HEMEN is numarasi doner.
+ * Ekran /durum/:id ile ilerlemeyi sorar. Baglanti kopsa da is surer, sayfa
+ * yenilense de sonuc durur (is bir saat bellekte kalir). Ayni anda tek
+ * yukleme calisir; ikincisi reddedilir — iki yukleme birbirinin
+ * uzerine yazmasin.
+ *
+ * Pod yeniden baslarsa bellek sifirlanir: durum sorgusu 404 doner, ekran
+ * "sonucu Stok Listesi'nden dogrula" der. Yarim kalan is yeniden calisir;
+ * yukleme idempotent oldugu icin (Id ile eslestirme) tekrar guvenlidir.
+ */
+type ExcelIsi = {
+  id: string;
+  dosyaAdi: string;
+  baslangic: number;
+  bitis: number | null;
+  durum: 'calisiyor' | 'bitti' | 'hata';
+  asama: string;
+  islenen: number;
+  toplam: number;
+  sonuc: ImportResult | null;
+  mesaj: string | null;
+};
+const excelIsleri = new Map<string, ExcelIsi>();
+let calisanExcelIsi: string | null = null;
+
+function excelIsMesaji(result: ImportResult): string {
+  const notes: string[] = [`${result.created} yeni`, `${result.updated} güncellendi`];
+  if (result.deleted && result.deleted > 0) notes.push(`${result.deleted} silindi`);
+  if (result.stockZeroed && result.stockZeroed > 0) notes.push(`${result.stockZeroed} faturalı ürün stok=0`);
+  if (result.categoriesCreated && result.categoriesCreated > 0) notes.push(`${result.categoriesCreated} yeni kategori`);
+  if (result.brandModelsCreated && result.brandModelsCreated > 0) notes.push(`${result.brandModelsCreated} yeni marka/model`);
+  return `Excel senkron: ${notes.join(', ')}.`;
+}
+
 app.post('/api/products/import/excel', async (request, reply) => {
   const upload = await request.file();
   if (!upload) {
@@ -5166,33 +5209,99 @@ app.post('/api/products/import/excel', async (request, reply) => {
       errors: null,
     });
   }
+  if (calisanExcelIsi && excelIsleri.get(calisanExcelIsi)?.durum === 'calisiyor') {
+    return reply.status(409).send({
+      success: false,
+      message: 'Bir Excel yüklemesi zaten sürüyor; bitmesini bekleyin.',
+      errors: null,
+      data: { jobId: calisanExcelIsi },
+    });
+  }
 
   const buffer = await upload.toBuffer();
-  const result = await importProductsExcel(prisma, buffer);
-
-  const notes: string[] = [
-    `${result.created} yeni`,
-    `${result.updated} güncellendi`,
-  ];
-  if (result.deleted && result.deleted > 0) {
-    notes.push(`${result.deleted} silindi`);
-  }
-  if (result.stockZeroed && result.stockZeroed > 0) {
-    notes.push(`${result.stockZeroed} faturalı ürün stok=0`);
-  }
-  if (result.categoriesCreated && result.categoriesCreated > 0) {
-    notes.push(`${result.categoriesCreated} yeni kategori`);
-  }
-  if (result.brandModelsCreated && result.brandModelsCreated > 0) {
-    notes.push(`${result.brandModelsCreated} yeni marka/model`);
-  }
-
-  return {
-    success: true,
-    data: result,
-    message: `Excel senkron: ${notes.join(', ')}.`,
+  const is: ExcelIsi = {
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    dosyaAdi: upload.filename,
+    baslangic: Date.now(),
+    bitis: null,
+    durum: 'calisiyor',
+    asama: 'kuyrukta',
+    islenen: 0,
+    toplam: 0,
+    sonuc: null,
+    mesaj: null,
   };
+  excelIsleri.set(is.id, is);
+  calisanExcelIsi = is.id;
+  request.log.info(`[excel ${is.id}] alindi: ${upload.filename}, ${buffer.length} bayt`);
+
+  // Isi bu istegin disinda baslat; yanit hemen doner
+  setImmediate(() => {
+    let sonLog = 0;
+    void importProductsExcel(prisma, buffer, (asama, islenen, toplam) => {
+      is.asama = asama;
+      is.islenen = islenen;
+      is.toplam = toplam;
+      // Her batch degil, ~10 saniyede bir log — 5.000 satirda 100 satir log olmasin
+      if (Date.now() - sonLog > 10_000 || islenen === 0) {
+        sonLog = Date.now();
+        app.log.info(`[excel ${is.id}] ${asama} ${islenen}/${toplam}`);
+      }
+    })
+      .then((result) => {
+        is.durum = 'bitti';
+        is.bitis = Date.now();
+        is.sonuc = result;
+        is.mesaj = excelIsMesaji(result);
+        is.islenen = is.toplam;
+        app.log.info(`[excel ${is.id}] bitti (${Math.round((is.bitis - is.baslangic) / 1000)} sn): ${is.mesaj}`);
+      })
+      .catch((error: unknown) => {
+        is.durum = 'hata';
+        is.bitis = Date.now();
+        is.mesaj = error instanceof Error ? error.message : 'Excel yüklenemedi.';
+        app.log.error(`[excel ${is.id}] HATA: ${is.mesaj}`);
+      })
+      .finally(() => {
+        if (calisanExcelIsi === is.id) calisanExcelIsi = null;
+        setTimeout(() => excelIsleri.delete(is.id), 60 * 60 * 1000).unref();
+      });
+  });
+
+  return reply.status(202).send({
+    success: true,
+    data: { jobId: is.id },
+    message: 'Excel yüklemesi başladı.',
+  });
 });
+
+app.get<{ Params: { id: string } }>(
+  '/api/products/import/excel/durum/:id',
+  async (request, reply) => {
+    const is = excelIsleri.get(request.params.id);
+    if (!is) {
+      return reply.status(404).send({
+        success: false,
+        message:
+          'Bu yüklemenin kaydı bulunamadı (sunucu yeniden başlamış olabilir). Sonucu Stok Listesi ekranından doğrulayın.',
+        errors: null,
+      });
+    }
+    return {
+      success: true,
+      data: {
+        jobId: is.id,
+        durum: is.durum,
+        asama: is.asama,
+        islenen: is.islenen,
+        toplam: is.toplam,
+        sureSn: Math.round(((is.bitis ?? Date.now()) - is.baslangic) / 1000),
+        sonuc: is.sonuc,
+      },
+      message: is.mesaj,
+    };
+  }
+);
 
 app.get<{ Params: { id: string } }>('/api/products/:id', async (request, reply) => {
   const id = Number(request.params.id);

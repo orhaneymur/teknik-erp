@@ -32,6 +32,13 @@ type ExcelActionsProps = {
    */
   precheckPath?: string;
   /**
+   * Verilirse yukleme ARKA PLANDA calisir: sunucu hemen is numarasi doner,
+   * ekran bu yoldan (`<statusPath>/<jobId>`) 2 saniyede bir ilerlemeyi
+   * sorar. Cloudflare 100 saniyede yanitsiz baglantiyi kestigi icin
+   * 5.000 satirlik yukleme baska turlu "bitti" diyemiyordu (15 Eylul 2026).
+   */
+  statusPath?: string;
+  /**
    * Dosyanın taban adı — ör. "stoklar.xlsx". İndirilirken başına firma
    * kısaltması, sonuna tarih-saat damgası eklenir:
    * `SM-stoklar-20260907-1432.xlsx` (bkz. lib/exportFilename.ts).
@@ -48,6 +55,7 @@ export default function ExcelActions({
   exportPath,
   importPath,
   precheckPath,
+  statusPath,
   exportFilename,
   exportQuery,
   importTimeoutMs = 120_000,
@@ -66,6 +74,8 @@ export default function ExcelActions({
    * kadar kalir.
    */
   const [sonuc, setSonuc] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  /** Arka plan isinin ilerlemesi — yalnizca statusPath verildiginde dolar */
+  const [ilerleme, setIlerleme] = useState<{ asama: string; islenen: number; toplam: number; sureSn: number } | null>(null);
   const bildir = (type: 'success' | 'error', message: string) => {
     setSonuc({ type, message });
     onNotify?.(type, message);
@@ -137,17 +147,47 @@ export default function ExcelActions({
         }
       }
 
-      const response = await axios.post<{ success: boolean; data: ImportResult; message: string }>(
-        `${API_BASE}${importPath}`,
-        formData,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: importTimeoutMs,
-        }
-      );
+      const response = await axios.post<{
+        success: boolean;
+        data: ImportResult | { jobId: string };
+        message: string;
+      }>(`${API_BASE}${importPath}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: importTimeoutMs,
+      });
 
-      const result = response.data.data;
-      let message = response.data.message || 'İçe aktarma tamamlandı.';
+      let result: ImportResult;
+      let message: string;
+      if (statusPath && 'jobId' in response.data.data) {
+        // Arka plan isi: bitene kadar ilerlemeyi sor
+        const jobId = response.data.data.jobId;
+        for (;;) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const durum = await axios.get<{
+            success: boolean;
+            data: {
+              durum: 'calisiyor' | 'bitti' | 'hata';
+              asama: string;
+              islenen: number;
+              toplam: number;
+              sureSn: number;
+              sonuc: ImportResult | null;
+            };
+            message: string | null;
+          }>(`${API_BASE}${statusPath}/${jobId}`);
+          const d = durum.data.data;
+          setIlerleme({ asama: d.asama, islenen: d.islenen, toplam: d.toplam, sureSn: d.sureSn });
+          if (d.durum === 'hata') throw new Error(durum.data.message ?? 'Excel yüklenemedi.');
+          if (d.durum === 'bitti' && d.sonuc) {
+            result = d.sonuc;
+            message = `${durum.data.message ?? 'İçe aktarma tamamlandı.'} (${d.sureSn} sn)`;
+            break;
+          }
+        }
+      } else {
+        result = response.data.data as ImportResult;
+        message = response.data.message || 'İçe aktarma tamamlandı.';
+      }
       if (result.errors.length > 0) {
         const preview = result.errors.slice(0, 3).join(' · ');
         message += ` Uyarı: ${preview}${result.errors.length > 3 ? '…' : ''}`;
@@ -156,7 +196,11 @@ export default function ExcelActions({
       onImported?.();
     } catch (error) {
       const message =
-        axios.isAxiosError(error) && error.code === 'ECONNABORTED'
+        error instanceof Error && !axios.isAxiosError(error)
+          ? error.message
+          : axios.isAxiosError(error) && error.response?.status === 404 && statusPath
+            ? 'Yükleme kaydı bulunamadı (sunucu yeniden başlamış olabilir). Sonucu listeden doğrulayın.'
+          : axios.isAxiosError(error) && error.code === 'ECONNABORTED'
           ? 'Excel yükleme zaman aşımına uğradı. Dosya çok büyük olabilir; bir süre sonra tekrar deneyin.'
           : axios.isAxiosError(error) && error.response?.data?.message
             ? String(error.response.data.message)
@@ -166,6 +210,7 @@ export default function ExcelActions({
       bildir('error', message);
     } finally {
       setImporting(false);
+      setIlerleme(null);
       if (fileRef.current) fileRef.current.value = '';
     }
   };
@@ -221,7 +266,9 @@ export default function ExcelActions({
       ) : null}
       {importing ? (
         <p className="text-xs text-amber-700">
-          Yükleniyor… Büyük dosyada 1–2 dakika sürebilir; sonuç bittiğinde burada yazar.
+          {ilerleme
+            ? `${ilerleme.asama}${ilerleme.toplam > 0 ? ` · ${ilerleme.islenen.toLocaleString('tr-TR')} / ${ilerleme.toplam.toLocaleString('tr-TR')} satır` : ''} · ${ilerleme.sureSn} sn`
+            : 'Yükleniyor… Büyük dosyada birkaç dakika sürebilir; sonuç bittiğinde burada yazar.'}
         </p>
       ) : null}
       {hint ? <p className="text-xs text-slate-400">{hint}</p> : null}

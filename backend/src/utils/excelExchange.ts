@@ -823,11 +823,21 @@ export async function excelOnKontrol(
   };
 }
 
+/**
+ * Uzun suren yuklemede ilerleme bildirimi. `asama` insan okur bir metin
+ * ("dosya ayristiriliyor", "kayitlar yaziliyor"), islenen/toplam satir
+ * sayisidir. Arka plan isi bunu ekrana tasir, log'a yazar.
+ */
+export type ImportProgress = (asama: string, islenen: number, toplam: number) => void;
+
 export async function importProductsExcel(
   prisma: PrismaClient,
-  buffer: Buffer
+  buffer: Buffer,
+  onProgress: ImportProgress = () => {}
 ): Promise<ImportResult> {
+  onProgress('dosya okunuyor', 0, 0);
   const rows = readRows<ProductExcelRow>(buffer);
+  onProgress('dosya ayristiriliyor', 0, rows.length);
   const { merkezId, cinIadeId } = await getDepotIds(prisma);
   let created = 0;
   let updated = 0;
@@ -1248,8 +1258,10 @@ export async function importProductsExcel(
     return existingId ? 'updated' : 'created';
   };
 
+  onProgress('kayitlar yaziliyor', 0, parsedRows.length);
   for (let offset = 0; offset < parsedRows.length; offset += BATCH_SIZE) {
     const batch = parsedRows.slice(offset, offset + BATCH_SIZE);
+    onProgress('kayitlar yaziliyor', offset, parsedRows.length);
 
     try {
       await prisma.$transaction(

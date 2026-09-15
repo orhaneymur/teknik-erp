@@ -41,6 +41,7 @@ BETIKLER=(
   "excel-lot-test:hayir"
   "fifo-test-kur:hayir"
   "excel-onkontrol-test:evet"
+  "excel-arkaplan-test:evet"
   "elle-stok-katman-test:evet"
   "kasa-hareket-test:evet"
   "anasayfa-f2-test:evet"
