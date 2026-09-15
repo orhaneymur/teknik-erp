@@ -3710,6 +3710,76 @@ app.get<{ Params: { id: string } }>('/api/customers/:id', async (request, reply)
   };
 });
 
+/*
+ * MUSTERI KODU — ardisik sayi.
+ *
+ * Eski sistemde kodlar 120, 121, 122 diye gidiyordu. Buradaki uc kod
+ * verilmeyince "M" + saat damgasi + iki rastgele hane uretiyordu
+ * (M9624233045): okunmuyor, telefonda soylenmiyor, eski kodlarla
+ * alakasiz. Musteri 15 Eylul 2026'da bildirdi.
+ *
+ * Kod yalnizca ETIKETTIR: fatura, tahsilat ve bakiye musteriye id ile
+ * baglidir. Bu yuzden kodu degistirmek gecmis hicbir hesabi etkilemez.
+ */
+const SAYISAL_KOD = /^[0-9]+$/;
+
+/** Mevcut en buyuk sayisal kodun bir fazlasi; hic yoksa 100 */
+async function sonrakiMusteriKodu(tx: Prisma.TransactionClient): Promise<string> {
+  const kodlar = await tx.customer.findMany({ select: { code: true } });
+  let enBuyuk = 99;
+  for (const { code } of kodlar) {
+    if (SAYISAL_KOD.test(code)) enBuyuk = Math.max(enBuyuk, Number(code));
+  }
+  return String(enBuyuk + 1);
+}
+
+/**
+ * Eski "M..." kodlu musterilere olusturulma sirasiyla ardisik numara verir.
+ * Sayisal kodlulara dokunmaz; tekrar cagrilirsa bir sey yapmaz.
+ * Tahsilat/odeme hareketlerinin ACIKLAMASINDA gecen eski kod da yeni koda
+ * cevrilir ("M96... cari tahsilat" -> "212 cari tahsilat"); tutar, tarih,
+ * bakiye degismez — yalnizca metindeki etiket.
+ */
+app.post('/api/customers/kodlari-duzelt', async () => {
+  const sonuc = await prisma.$transaction(async (tx) => {
+    const eskiler = await tx.customer.findMany({
+      select: { id: true, code: true, name: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    const duzeltilecek = eskiler.filter((c) => c.code.startsWith('M') && !SAYISAL_KOD.test(c.code));
+    const degisenler: Array<{ id: number; eski: string; yeni: string; name: string }> = [];
+    let aciklama = 0;
+    for (const c of duzeltilecek) {
+      const yeni = await sonrakiMusteriKodu(tx);
+      await tx.customer.update({ where: { id: c.id }, data: { code: yeni } });
+      for (const tur of ['cari tahsilat', 'cari ödeme']) {
+        const r = await tx.transaction.updateMany({
+          where: { customerId: c.id, description: `${c.code} ${tur}` },
+          data: { description: `${yeni} ${tur}` },
+        });
+        aciklama += r.count;
+      }
+      degisenler.push({ id: c.id, eski: c.code, yeni, name: c.name });
+    }
+    return { degisenler, aciklama };
+  });
+  return {
+    success: true,
+    data: sonuc,
+    message:
+      sonuc.degisenler.length === 0
+        ? 'Düzeltilecek eski kod yok.'
+        : `${sonuc.degisenler.length} müşteri kodu düzeltildi (${sonuc.degisenler[0].yeni} … ${sonuc.degisenler[sonuc.degisenler.length - 1].yeni}), ${sonuc.aciklama} hareket açıklaması güncellendi.`,
+  };
+});
+
+/** Ekranda dugmeyi gostermek icin: kac musteri eski "M..." kodlu */
+app.get('/api/customers/eski-kod-sayisi', async () => {
+  const kodlar = await prisma.customer.findMany({ select: { code: true } });
+  const sayi = kodlar.filter((c) => c.code.startsWith('M') && !SAYISAL_KOD.test(c.code)).length;
+  return { success: true, data: { sayi }, message: null };
+});
+
 app.post<{
   Body: {
     code?: string;
@@ -3748,14 +3818,12 @@ app.post<{
     });
   }
 
-  const customerCode =
-    code?.trim() ||
-    `M${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 90 + 10)}`;
-
   try {
-    const customer = await prisma.customer.create({
-      data: {
-        code: customerCode,
+    const customer = await prisma.$transaction(async (tx) => {
+      const customerCode = code?.trim() || (await sonrakiMusteriKodu(tx));
+      return tx.customer.create({
+        data: {
+          code: customerCode,
         name: trimmedName,
         contactPerson: contactPerson?.trim() || null,
         address: address?.trim() || null,
@@ -3766,7 +3834,8 @@ app.post<{
         taxOffice: taxOffice?.trim() || null,
         taxNumber: taxNumber?.trim() || null,
         creditLimit: creditLimit ?? 0,
-      },
+        },
+      });
     });
 
     return reply.status(201).send({

@@ -57,6 +57,12 @@ export default function CustomerList({ onNotify }: CustomerListProps = {}) {
   const [form, setForm] = useState<CustomerForm>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /*
+   * Eski "M9624233045" bicimli kodlu musteri sayisi. Sifirdan buyukse
+   * "Eski kodları düzelt" dugmesi gorunur; duzeltince kaybolur.
+   */
+  const [eskiKodSayisi, setEskiKodSayisi] = useState(0);
+  const [kodDuzeltiliyor, setKodDuzeltiliyor] = useState(false);
 
   const notify = useCallback(
     (type: 'success' | 'error', message: string) => onNotify?.(type, message),
@@ -101,6 +107,47 @@ export default function CustomerList({ onNotify }: CustomerListProps = {}) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [search, page, loadCustomers]);
+
+  const eskiKodSayisiniYukle = useCallback(async () => {
+    try {
+      const r = await axios.get<{ success: boolean; data: { sayi: number } }>(
+        `${API_BASE}/api/customers/eski-kod-sayisi`
+      );
+      setEskiKodSayisi(r.data.data?.sayi ?? 0);
+    } catch {
+      setEskiKodSayisi(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    void eskiKodSayisiniYukle();
+  }, [eskiKodSayisiniYukle]);
+
+  const eskiKodlariDuzelt = async () => {
+    const onay = window.confirm(
+      `${eskiKodSayisi} müşterinin eski biçimli kodu (M…) sıradaki sayıyla değiştirilecek.\n` +
+        `Faturalar, tahsilatlar ve bakiyeler etkilenmez; yalnızca kod ve hareket açıklamalarındaki kod etiketi değişir.\n\nDevam edilsin mi?`
+    );
+    if (!onay) return;
+    setKodDuzeltiliyor(true);
+    try {
+      const r = await axios.post<{ success: boolean; message: string }>(
+        `${API_BASE}/api/customers/kodlari-duzelt`
+      );
+      notify('success', r.data.message);
+      await eskiKodSayisiniYukle();
+      await loadCustomers(search, page);
+    } catch (error) {
+      notify(
+        'error',
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? String(error.response.data.message)
+          : 'Kodlar düzeltilemedi.'
+      );
+    } finally {
+      setKodDuzeltiliyor(false);
+    }
+  };
 
   const resetForm = () => {
     setForm(emptyForm());
@@ -211,6 +258,17 @@ export default function CustomerList({ onNotify }: CustomerListProps = {}) {
             onNotify={notify}
             hint="Bakiye sütunu bilgi amaçlıdır; yüklemede değiştirilmez."
           />
+          {eskiKodSayisi > 0 ? (
+            <button
+              type="button"
+              onClick={eskiKodlariDuzelt}
+              disabled={kodDuzeltiliyor}
+              className="inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60"
+              title="M ile başlayan eski biçimli kodları sıradaki sayıyla değiştirir"
+            >
+              {kodDuzeltiliyor ? 'Düzeltiliyor…' : `Eski kodları düzelt (${eskiKodSayisi} müşteri)`}
+            </button>
+          ) : null}
           <div className="flex w-full gap-2 sm:w-auto">
           <div className="relative flex-1 sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
