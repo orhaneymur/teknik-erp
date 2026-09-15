@@ -189,6 +189,32 @@ sonucu 0 değilse o iadeler elle incelenir. **15 Eylül 20:40'ta canlıda çalı
 kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "SELECT COUNT(*) on_siparise_iade FROM InvoiceItem ii JOIN InvoiceItem src ON src.id=ii.sourceInvoiceItemId JOIN Invoice s ON s.id=src.invoiceId WHERE s.isPreOrder=1 AND s.deletedAt IS NULL"'
 ```
 
+**STOK EKSİĞİ — BEKLEMEDE (16 Eylül).** Müşteri "stoklarımda eksikler var"
+dedi. Bilinenler:
+
+- Canlıda 12 Eylül'den beri **hiç Excel yüklenmemiş** (son toplu yazma
+  11 Eylül 19:51–19:54, ilk yükleme). Eksik sonradan yüklemeyle gelmedi.
+- Excel kuralı (`excelExchange.ts:1216`): **Bakiye üzerine yazar,
+  GelenAdet ekler; GelenAdet doluysa Bakiye yok sayılır.** İlk yüklemede
+  "ikisi de dolu" senaryosu düşünüldü; müşterinin masaüstündeki
+  `SM-stoklar-20260911-1901.xlsx` dosyasında GelenAdet tamamen boş — o
+  ihtimal bu dosya için düştü.
+- O dosya (sistemden 19:01'de indirilmiş, sıfırlamadan önce): **1.146
+  üründe stok, 22.604 adet.** Yüklemeden sonra kayıtlı olan (DURUM,
+  11 Eylül): **235 ürün, 10.923 adet.** Ama müşteri bu dosyanın doğru
+  sayım olduğundan emin değil → **beklemede.**
+
+Karar: doğru dosya bulunana kadar dokunulmaz. Dosya gelince
+`dosyadaki stok + alış − satış + iade (12 Eylül'den itibaren) = olması
+gereken` hesabı provada yapılır (`k8s/sql/stok-mutabakat.sql` ve
+`stok-uclu-karsilastirma.sql` kalıbı; Excel'i tabloya yükleyen SQL
+müşteri verisi olduğu için depoda değil, masaüstünde `excel-1109.sql`),
+liste müşteriye gösterilir, onayla canlıya yazılır. O zamana kadar
+personel **stoğu elle düzeltmesin, mal girişi Alış Faturası ile** —
+elle düzenleme ve transfer fiş bırakmaz, hesabı bozar.
+12 Eylül 03:00 yedeği (`shenzhen-20260912-*.sql.gz`) 26 Eylül'de 14 gün
+döngüsüyle silinir; **`/root/` altına kopyalanacak.**
+
 **Kasa — açılış kayıtları.** 11 Eylül akşamı 50 adet "ESKİ SİSTEMDEN
 AKTARILDI" kaydı: borçlu müşteriler tediye (ÇIKIŞ, 26.372 $), alacaklılar
 tahsilat (GİRİŞ, 14.860 $). Cari bakiyeler için doğru; ama her tediye
@@ -536,6 +562,10 @@ dalı da bu sürümde kapanır.
 
 **Kod dışı bekleyenler:** repo private (5 dk), yedekleri Backblaze B2'ye
 (`rclone`), kasa düzeltmesi (tek satır SQL, rakam bekleniyor).
+**Stok eksiği:** doğru Excel bekleniyor (yukarıda). PV reclaim policy: canlının
+iki diski Retain'e çevrildi (15 Eylül) — PVC silinse de disk kalır.
+**Excel ön kontrolüne eklenecek:** "N satırda hem Bakiye hem GelenAdet
+dolu — Bakiye yok sayılacak" ve "N üründe stok azalacak" uyarıları.
 
 **İlk gün izlenecekler** (14 Eylül'de dördü de temiz çıktı; kalsın):
 
