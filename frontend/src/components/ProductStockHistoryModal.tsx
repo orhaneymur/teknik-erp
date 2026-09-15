@@ -16,7 +16,14 @@ import {
 } from '../lib/api';
 import { openInvoiceEditorInNewTab } from '../lib/navigation';
 
-type UrunToplam = { giris: number; cikis: number; mevcut: number; cinIade: number };
+type UrunToplam = {
+  giris: number;
+  cikis: number;
+  mevcut: number;
+  cinIade: number;
+  /** alis + iade + stokGirisi(Excel/elle) = giris; satis + stokDusumu = cikis */
+  kirilim?: { alis: number; iade: number; stokGirisi: number; satis: number; stokDusumu: number };
+};
 
 type MovementRow = {
   id: number;
@@ -365,7 +372,15 @@ export default function ProductStockHistoryModal({
                   <p className="text-xl font-bold tabular-nums text-emerald-800">
                     {urunToplam.giris} adet
                   </p>
-                  <p className="text-caption text-slate-400">alış + iade</p>
+                  <p className="text-caption text-slate-400">
+                    {urunToplam.kirilim
+                      ? [
+                          `alış ${urunToplam.kirilim.alis}`,
+                          `iade ${urunToplam.kirilim.iade}`,
+                          `stok girişi ${urunToplam.kirilim.stokGirisi}`,
+                        ].join(' · ')
+                      : 'alış + iade + stok girişi'}
+                  </p>
                 </div>
                 <div className="px-4 py-3 text-center">
                   <p className="text-caption font-semibold uppercase tracking-wide text-red-600">
@@ -374,7 +389,13 @@ export default function ProductStockHistoryModal({
                   <p className="text-xl font-bold tabular-nums text-red-700">
                     {urunToplam.cikis} adet
                   </p>
-                  <p className="text-caption text-slate-400">teslim edilmiş satış</p>
+                  <p className="text-caption text-slate-400">
+                    {urunToplam.kirilim
+                      ? urunToplam.kirilim.stokDusumu > 0
+                        ? `satış ${urunToplam.kirilim.satis} · elle düşüm ${urunToplam.kirilim.stokDusumu}`
+                        : `satış ${urunToplam.kirilim.satis}`
+                      : 'teslim edilmiş satış'}
+                  </p>
                 </div>
                 <div className="px-4 py-3 text-center">
                   <p className="text-caption font-semibold uppercase tracking-wide text-slate-600">

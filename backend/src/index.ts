@@ -7238,27 +7238,23 @@ app.get<{
      */
     const urunToplamSorgusu =
       parsedProductId && Number.isFinite(parsedProductId) && parsedProductId > 0
-        ? prisma.invoiceItem.groupBy({
-            by: ['productId'],
-            where: {
-              productId: parsedProductId,
-              invoice: { type: { in: ['ALIS', 'IADE'] }, deletedAt: null },
-            },
-            _sum: { quantity: true },
-          }).then(async (girisRows) => {
-            const cikisRows = await prisma.invoiceItem.groupBy({
-              by: ['productId'],
-              where: {
-                productId: parsedProductId,
-                invoice: { type: 'SATIS', ...SATIS_RAKAMI_FILTER },
-              },
-              _sum: { quantity: true },
-            });
-            return {
-              giris: girisRows[0]?._sum.quantity ?? 0,
-              cikis: cikisRows[0]?._sum.quantity ?? 0,
+        ? (async () => {
+            const toplam = async (where: Prisma.InvoiceItemWhereInput) => {
+              const rows = await prisma.invoiceItem.groupBy({
+                by: ['productId'],
+                where: { productId: parsedProductId, ...where },
+                _sum: { quantity: true },
+              });
+              return rows[0]?._sum.quantity ?? 0;
             };
-          })
+            const [alis, iade, satis] = await Promise.all([
+              toplam({ invoice: { type: 'ALIS', deletedAt: null } }),
+              // Cin iadesi CIN_IADE_DEPO'ya gider, merkez stoguna girmez
+              toplam({ isChinaReturn: false, invoice: { type: 'IADE', deletedAt: null } }),
+              toplam({ invoice: { type: 'SATIS', ...SATIS_RAKAMI_FILTER } }),
+            ]);
+            return { alis, iade, satis };
+          })()
         : Promise.resolve(null);
 
     const [items, totalCount, stokUrunleri, urunToplam] = await Promise.all([
@@ -7356,8 +7352,34 @@ app.get<{
     return {
       ...buildListResponse(data, totalCount, pagination.limit, pagination.page),
       stokOzeti,
+      /*
+       * Excel yuklemesi, elle stok duzenleme ve depo transferi fis birakmaz;
+       * katmanda da yalnizca KALAN miktar durur. Bu girisler stok
+       * denkliginden turetilir (musteri istegi, 16 Eylul 2026):
+       *   stokGirisi = mevcut + satis - alis - iade
+       * Pozitifse giris (Excel/elle eklenen), negatifse elle dusulen.
+       * Boylece her zaman giris - cikis = mevcut.
+       */
       urunToplam: urunToplam
-        ? { ...urunToplam, mevcut: stokOzeti[0]?.merkez ?? 0, cinIade: stokOzeti[0]?.cinIade ?? 0 }
+        ? (() => {
+            const mevcut = stokOzeti[0]?.merkez ?? 0;
+            const duzeltme = mevcut + urunToplam.satis - urunToplam.alis - urunToplam.iade;
+            const stokGirisi = duzeltme > 0 ? duzeltme : 0;
+            const stokDusumu = duzeltme < 0 ? -duzeltme : 0;
+            return {
+              giris: urunToplam.alis + urunToplam.iade + stokGirisi,
+              cikis: urunToplam.satis + stokDusumu,
+              mevcut,
+              cinIade: stokOzeti[0]?.cinIade ?? 0,
+              kirilim: {
+                alis: urunToplam.alis,
+                iade: urunToplam.iade,
+                stokGirisi,
+                satis: urunToplam.satis,
+                stokDusumu,
+              },
+            };
+          })()
         : null,
     };
   }

@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.13 derlendi, provaya kurulacak.**
-> (v1.22.0–v1.22.12 de Docker Hub'da; v1.22.13 hepsini kapsar, doğrudan o kurulur.)
+> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.14 derlendi, provaya kurulacak.**
+> (v1.22.0–v1.22.13 de Docker Hub'da; v1.22.14 hepsini kapsar, doğrudan o kurulur.)
 > **Müşterinin kararı (15 Eylül akşamı):** önce provada dene → dükkan
 > kapanınca canlı kopyasını provaya yükle, her şeyi gerçek veriyle gör →
 > sonra canlı. Canlı veriye dokunan hiçbir adım onaysız atılmaz.
@@ -211,6 +211,14 @@ metin. Stok listesi satırında kalite de görünür. `kalite-test.ts` (5).
 Doğrulama: `on-siparis-rapor-test` 19 kontrol (bugün fiş/adet: ön sipariş
 saymaz, tamamlanınca sayar, silinince düşer); `tsc` + `vite build` temiz.
 **Maliyet sorusu** (fişte 46 $, kartta 40 $) ayrı — aşağıda "Maliyet".
+
+**v1.22.14 — stok geçmişi "Toplam Giriş" Excel/elle girişleri de saysın
+(müşteri, 16 Eylül gecesi).** Excel yüklemesi, elle stok düzenleme ve
+transfer fiş bırakmaz; katmanda yalnızca KALAN durur. Denklikten türetildi:
+`stokGirişi = mevcut + satış − alış − iade` (negatifse elle düşüm, çıkışa
+yazılır). Artık her zaman giriş − çıkış = mevcut; alt satırda kırılım
+("alış 8 · iade 2 · stok girişi 100"). Çin iadesi merkez girişine sayılmaz.
+`rapor-test`: 110 − 10 = 100.
 
 **v1.22.13 — müşterinin istekleri (16 Eylül gecesi, 3. tur).**
 
@@ -581,7 +589,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.13 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.14 shenzhen-test`
    (veriyi tazelemeye gerek yok — kopya duruyor, sürüm değişince veri değişmez)
 4. Provada dene:
    - **v1.22.13:** Alışta aynı ürün iki satır; sepette 9,17 → sol → aşağı → sağ →
@@ -624,7 +632,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
      dolu olmalı; katman sorgusunda o ürün görünmemeli
    - **Provada Excel indir-yükle turu yapıldı (15 Eylül):** 5.439 ürün
      güncellendi, katman farkı yalnızca 15 eksi stokluda kaldı (beklenen)
-5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.13 shenzhen`, ardından
+5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.14 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):

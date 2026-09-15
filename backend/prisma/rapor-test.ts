@@ -229,7 +229,9 @@ async function main() {
   // A: satis 5+2+3=10 cikis; iade 2 + alis 8 = 10 giris; mevcut 100-10+2+8 = 100
   const shRes = await fetch(`${API}/api/reports/stock-history?productId=${urunA.id}&page=1&limit=5`, { headers: H });
   const sh = ((await shRes.json()) as { urunToplam: { giris: number; cikis: number; mevcut: number } | null }).urunToplam;
-  kontrol('urun toplam: giris 10, cikis 10, mevcut 100 (sayfalamadan bagimsiz)', !!sh && sh.giris === 10 && sh.cikis === 10 && sh.mevcut === 100, JSON.stringify(sh));
+  // Baslangic stogu 100 Excel/elle girisi sayilir: giris = 8 + 2 + 100 = 110, cikis 10, mevcut 100
+  kontrol('urun toplam: giris 110 (alis 8 + iade 2 + stok girisi 100), cikis 10, mevcut 100', !!sh && sh.giris === 110 && sh.cikis === 10 && sh.mevcut === 100, JSON.stringify(sh));
+  kontrol('giris - cikis = mevcut', !!sh && sh.giris - sh.cikis === sh.mevcut, `${sh?.giris} - ${sh?.cikis} = ${sh?.mevcut}`);
 
   // ── 12. Ekstre: fis kaynakli nakit hareketi fis satirina katlanir (16 Eylul 2026) ──
   const ekRes = await fetch(`${API}/api/reports/customer-statement?customerId=${musteri.id}`, { headers: H });
