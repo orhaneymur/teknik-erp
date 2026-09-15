@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.12 derlendi, provaya kurulacak.**
-> (v1.22.0–v1.22.11 de Docker Hub'da; v1.22.12 hepsini kapsar, doğrudan o kurulur.)
+> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.13 derlendi, provaya kurulacak.**
+> (v1.22.0–v1.22.12 de Docker Hub'da; v1.22.13 hepsini kapsar, doğrudan o kurulur.)
 > **Müşterinin kararı (15 Eylül akşamı):** önce provada dene → dükkan
 > kapanınca canlı kopyasını provaya yükle, her şeyi gerçek veriyle gör →
 > sonra canlı. Canlı veriye dokunan hiçbir adım onaysız atılmaz.
@@ -211,6 +211,22 @@ metin. Stok listesi satırında kalite de görünür. `kalite-test.ts` (5).
 Doğrulama: `on-siparis-rapor-test` 19 kontrol (bugün fiş/adet: ön sipariş
 saymaz, tamamlanınca sayar, silinince düşer); `tsc` + `vite build` temiz.
 **Maliyet sorusu** (fişte 46 $, kartta 40 $) ayrı — aşağıda "Maliyet".
+
+**v1.22.13 — müşterinin istekleri (16 Eylül gecesi, 3. tur).**
+
+| # | İstek | Ne yapıldı |
+|---|---|---|
+| 1 | Alışta aynı ürün yeni satır olsun (satış/iade birleştirsin) | `PurchaseCreate`: aynı ürün her seferinde yeni kalem; her satır kendi maliyetiyle katman açar |
+| 2 | Sepette yön tuşları kutu içinde imleç gezdirmesin, gelinen kutuda yazılan eskisini silsin ("9,179,18" olmasın) | `useCartGridKeyboardNav`: sol/sağ her zaman komşu hücre; gelinen hücre tümüyle seçili, blur sonrası yeniden çizimin düşürdüğü seçim bir kare sonra yenilenir (`NumericInput` de). Satış/alış/iade ortak |
+| 3 | Stok Hareketleri'nde fiş penceresinde "Düzenle" | Sayfada fiş no tıklanır → pencere → Düzenle **yeni sekmede** açar (eldeki sepet kaybolmasın). Ürün stok geçmişi penceresinde de aynı (`openInvoiceEditorInNewTab`) |
+| 4 | Ürün stok geçmişi penceresinin altında Toplam Giriş / Toplam Çıkış / Mevcut | `stock-history` yanıtına `urunToplam` (alış+iade / teslim edilmiş satış / merkez stok; sayfalama ve müşteri süzgecinden bağımsız). `rapor-test` kontrolü |
+| 5 | Nakit satış ekstrede iki satır (satış + tahsilat) olmasın | Fiş kaynaklı kasa hareketleri (satış tahsilatı, alış/iade ödemesi, düzenleme farkı) fişin satırına katlanır: borç 12 / alacak 12 + "Tahsil edildi 12 $ · Nakit" rozeti. Yürüyen bakiye aynı. Cari tahsilat/ödeme fişleri ayrı kalır. Silinmiş fişin hareketleri toplam sıfırsa düşer. `rapor-test`: ekstre toplamı = müşteri bakiyesi |
+| 6 | Ekstre ve Fatura Listesi satırları arasında ince çizgi | `divide-slate-200` + `border-b` |
+| 7 | Fatura Listesi'nde Yazdır düğmesi (fişe girmeden) | Yazdır → fiş düzenleme ekranında açılır, yüklenince yazdırma diyaloğu, kapanınca listeye dönüş (`useAutoPrint`); çıktı satış/alış/iade ekranıyla birebir, ayrı şablon yok |
+
+`tsc -b` + `vite build` temiz; `rapor-test` 38 kontrol. **Yerel `tsc --noEmit -p .`
+hiçbir dosyayı denetlemiyormuş** (tsconfig `files: []`) — v1.22.12 Docker
+derlemesi bu yüzden bir kez düştü; artık `tsc -b`.
 
 **v1.22.12 — müşterinin dört isteği (16 Eylül gecesi, 2. tur).**
 
@@ -565,9 +581,13 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.12 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.13 shenzhen-test`
    (veriyi tazelemeye gerek yok — kopya duruyor, sürüm değişince veri değişmez)
 4. Provada dene:
+   - **v1.22.13:** Alışta aynı ürün iki satır; sepette 9,17 → sol → aşağı → sağ →
+     yukarı → "9,18" yaz = 9,18; Stok Hareketleri fiş no → Düzenle yeni sekme;
+     ürün geçmişi penceresi altında toplamlar; nakit satış ekstrede tek satır
+     + rozet; Fatura Listesi Yazdır → diyalog → listeye dönüş
    - **v1.22.12:** Ekstre → ödeme düzenle → ₺ seç, TL yaz, karşılığı görünsün;
      ekstre PDF adı müşteri adıyla; Stok Hareketleri'nde "Mevcut stok" şeridi;
      Cari satış kaydet → bakiye kutusu anında değişsin, "tahmini" satırı kalksın
@@ -604,7 +624,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
      dolu olmalı; katman sorgusunda o ürün görünmemeli
    - **Provada Excel indir-yükle turu yapıldı (15 Eylül):** 5.439 ürün
      güncellendi, katman farkı yalnızca 15 eksi stokluda kaldı (beklenen)
-5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.12 shenzhen`, ardından
+5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.13 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):
