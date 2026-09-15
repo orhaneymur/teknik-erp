@@ -736,10 +736,23 @@ type InvoiceFinancialSnapshot = {
   totalAmountTl: number;
 };
 
+/**
+ * Bir faturanin KASAYA net etkisi (+ giris, - cikis). Cari odeme, on
+ * siparis ve kasa disi yollar 0 doner. applyInvoiceFinancialDelta'nin
+ * kasa dalini aynen izler; ikisi ayrisirsa hareket listesi yalan soyler.
+ */
+function invoiceSafeEffect(s: InvoiceFinancialSnapshot): number {
+  if (s.isPreOrder || !isCashLikePayment(s.paymentMethod)) return 0;
+  if (s.invoiceType === 'SATIS') return s.totalAmountTl;
+  if (s.invoiceType === 'ALIS' || s.invoiceType === 'IADE') return -s.totalAmountTl;
+  return 0;
+}
+
 async function reconcileInvoiceFinancials(
   tx: Prisma.TransactionClient,
   before: InvoiceFinancialSnapshot,
-  after: InvoiceFinancialSnapshot
+  after: InvoiceFinancialSnapshot,
+  invoiceNo: string
 ) {
   await applyInvoiceFinancialDelta(tx, {
     invoiceType: before.invoiceType,
@@ -757,6 +770,36 @@ async function reconcileInvoiceFinancials(
     safeId: after.safeId,
     amountDelta: after.totalAmountTl,
   });
+
+  /*
+   * 15 Eylul 2026: kasa bakiyesi degisiyor ama HAREKET yazilmiyordu.
+   * Canlida bakiye ile hareket toplami 1.191 $ ayrismisti — "tekrar
+   * Kaydet ayni fisi gunceller" (v1.21.2) akisinda personel fise kalem
+   * ekleyip yeniden kaydedince bakiye artiyor, listede ilk tutar kaliyordu.
+   * Artik kasa etkisinin FARKI tek bir hareket olarak yazilir; kasa
+   * degistiyse eskisine ters, yenisine duz kayit girer.
+   */
+  const onceki = invoiceSafeEffect(before);
+  const sonraki = invoiceSafeEffect(after);
+  const hareket = async (safeId: number, customerId: number, fark: number) => {
+    const tutar = roundMoney(Math.abs(fark));
+    if (tutar < 0.005) return;
+    await tx.transaction.create({
+      data: {
+        safeId,
+        customerId,
+        type: fark > 0 ? 'GIRIS' : 'CIKIS',
+        amount: tutar,
+        description: `${invoiceNo} düzenleme farkı (${after.paymentMethod})`,
+      },
+    });
+  };
+  if (before.safeId === after.safeId) {
+    await hareket(after.safeId, after.customerId, sonraki - onceki);
+  } else {
+    await hareket(before.safeId, before.customerId, -onceki);
+    await hareket(after.safeId, after.customerId, sonraki);
+  }
 }
 
 async function getReturnedQtyMap(
@@ -3120,7 +3163,7 @@ app.put<{
           beforeFinancial.isPreOrder !== afterFinancial.isPreOrder ||
           beforeFinancial.totalAmountTl !== afterFinancial.totalAmountTl
         ) {
-          await reconcileInvoiceFinancials(tx, beforeFinancial, afterFinancial);
+          await reconcileInvoiceFinancials(tx, beforeFinancial, afterFinancial, existing.invoiceNo);
         }
       }
 

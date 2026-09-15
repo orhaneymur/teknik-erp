@@ -38,6 +38,7 @@ BETIKLER=(
   "fifo-test-kur:hayir"
   "excel-onkontrol-test:evet"
   "elle-stok-katman-test:evet"
+  "kasa-hareket-test:evet"
   "duzeltmeler-test:evet"
   "fis-kur-test:evet"
   "harem-kur-test:evet"
