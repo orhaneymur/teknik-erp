@@ -3,6 +3,8 @@ import axios from 'axios';
 import { ChevronDown, ChevronRight, History, Package, Search } from 'lucide-react';
 import PaginationBar from '../components/PaginationBar';
 import CustomerNameLink from '../components/CustomerNameLink';
+import InvoiceDetailModal from '../components/InvoiceDetailModal';
+import { openInvoiceEditorInNewTab } from '../lib/navigation';
 import {
   API_BASE,
   LIST_PAGE_SIZE,
@@ -59,6 +61,7 @@ export default function StockMovements() {
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -274,7 +277,19 @@ export default function StockMovements() {
                                 {row.customer.name}
                               </CustomerNameLink>
                               <p className="text-xs text-slate-400">
-                                {row.invoiceNo} · {invoiceTypeLabel(row.invoiceType)}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewingInvoiceId(row.invoiceId);
+                                  }}
+                                  className="font-medium text-cyan-800 underline-offset-2 hover:underline"
+                                  title="Fiş içeriğini görüntüle / düzenle"
+                                >
+                                  {row.invoiceNo}
+                                </button>
+                                {' · '}
+                                {invoiceTypeLabel(row.invoiceType)}
                               </p>
                             </td>
                             <td className="px-4 py-3 text-center">
@@ -358,6 +373,17 @@ export default function StockMovements() {
           </>
         )}
       </section>
+
+      <InvoiceDetailModal
+        invoiceId={viewingInvoiceId}
+        onClose={() => setViewingInvoiceId(null)}
+        // "Duzenle": fis yeni sekmede duzenleme ekraninda acilir; arama
+        // sonucu bu sekmede kalir (musteri istegi, 16 Eylul 2026)
+        onEdit={(inv) => {
+          setViewingInvoiceId(null);
+          openInvoiceEditorInNewTab(inv.id);
+        }}
+      />
     </div>
   );
 }

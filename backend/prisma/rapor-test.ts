@@ -225,6 +225,12 @@ async function main() {
   const k2r = await kasaRaporu(bugun, bugun, kasa2.id);
   kontrol('safeId suzgeci: yalnizca kasa2', k2r.transactions.length === 1 && k2r.kasalar.length === 1 && k2r.transactions.every((t) => t.safe.id === kasa2.id), `hareket=${k2r.transactions.length} kasa=${k2r.kasalar.length}`);
 
+  // ── 11. Urun stok gecmisi toplamlari (16 Eylul 2026) ────────────────
+  // A: satis 5+2+3=10 cikis; iade 2 + alis 8 = 10 giris; mevcut 100-10+2+8 = 100
+  const shRes = await fetch(`${API}/api/reports/stock-history?productId=${urunA.id}&page=1&limit=5`, { headers: H });
+  const sh = ((await shRes.json()) as { urunToplam: { giris: number; cikis: number; mevcut: number } | null }).urunToplam;
+  kontrol('urun toplam: giris 10, cikis 10, mevcut 100 (sayfalamadan bagimsiz)', !!sh && sh.giris === 10 && sh.cikis === 10 && sh.mevcut === 100, JSON.stringify(sh));
+
   console.log(hata === 0 ? '\nHEPSI GECTI' : `\n${hata} KONTROL KALDI`);
   process.exitCode = hata === 0 ? 0 : 1;
 }

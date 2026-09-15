@@ -14,6 +14,9 @@ import {
   type Customer,
   type PaginatedListResponse,
 } from '../lib/api';
+import { openInvoiceEditorInNewTab } from '../lib/navigation';
+
+type UrunToplam = { giris: number; cikis: number; mevcut: number; cinIade: number };
 
 type MovementRow = {
   id: number;
@@ -56,6 +59,8 @@ export default function ProductStockHistoryModal({
   const [rows, setRows] = useState<MovementRow[]>([]);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  /** Urunun tum gecmisi: toplam giris / cikis / mevcut (musteri suzgecinden bagimsiz) */
+  const [urunToplam, setUrunToplam] = useState<UrunToplam | null>(null);
   const [loading, setLoading] = useState(false);
   const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -84,13 +89,13 @@ export default function ProductStockHistoryModal({
         };
         if (filterCustomer) params.customerId = filterCustomer.id;
 
-        const res = await axios.get<PaginatedListResponse<MovementRow>>(
-          `${API_BASE}/api/reports/stock-history`,
-          { params }
-        );
+        const res = await axios.get<
+          PaginatedListResponse<MovementRow> & { urunToplam?: UrunToplam | null }
+        >(`${API_BASE}/api/reports/stock-history`, { params });
         if (res.data.success) {
           setRows(ensureArray(res.data.data));
           setTotalCount(res.data.totalCount);
+          setUrunToplam(res.data.urunToplam ?? null);
         } else {
           setRows([]);
           setTotalCount(0);
@@ -348,6 +353,46 @@ export default function ProductStockHistoryModal({
               limit={LIST_PAGE_SIZE}
               onPageChange={setPage}
             />
+
+            {/* Urunun tum gecmisi — musteri istegi (16 Eylul 2026): "bu urunden
+                bugune kadar kac girdi, kac cikti, simdi kac var" */}
+            {urunToplam && (
+              <div className="grid grid-cols-3 divide-x divide-slate-200 border-t border-slate-200 bg-slate-50/80">
+                <div className="px-4 py-3 text-center">
+                  <p className="text-caption font-semibold uppercase tracking-wide text-emerald-700">
+                    Toplam Giriş
+                  </p>
+                  <p className="text-xl font-bold tabular-nums text-emerald-800">
+                    {urunToplam.giris} adet
+                  </p>
+                  <p className="text-caption text-slate-400">alış + iade</p>
+                </div>
+                <div className="px-4 py-3 text-center">
+                  <p className="text-caption font-semibold uppercase tracking-wide text-red-600">
+                    Toplam Çıkış
+                  </p>
+                  <p className="text-xl font-bold tabular-nums text-red-700">
+                    {urunToplam.cikis} adet
+                  </p>
+                  <p className="text-caption text-slate-400">teslim edilmiş satış</p>
+                </div>
+                <div className="px-4 py-3 text-center">
+                  <p className="text-caption font-semibold uppercase tracking-wide text-slate-600">
+                    Mevcut Durum
+                  </p>
+                  <p
+                    className={`text-xl font-bold tabular-nums ${
+                      urunToplam.mevcut <= 0 ? 'text-red-700' : 'text-slate-900'
+                    }`}
+                  >
+                    {urunToplam.mevcut} adet
+                  </p>
+                  <p className="text-caption text-slate-400">
+                    merkez depo{urunToplam.cinIade > 0 ? ` · Çin iade ${urunToplam.cinIade}` : ''}
+                  </p>
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </div>
@@ -355,6 +400,12 @@ export default function ProductStockHistoryModal({
       <InvoiceDetailModal
         invoiceId={viewingInvoiceId}
         onClose={() => setViewingInvoiceId(null)}
+        // "Duzenle": fis yeni sekmede duzenleme ekraninda acilir; buradaki
+        // satis/alis ekrani ve sepeti yerinde kalir (musteri istegi, 16 Eylul)
+        onEdit={(inv) => {
+          setViewingInvoiceId(null);
+          openInvoiceEditorInNewTab(inv.id);
+        }}
       />
     </div>
   );

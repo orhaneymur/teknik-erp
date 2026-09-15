@@ -285,6 +285,15 @@ export function buildPageUrl(page: PageId, options?: NavigateOptions): string {
   return url.toString();
 }
 
+/**
+ * Kayıtlı fişi düzenleme ekranında YENİ SEKMEDE açar (Fatura Listesi ile
+ * aynı gömülü düzenleyici). Stok geçmişi penceresi satış/alış ekranının
+ * üstünde açıldığı için aynı sekmede gitmek eldeki sepeti kaybettirirdi.
+ */
+export function openInvoiceEditorInNewTab(invoiceId: number): void {
+  window.open(buildPageUrl('invoices', { editInvoiceId: invoiceId }), '_blank', 'noopener');
+}
+
 export function parsePageFromUrl(): {
   page: PageId;
   invoiceFilter: InvoiceFilter;

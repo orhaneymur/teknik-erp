@@ -7229,7 +7229,39 @@ app.get<{
         })
       : Promise.resolve([]);
 
-    const [items, totalCount, stokUrunleri] = await Promise.all([
+    /*
+     * Urun bazli TOPLAM giris/cikis (musteri istegi, 16 Eylul 2026): urun
+     * stok gecmisi penceresinin altinda "Toplam Giris / Toplam Cikis /
+     * Mevcut" yazar. Sayfalamadan ve musteri suzgecinden BAGIMSIZ — urunun
+     * tum gecmisi. Kural hareket listesiyle ayni: ALIS ve IADE giris,
+     * teslim edilmis SATIS cikis; silinmis fis ve on siparis sayilmaz.
+     */
+    const urunToplamSorgusu =
+      parsedProductId && Number.isFinite(parsedProductId) && parsedProductId > 0
+        ? prisma.invoiceItem.groupBy({
+            by: ['productId'],
+            where: {
+              productId: parsedProductId,
+              invoice: { type: { in: ['ALIS', 'IADE'] }, deletedAt: null },
+            },
+            _sum: { quantity: true },
+          }).then(async (girisRows) => {
+            const cikisRows = await prisma.invoiceItem.groupBy({
+              by: ['productId'],
+              where: {
+                productId: parsedProductId,
+                invoice: { type: 'SATIS', ...SATIS_RAKAMI_FILTER },
+              },
+              _sum: { quantity: true },
+            });
+            return {
+              giris: girisRows[0]?._sum.quantity ?? 0,
+              cikis: cikisRows[0]?._sum.quantity ?? 0,
+            };
+          })
+        : Promise.resolve(null);
+
+    const [items, totalCount, stokUrunleri, urunToplam] = await Promise.all([
       prisma.invoiceItem.findMany({
         where: itemWhere,
         orderBy: { invoice: { createdAt: 'desc' } },
@@ -7259,6 +7291,7 @@ app.get<{
       }),
       prisma.invoiceItem.count({ where: itemWhere }),
       stokOzetiSorgusu,
+      urunToplamSorgusu,
     ]);
 
     const stokOzeti = stokUrunleri.map((p) => {
@@ -7323,6 +7356,9 @@ app.get<{
     return {
       ...buildListResponse(data, totalCount, pagination.limit, pagination.page),
       stokOzeti,
+      urunToplam: urunToplam
+        ? { ...urunToplam, mevcut: stokOzeti[0]?.merkez ?? 0, cinIade: stokOzeti[0]?.cinIade ?? 0 }
+        : null,
     };
   }
 );
