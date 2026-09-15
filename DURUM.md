@@ -10,7 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **v1.22.0 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
+> **v1.22.1 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
+> (v1.22.0 da Docker Hub'da; v1.22.1 onu kapsar, doğrudan v1.22.1 kurulur.)
 
 ### Yapıldı (14–15 Eylül)
 
@@ -57,6 +58,19 @@ Doğrulama: `elle-stok-katman-test` (12), `excel-onkontrol-test` (14),
 `kasa-hareket-test` (19 — her adımda `Safe.balance == SUM(GIRIS) − SUM(CIKIS)`),
 mevcut 7 betik değişmeden geçiyor. `excel-lot-test` yalnızca ekrana
 yazıyordu, gerçek kontrol eklendi.
+
+**v1.22.1 — müşterinin üç isteği (15 Eylül):**
+
+| # | İstek | Ne yapıldı |
+|---|---|---|
+| 1 | Satış fişine ürün eklerken ekranlar en üstte, sonra piller, her kategori kendi içinde alfabetik | F2 sıralaması: kategori (`F2_KATEGORI_ONCELIGI = ['EKR','BAT']`, kalanı alfabetik, kategorisiz sonda) → isabet kademesi (ad/kodda geçen önce) → **doğal** ad sırası (IPH-8 < IPH-11 < IPH-12; düz alfabetik 11'i 8'in önüne koyuyordu). Öncelik listesini genişletmek tek satır |
+| 2 | Satış sayfasında dolar toplamının altında TL de yazsın | Net Toplam'ın altına `≈ 12.450,00 TL (1 USD = 48,60 TL)`; fişle aynı kur (`receiptTryRate`), kur yoksa satır çizilmez |
+| 3 | Anasayfa "Bugün satış" dünü gösteriyor; haftalık da olsun | Gün anahtarı `toISOString()` (UTC) ile kuruluyordu: yerel 00:00 UTC'de önceki güne düşüyor, anahtar dizisi dünde bitiyor, bugünün satışları hiçbir kovaya girmiyordu. Artık yerel gün (`TZ=Europe/Istanbul`). "Bu hafta satış" kartı: son 7 gün / önceki 7 güne göre |
+
+Doğrulama: `anasayfa-f2-test.ts` (12 kontrol — 00:30'daki satış bugüne
+yazılıyor, 15 gün önceki haftaya girmiyor). Koşucu artık `TZ` verir;
+Git Bash bunu Windows süreçlerine geçirmez, orada makinenin saat dilimi
+(Türkiye, UTC+3) geçerlidir.
 
 **Kasa — açılış kayıtları.** 11 Eylül akşamı 50 adet "ESKİ SİSTEMDEN
 AKTARILDI" kaydı: borçlu müşteriler tediye (ÇIKIŞ, 26.372 $), alacaklılar
@@ -321,12 +335,12 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 
 ### Sıradaki adım
 
-> **v1.22.0 provaya, sonra canlıya.** Canlı ve prova şu an v1.21.4.
+> **v1.22.1 provaya, sonra canlıya.** Canlı ve prova şu an v1.21.4.
+> Prova 15 Eylül 07:30'da canlının kopyasıyla dolduruldu (BIREBIR TUTTU).
 
 1. Sunucuda `cd /root/teknikerp && git pull`
-2. Provayı canlının kopyasıyla doldur: `bash k8s/prova-tazele.sh shenzhen`
-   (ilk çalıştırma — çıktıdaki "BIREBIR TUTTU" satırına bak)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.0 shenzhen-test`
+2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.1 shenzhen-test`
 4. Provada dene:
    - Stok Listesi → Excel İndir → **değiştirmeden** Excel Yükle → katman
      farkı sorgusu (aşağıda) **0** olmalı
@@ -335,7 +349,10 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
      **İptal** → ürün sayısı değişmemeli
    - Nakit satış kes, kalem ekleyip tekrar Kaydet → Kasa hareketlerinde
      "düzenleme farkı" satırı görünmeli
-5. Canlıya: `bash k8s/update-all-tenants.sh v1.22.0 shenzhen`, ardından
+   - Satış ekranında F2 → "iph 11" yaz: önce ekranlar, sonra piller;
+     Net Toplam'ın altında TL satırı
+   - Anasayfa: "Bugün satış" bugünün fişlerini toplamalı, "Bu hafta" kartı
+5. Canlıya: `bash k8s/update-all-tenants.sh v1.22.1 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):
