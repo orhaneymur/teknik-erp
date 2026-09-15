@@ -94,6 +94,14 @@ Doğrulama: `excel-arkaplan-test.ts` (11 kontrol). Yerelde gerçek boyut
 (5.480 satır, 3,6 MB indirilen dosya): boş tabloya 51 sn, dolu tabloya
 57 sn, ön kontrol 1,4 sn. Sunucu ~10× yavaş (ön kontrol 13 sn ölçüldü).
 
+> **SAAT TUZAĞI (15 Eylül'de teşhisi saptırdı):** MySQL'de `NOW()`
+> Türkiye saati, Prisma'nın yazdığı `createdAt/updatedAt` **UTC**.
+> `updatedAt >= NOW() - INTERVAL 1 HOUR` 3 saat ilerideki bir pencereye
+> bakar ve **hep 0** verir. Zaman penceresi sorgularında `UTC_TIMESTAMP()`
+> kullan; göstermek için `DATE_ADD(createdAt, INTERVAL 3 HOUR)`.
+> Prova logu yüklemenin gerçek hızını gösterdi: okuma 3,6 sn, ayrıştırma
+> 77 sn, yazma 200 satır / 11 sn → 5.439 satır ≈ 6,5 dk (yerelde 57 sn).
+>
 > Sunucuda yükleme yine takılırsa log artık nerede durduğunu söyler:
 > `kubectl logs -n <ns> deploy/teknikerp-backend --since=1h | grep "\[excel"`
 
