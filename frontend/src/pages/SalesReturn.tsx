@@ -30,6 +30,7 @@ import { depotLabel } from '../lib/depots';
 import {
   API_BASE,
   ensureArray,
+  fetchCustomerBalance,
   formatDate,
   formatMoney,
   formatUsd,
@@ -848,6 +849,9 @@ export default function SalesReturn({
         })),
       });
       setSavedNotice(`Fatura güncellendi · ${displayInvoiceNo}`);
+      void fetchCustomerBalance(Number(editCustomerId)).then((b) => {
+        if (b != null) setSelectedCustomer((prev) => (prev ? { ...prev, balance: b } : prev));
+      });
       notify('success', `İade faturası güncellendi: ${displayInvoiceNo}`);
       setRemovedItemIds([]);
       onDataChange?.();
@@ -982,6 +986,10 @@ export default function SalesReturn({
           ? response.data.data.tryRate
           : null
       );
+      // Ekrandaki musteri bakiyesi sunucudaki gercek degerle tazelensin
+      void fetchCustomerBalance(customer.id).then((b) => {
+        if (b != null) setSelectedCustomer((prev) => (prev ? { ...prev, balance: b } : prev));
+      });
 
       /*
        * MUKERRER FIS KORUMASI — kayit tamam, ikinci kez kaydedilemesin.

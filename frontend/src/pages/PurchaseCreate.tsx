@@ -27,6 +27,7 @@ import { useExchangeRates } from '../hooks/useExchangeRates';
 import {
   API_BASE,
   ensureArray,
+  fetchCustomerBalance,
   formatMoney,
   formatUsd,
   roundPrice,
@@ -576,6 +577,9 @@ export default function PurchaseCreate({
         });
 
         setSavedNotice(`Fatura güncellendi · ${displayInvoiceNo}`);
+        void fetchCustomerBalance(selectedSupplier.id).then((b) => {
+          if (b != null) setSelectedSupplier((prev) => (prev ? { ...prev, balance: b } : prev));
+        });
         notify('success', `Alış faturası güncellendi: ${displayInvoiceNo}`);
         setRemovedItemIds([]);
         onDataChange?.();
@@ -658,6 +662,10 @@ export default function PurchaseCreate({
         if (settlementType === 'ACIK' || Math.abs(balanceBefore) > 0.0001) {
           setPrintBalance({ before: balanceBefore, after: balanceAfter });
         }
+        // Ekrandaki tedarikci bakiyesi sunucudaki gercek degerle tazelensin
+        void fetchCustomerBalance(selectedSupplier.id).then((b) => {
+          if (b != null) setSelectedSupplier((prev) => (prev ? { ...prev, balance: b } : prev));
+        });
 
         setSavedNotice(
           `Fatura kaydedildi${savedInvoiceNo ? ` · ${savedInvoiceNo}` : ''} · ${formatUsd(totalUsd)}`

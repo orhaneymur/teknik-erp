@@ -33,6 +33,7 @@ import { tryEquivalent, tryRateNote } from '../lib/receiptTl';
 import {
   API_BASE,
   ensureArray,
+  fetchCustomerBalance,
   formatMoney,
   formatUsd,
   roundPrice,
@@ -912,6 +913,10 @@ export default function SalesCreate({
         setSavedNotice(`Fatura güncellendi · ${displayInvoiceNo}`);
         notify('success', `Fatura güncellendi: ${displayInvoiceNo}`);
         setRemovedItemIds([]);
+        // Bakiye kutusu sunucudaki gercek degerle tazelensin
+        void fetchCustomerBalance(customer.id).then((b) => {
+          if (b != null) setSelectedCustomer((prev) => (prev ? { ...prev, balance: b } : prev));
+        });
         onDataChange?.();
         // Listeden duzenlemeye gelindiyse listeye don. Bu ekranda kesilmis
         // fisi guncelliyorsak EKRANDA KALINIR; kullanici yine duzeltebilir.
@@ -966,6 +971,9 @@ export default function SalesCreate({
         } else if (affectsBalance) {
           setSelectedCustomer({ ...customer, balance: balanceAfter });
         }
+        void fetchCustomerBalance(customer.id).then((b) => {
+          if (b != null) setSelectedCustomer((prev) => (prev ? { ...prev, balance: b } : prev));
+        });
 
         notify(
           'success',
@@ -1381,9 +1389,16 @@ export default function SalesCreate({
               >
                 {selectedCustomer ? formatMoney(selectedCustomer.balance) : '—'}
               </div>
-              {selectedCustomer && paymentMethod === 'Cari' && cart.length > 0 && (
+              {/* Kayitli fiste bakiye zaten bu fisi icerir; "tahmini" satiri
+                  yanlis olurdu (musteri bildirdi, 16 Eylul 2026) */}
+              {selectedCustomer && paymentMethod === 'Cari' && cart.length > 0 && !isEditMode && (
                 <p className="mt-1 text-xs text-indigo-600 font-medium">
                   Satış sonrası tahmini: {formatMoney(selectedCustomer.balance + totalUsd)}
+                </p>
+              )}
+              {selectedCustomer && paymentMethod === 'Cari' && isEditMode && !isPreOrder && (
+                <p className="mt-1 text-xs text-emerald-700 font-medium">
+                  Bu fiş bakiyeye işlendi
                 </p>
               )}
             </div>

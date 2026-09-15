@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.11 derlendi, provaya kurulacak.**
-> (v1.22.0–v1.22.10 de Docker Hub'da; v1.22.11 hepsini kapsar, doğrudan o kurulur.)
+> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.12 derlendi, provaya kurulacak.**
+> (v1.22.0–v1.22.11 de Docker Hub'da; v1.22.12 hepsini kapsar, doğrudan o kurulur.)
 > **Müşterinin kararı (15 Eylül akşamı):** önce provada dene → dükkan
 > kapanınca canlı kopyasını provaya yükle, her şeyi gerçek veriyle gör →
 > sonra canlı. Canlı veriye dokunan hiçbir adım onaysız atılmaz.
@@ -211,6 +211,17 @@ metin. Stok listesi satırında kalite de görünür. `kalite-test.ts` (5).
 Doğrulama: `on-siparis-rapor-test` 19 kontrol (bugün fiş/adet: ön sipariş
 saymaz, tamamlanınca sayar, silinince düşer); `tsc` + `vite build` temiz.
 **Maliyet sorusu** (fişte 46 $, kartta 40 $) ayrı — aşağıda "Maliyet".
+
+**v1.22.12 — müşterinin dört isteği (16 Eylül gecesi, 2. tur).**
+
+| # | İstek | Ne yapıldı |
+|---|---|---|
+| 1 | Ekstredeki "Ödeme Düzenle" yalnızca dolar alıyor, Tahsilat/Ödeme ekranındaki gibi TL de girilebilsin | Tutar alanı + $/₺/€ seçici ortak bileşen oldu (`components/PaymentAmountField.tsx`, çevirim `lib/paymentCurrency.ts`); Tahsilat/Ödeme ekranından çıkarılıp ikisinde de kullanıldı. TL/EUR günün kurundan (Harem + fark) dolara çevrilip kaydedilir, USD saklanır |
+| 2 | Ekstre PDF'inin dosya adı "Müşteri Ekstre · Shenzhen Market" çıkıyor, müşteri adı elle yazılıyor | Yazdırma süresince sekme başlığı `"<Müşteri> - Ekstre - 16.09.2026"` olur, sonra geri alınır (`printDocument(dosyaAdi)`) |
+| 3 | Stok Hareketleri'nde ürünün mevcut stoğu görünmüyor | Arama sonucunun üstünde "Mevcut stok" şeridi: eşleşen ürünler (ilk 12) merkez adedi (0 kırmızı, ≤5 sarı) + varsa Çin iade. `/api/reports/stock-history` yanıtına `stokOzeti` eklendi; liste/arama değişmedi |
+| 4 | Fiş kaydedince ekrandaki müşteri bakiyesi eski kalıyor, "satış sonrası tahmini" yazmaya devam ediyor | Satış/alış/iade — yeni kayıt ve düzenleme sonrası bakiye sunucudan tazelenir (`fetchCustomerBalance`). "Satış sonrası tahmini" yalnızca henüz kaydedilmemiş fişte; kayıtlı Cari fişte "Bu fiş bakiyeye işlendi" |
+
+`tsc` + `vite build` temiz. Sunucuda yalnızca stok özeti (salt okuma) eklendi.
 
 **v1.22.11 — düzenleme ekranında "Maliyet" satış fiyatını gösteriyordu
 (müşteri sorusu, 16 Eylül: "fişte 46, stok listesinde 40").** Sorgu
@@ -554,9 +565,12 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.11 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.12 shenzhen-test`
    (veriyi tazelemeye gerek yok — kopya duruyor, sürüm değişince veri değişmez)
 4. Provada dene:
+   - **v1.22.12:** Ekstre → ödeme düzenle → ₺ seç, TL yaz, karşılığı görünsün;
+     ekstre PDF adı müşteri adıyla; Stok Hareketleri'nde "Mevcut stok" şeridi;
+     Cari satış kaydet → bakiye kutusu anında değişsin, "tahmini" satırı kalksın
    - **v1.22.11:** 260915184312'yi düzenlemede aç, F8 → Maliyet 40 (46 değil)
    - **v1.22.10:** Stok Kartı → Kalite'ye "cof" yaz → "Cof Orijinal" önerilmeli;
      Stok Listesi → düzenle → Kalite alanı var
@@ -590,7 +604,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
      dolu olmalı; katman sorgusunda o ürün görünmemeli
    - **Provada Excel indir-yükle turu yapıldı (15 Eylül):** 5.439 ürün
      güncellendi, katman farkı yalnızca 15 eksi stokluda kaldı (beklenen)
-5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.11 shenzhen`, ardından
+5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.12 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):

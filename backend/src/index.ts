@@ -7201,7 +7201,35 @@ app.get<{
       itemWhere.product = buildProductSearchWhere(search.trim());
     }
 
-    const [items, totalCount] = await Promise.all([
+    /*
+     * Aramaya uyan urunlerin MEVCUT stogu da doner (musteri istegi,
+     * 16 Eylul 2026): hareketleri gorunce "simdi kac tane var?" icin
+     * stok listesine gidip yeniden aramak gerekiyordu. Ilk 12 urun,
+     * ada gore; liste degismez, ustune kucuk bir serit eklenir.
+     */
+    const urunWhere: Prisma.ProductWhereInput | null =
+      parsedProductId && Number.isFinite(parsedProductId) && parsedProductId > 0
+        ? { id: parsedProductId }
+        : search?.trim()
+          ? { ...buildProductSearchWhere(search.trim()), ...AKTIF_URUN_FILTRESI }
+          : null;
+    const stokOzetiSorgusu = urunWhere
+      ? prisma.product.findMany({
+          where: urunWhere,
+          orderBy: { name: 'asc' },
+          take: 12,
+          select: {
+            id: true,
+            sku: true,
+            name: true,
+            stocks: {
+              select: { quantity: true, branch: { select: { name: true } } },
+            },
+          },
+        })
+      : Promise.resolve([]);
+
+    const [items, totalCount, stokUrunleri] = await Promise.all([
       prisma.invoiceItem.findMany({
         where: itemWhere,
         orderBy: { invoice: { createdAt: 'desc' } },
@@ -7230,7 +7258,22 @@ app.get<{
         },
       }),
       prisma.invoiceItem.count({ where: itemWhere }),
+      stokOzetiSorgusu,
     ]);
+
+    const stokOzeti = stokUrunleri.map((p) => {
+      const adet = (depo: string) =>
+        p.stocks
+          .filter((st) => st.branch.name === depo)
+          .reduce((t, st) => t + Number(st.quantity), 0);
+      return {
+        id: p.id,
+        sku: p.sku,
+        name: p.name,
+        merkez: adet(DEPOT_NAMES.MERKEZ),
+        cinIade: adet(DEPOT_NAMES.CIN_IADE),
+      };
+    });
 
     const data = items.map((item) => {
       let direction: 'IN' | 'OUT' = 'IN';
@@ -7277,7 +7320,10 @@ app.get<{
       };
     });
 
-    return buildListResponse(data, totalCount, pagination.limit, pagination.page);
+    return {
+      ...buildListResponse(data, totalCount, pagination.limit, pagination.page),
+      stokOzeti,
+    };
   }
 );
 

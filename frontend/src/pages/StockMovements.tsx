@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { ChevronDown, ChevronRight, History, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, History, Package, Search } from 'lucide-react';
 import PaginationBar from '../components/PaginationBar';
 import CustomerNameLink from '../components/CustomerNameLink';
 import {
@@ -14,6 +14,14 @@ import {
   type PaginatedListResponse,
 } from '../lib/api';
 import { depotLabel } from '../lib/depots';
+
+type StokOzetiSatiri = {
+  id: number;
+  sku: string;
+  name: string;
+  merkez: number;
+  cinIade: number;
+};
 
 type MovementRow = {
   id: number;
@@ -44,6 +52,8 @@ type MovementRow = {
 
 export default function StockMovements() {
   const [rows, setRows] = useState<MovementRow[]>([]);
+  /** Aramaya uyan urunlerin MEVCUT stogu — hareket listesinin ustundeki serit */
+  const [stokOzeti, setStokOzeti] = useState<StokOzetiSatiri[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -65,6 +75,7 @@ export default function StockMovements() {
 
     if (!hasQuery) {
       setRows([]);
+      setStokOzeti([]);
       setTotalCount(0);
       setLoading(false);
       return;
@@ -73,7 +84,9 @@ export default function StockMovements() {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await axios.get<PaginatedListResponse<MovementRow>>(
+        const res = await axios.get<
+          PaginatedListResponse<MovementRow> & { stokOzeti?: StokOzetiSatiri[] }
+        >(
           `${API_BASE}/api/reports/stock-history`,
           {
             params: {
@@ -85,13 +98,16 @@ export default function StockMovements() {
         );
         if (res.data.success) {
           setRows(ensureArray(res.data.data));
+          setStokOzeti(ensureArray(res.data.stokOzeti));
           setTotalCount(res.data.totalCount);
         } else {
           setRows([]);
+          setStokOzeti([]);
           setTotalCount(0);
         }
       } catch {
         setRows([]);
+        setStokOzeti([]);
         setTotalCount(0);
       } finally {
         setLoading(false);
@@ -136,6 +152,43 @@ export default function StockMovements() {
           />
         </div>
       </div>
+
+      {/* Mevcut stok seridi — hareketleri gorurken stok listesine gitmeye gerek kalmasin
+          (musteri istegi, 16 Eylul 2026). Liste ve arama aynen; yalnizca bu serit eklendi. */}
+      {hasQuery && stokOzeti.length > 0 && (
+        <section className="rounded-xl border border-cyan-200 bg-cyan-50/60 px-4 py-3">
+          <p className="mb-2 flex items-center gap-1.5 text-caption font-semibold uppercase tracking-wide text-cyan-800">
+            <Package className="h-3.5 w-3.5" /> Mevcut stok
+          </p>
+          <ul className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+            {stokOzeti.map((u) => (
+              <li key={u.id} className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="min-w-0 truncate text-slate-700">
+                  <span className="font-mono text-caption text-slate-500">{u.sku}</span>{' '}
+                  {u.name}
+                </span>
+                <span className="shrink-0 tabular-nums">
+                  <span
+                    className={`font-bold ${
+                      u.merkez <= 0 ? 'text-red-600' : u.merkez <= 5 ? 'text-amber-600' : 'text-slate-900'
+                    }`}
+                  >
+                    {u.merkez} adet
+                  </span>
+                  {u.cinIade > 0 && (
+                    <span className="ml-2 text-caption text-sky-700">Çin iade: {u.cinIade}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {stokOzeti.length >= 12 && (
+            <p className="mt-1 text-caption text-slate-500">
+              İlk 12 ürün gösteriliyor — daha kesin sonuç için aramayı daraltın.
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {!hasQuery && (

@@ -37,6 +37,24 @@ export type ExchangeRates = {
   uyari?: string | null;
 };
 
+/**
+ * Carinin SUNUCUDAKI guncel bakiyesi. Fis kaydedildikten/duzenlendikten
+ * sonra ekrandaki "Musteri Bakiyesi" kutusu bununla tazelenir — eskiden
+ * eski rakam kaliyor, sayfa yenilenince duzeliyordu (musteri bildirdi,
+ * 16 Eylul 2026). Hata olursa null: ekran eldeki degeri korur.
+ */
+export async function fetchCustomerBalance(customerId: number): Promise<number | null> {
+  try {
+    const res = await axios.get<{ success: boolean; data?: { balance?: number } }>(
+      `${API_BASE}/api/customers/${customerId}`
+    );
+    const b = res.data.data?.balance;
+    return res.data.success && typeof b === 'number' ? b : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchExchangeRates(): Promise<ExchangeRates> {
   try {
     const response = await axios.get<{

@@ -29,6 +29,8 @@ import InvoiceInlineEditor, {
 } from '../components/InvoiceInlineEditor';
 import { useAppNavigationOptional } from '../context/AppNavigationContext';
 import { useExchangeRates } from '../hooks/useExchangeRates';
+import { type PaymentCurrency, amountToStoredUsd } from '../lib/paymentCurrency';
+import { PaymentAmountField } from '../components/PaymentAmountField';
 import { buildReceiptPartyLines } from '../lib/receiptParty';
 import {
   API_BASE,
@@ -142,6 +144,10 @@ export default function CustomerStatement({
   const [safes, setSafes] = useState<StatementSafe[]>([]);
   const [editingPayment, setEditingPayment] = useState<StatementLine | null>(null);
   const [payAmount, setPayAmount] = useState('');
+  // Tahsilat/Odeme ekraniyla ayni: tutar $ / TL / EUR girilebilir, USD saklanir
+  const [payCurrency, setPayCurrency] = useState<PaymentCurrency>('USD');
+  // Kur: TL/EUR girisini dolara cevirmek icin (ekstre TL satirlari da bunu kullanir)
+  const { rates } = useExchangeRates();
   const [payType, setPayType] = useState<'GIRIS' | 'CIKIS'>('GIRIS');
   const [paySafeId, setPaySafeId] = useState<number | ''>('');
   const [payMethod, setPayMethod] = useState<PaymentMethodOption>('Nakit');
@@ -254,6 +260,7 @@ export default function CustomerStatement({
   const openPaymentEdit = useCallback((line: StatementLine) => {
     setEditingPayment(line);
     setPayAmount(String(line.amount ?? line.debit ?? line.credit ?? ''));
+    setPayCurrency('USD');
     setPayType(line.paymentType === 'CIKIS' ? 'CIKIS' : 'GIRIS');
     setPaySafeId(line.safeId ?? '');
     setPayMethod(
@@ -272,7 +279,12 @@ export default function CustomerStatement({
   const savePaymentEdit = useCallback(async () => {
     if (!editingPayment) return;
 
-    const parsedAmount = Number(payAmount.replace(',', '.'));
+    const parsedAmount = amountToStoredUsd(
+      Number(payAmount.replace(',', '.')),
+      payCurrency,
+      rates.usd,
+      rates.eur
+    );
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       notify('error', 'Geçerli bir tutar girin.');
       return;
@@ -311,6 +323,9 @@ export default function CustomerStatement({
   }, [
     editingPayment,
     payAmount,
+    payCurrency,
+    rates.usd,
+    rates.eur,
     payType,
     paySafeId,
     payMethod,
@@ -389,11 +404,20 @@ export default function CustomerStatement({
     });
   };
 
-  const printReceipts = useCallback((toPrint: StatementLine[]) => {
-    if (toPrint.length === 0) return;
-    setPrintLines(toPrint);
-    window.setTimeout(() => printDocument(), 80);
-  }, []);
+  const printReceipts = useCallback(
+    (toPrint: StatementLine[]) => {
+      if (toPrint.length === 0) return;
+      setPrintLines(toPrint);
+      // PDF dosya adi: "<Musteri> - Ekstre - 16.09.2026"
+      const tarih = new Date().toLocaleDateString('tr-TR');
+      const ad = customer?.name?.trim();
+      window.setTimeout(
+        () => printDocument(ad ? `${ad} - Ekstre - ${tarih}` : undefined),
+        80
+      );
+    },
+    [customer]
+  );
 
   const downloadCsv = () => {
     if (customerId === '') return;
@@ -422,7 +446,6 @@ export default function CustomerStatement({
    * `balanceByKey` eskiden yeniye yürüyen bakiyedir; en yeni satırın değeri
    * "güncel", en eski satırın kendi etkisi düşülmüş değeri "önceki" olur.
    */
-  const { rates } = useExchangeRates();
   /*
    * Ekstrede kur ANLIK alınır — satış/tahsilat fişlerindeki gibi kayda
    * yazılmış kur kullanılmaz.
@@ -1170,19 +1193,16 @@ export default function CustomerStatement({
                 </select>
               </div>
 
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Tutar ($)
-                </label>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={payAmount}
-                  onChange={(e) => setPayAmount(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
-              </div>
+              <PaymentAmountField
+                label="Tutar"
+                amount={payAmount}
+                onAmountChange={setPayAmount}
+                currency={payCurrency}
+                onCurrencyChange={setPayCurrency}
+                usdRate={rates.usd}
+                eurRate={rates.eur}
+                inputClass="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
 
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
