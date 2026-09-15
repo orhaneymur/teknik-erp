@@ -18,6 +18,8 @@ type InvoiceInlineEditorProps = {
   onCancelEdit: () => void;
   onSaved: () => void;
   onF2ContextActive?: (active: boolean) => void;
+  /** Fiş yüklenince yazdır, bitince onCancelEdit (Fatura Listesi "Yazdır") */
+  autoPrint?: boolean;
 };
 
 /** Sayfadan ayrılmadan satış / alış / iade faturası düzenleme */
@@ -29,6 +31,7 @@ export default function InvoiceInlineEditor({
   onCancelEdit,
   onSaved,
   onF2ContextActive,
+  autoPrint = false,
 }: InvoiceInlineEditorProps) {
   const common = {
     key: invoice.id,
@@ -38,6 +41,7 @@ export default function InvoiceInlineEditor({
     onDataChange,
     onCancelEdit,
     onSaved,
+    autoPrint,
   };
 
   if (invoice.type === 'ALIS') {

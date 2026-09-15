@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import NumericInput from '../components/NumericInput';
 import SavedBanner from '../components/SavedBanner';
+import { useAutoPrint } from '../hooks/useAutoPrint';
+
 import KayitliFisRozeti from '../components/KayitliFisRozeti';
 import OdemeOnayModal from '../components/OdemeOnayModal';
 import ProductSearchPopover from '../components/ProductSearchPopover';
@@ -147,6 +149,8 @@ type SalesReturnProps = {
   onDataChange?: () => void;
   onCancelEdit?: () => void;
   onSaved?: () => void;
+  /** Listeden "Yazdır": fiş yüklenince yazdır, bitince onCancelEdit ile dön */
+  autoPrint?: boolean;
 };
 
 type EditReturnLine = {
@@ -169,6 +173,7 @@ export default function SalesReturn({
   onDataChange,
   onCancelEdit,
   onSaved,
+  autoPrint = false,
 }: SalesReturnProps) {
   /**
    * MUKERRER FIS KORUMASI (11 Eylul 2026).
@@ -237,6 +242,8 @@ export default function SalesReturn({
   const handlePrint = useCallback(() => {
     printDocument();
   }, []);
+
+  useAutoPrint(autoPrint && isEditMode, !editLoading && editLines.length > 0, onCancelEdit);
 
   const getCartRowIds = useCallback(() => cart.map((line) => line.rowId), [cart]);
   const {

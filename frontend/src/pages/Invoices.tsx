@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { Eye, FileText, Filter, Package, Search, Trash2, User } from 'lucide-react';
+import { Eye, FileText, Filter, Package, Printer, Search, Trash2, User } from 'lucide-react';
 import {
   API_BASE,
   formatDate,
@@ -60,6 +60,8 @@ export default function Invoices({
   onF2ContextActive,
 }: InvoicesProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  /** Listeden "Yazdir" ile acildiysa: yuklenince yazdir, bitince listeye don */
+  const [autoPrint, setAutoPrint] = useState(false);
   const [filter, setFilter] = useState<FilterType>(initialFilter);
   const [customerSearch, setCustomerSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
@@ -182,9 +184,13 @@ export default function Invoices({
         f2Trigger={f2Trigger}
         onNotify={onNotify}
         onDataChange={onDataChange}
-        onCancelEdit={closeEditor}
+        onCancelEdit={() => {
+          setAutoPrint(false);
+          closeEditor();
+        }}
         onSaved={handleSaved}
         onF2ContextActive={onF2ContextActive}
+        autoPrint={autoPrint}
       />
     );
   }
@@ -317,7 +323,8 @@ export default function Invoices({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            {/* Satirlar arasinda ince cizgi — musteri istegi (16 Eylul 2026) */}
+            <tbody className="divide-y divide-slate-200">
               {loading && (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-400">
@@ -338,7 +345,9 @@ export default function Invoices({
                 invoices.map((inv) => (
                   <tr
                     key={inv.id}
-                    className={inv.isPreOrder ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50/60'}
+                    className={`border-b border-slate-200 ${
+                      inv.isPreOrder ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50/60'
+                    }`}
                   >
                     <td className="px-4 py-3 text-sm font-semibold text-slate-900">
                       {/*
@@ -409,6 +418,22 @@ export default function Invoices({
                         >
                           <Eye className="h-4 w-4" />
                         </button>
+                        {/* Yazdir: fis duzenleme ekraninda acilir, yuklenince yazdirma
+                            diyalogu cikar, kapaninca listeye donulur — fisin ciktisi
+                            satis/alis/iade ekraniyla birebir (musteri istegi, 16 Eylul) */}
+                        {['SATIS', 'ALIS', 'IADE'].includes(inv.type) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAutoPrint(true);
+                              tryOpenEditor(inv);
+                            }}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                            title="Fişi yazdır"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => void handleTrash(inv)}

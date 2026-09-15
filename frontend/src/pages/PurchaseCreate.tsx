@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Printer, Save, Search, ShoppingCart, X, ArrowLeft, FileText } from 'lucide-react';
 import NumericInput from '../components/NumericInput';
+import { useAutoPrint } from '../hooks/useAutoPrint';
+
 import SavedBanner from '../components/SavedBanner';
 import KayitliFisRozeti from '../components/KayitliFisRozeti';
 import OdemeOnayModal from '../components/OdemeOnayModal';
@@ -101,6 +103,8 @@ type PurchaseCreateProps = {
   onDataChange?: () => void;
   onCancelEdit?: () => void;
   onSaved?: () => void;
+  /** Listeden "Yazdır": fiş yüklenince yazdır, bitince onCancelEdit ile dön */
+  autoPrint?: boolean;
 };
 
 export default function PurchaseCreate({
@@ -110,6 +114,7 @@ export default function PurchaseCreate({
   onDataChange,
   onCancelEdit,
   onSaved,
+  autoPrint = false,
 }: PurchaseCreateProps) {
   /**
    * MUKERRER FIS KORUMASI — bkz. SalesCreate'teki ayni alan.
@@ -172,6 +177,8 @@ export default function PurchaseCreate({
   const handlePrint = useCallback(() => {
     printDocument();
   }, []);
+
+  useAutoPrint(autoPrint && isEditMode, !editLoading && cart.length > 0, onCancelEdit);
 
   const totalQuantity = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity, 0),

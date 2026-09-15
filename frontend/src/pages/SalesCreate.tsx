@@ -27,6 +27,8 @@ import F2ProductList, {
 import { useF2ProductSearch, type F2Product } from '../hooks/useF2ProductSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
 import { useHoldKeyReveal } from '../hooks/useHoldKeyReveal';
+import { useAutoPrint } from '../hooks/useAutoPrint';
+
 import { useCartGridKeyboardNav } from '../hooks/useCartGridKeyboardNav';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import { tryEquivalent, tryRateNote } from '../lib/receiptTl';
@@ -121,6 +123,8 @@ type SalesCreateProps = {
   onDataChange?: () => void;
   onCancelEdit?: () => void;
   onSaved?: () => void;
+  /** Listeden "Yazdır": fiş yüklenince yazdır, bitince onCancelEdit ile dön */
+  autoPrint?: boolean;
   /** Fatura düzenleme modunda F2'nin App seviyesinde tanınması için */
   onF2ContextActive?: (active: boolean) => void;
 };
@@ -163,6 +167,7 @@ export default function SalesCreate({
   onDataChange,
   onCancelEdit,
   onSaved,
+  autoPrint = false,
   onF2ContextActive,
 }: SalesCreateProps) {
   /**
@@ -270,6 +275,8 @@ export default function SalesCreate({
   const handlePrint = useCallback(() => {
     printDocument();
   }, []);
+
+  useAutoPrint(autoPrint && isEditMode, !editLoading && cart.length > 0, onCancelEdit);
 
   const customerSearchRef = useRef<HTMLInputElement>(null);
   const lastAddedRowId = useRef<string | null>(null);
