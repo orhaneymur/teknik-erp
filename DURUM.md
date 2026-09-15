@@ -567,11 +567,19 @@ bakiye değişmez):
 kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "UPDATE InvoiceItem ii JOIN Invoice i ON i.id=ii.invoiceId JOIN Product p ON p.id=ii.productId SET ii.unitCost = COALESCE((SELECT ROUND(SUM(l.quantity*l.unitCost)/SUM(l.quantity),4) FROM StockLot l WHERE l.productId=p.id AND l.quantity>0), p.costPrice) WHERE i.type=\"SATIS\" AND i.isPreOrder=0 AND i.deletedAt IS NULL AND ii.unitCost IS NULL; SELECT ROW_COUNT() degisen"'
 ```
 
-2. **Dolar kasası düzeltmesi** — rakam için iki sorgu çıktısı bekleniyor
-   (nakit satış toplamı vs fatura kaynaklı hareket toplamı). Bilinenler:
-   açılış tediyeleri net −11.512 $ kasadan çıkmış gösteriyor; fiş
-   düzenlemeleri 1.191 $ hareket yazmadan bakiyeye girmiş (v1.22.0 ile
-   kapandı). Sorgular yukarıda "Kasa — açılış kayıtları" bölümünde.
+2. **Dolar kasası düzeltmesi — TEŞHİS KESİNLEŞTİ, PROVADA UYGULANDI (16 Eylül
+   gecesi), CANLI ONAY BEKLİYOR.** Kasa bakiyesi 2.767,46 $, hareket toplamı
+   887,21 $, fark **1.880,25 $** = eski sürümün (v1.21.4) hareket yazmadığı
+   **22 nakit SATIS fişinin** farkları toplamı (kuruşuna kadar). Kasa bakiyesi
+   ve müşteri bakiyeleri **doğru**; eksik olan yalnızca hareket kayıtları.
+   Düzeltme `k8s/sql/kasa-hareket-tamamla.sql`: 22 hareket ekler
+   ("<fişno> düzenleme farkı (eski sürüm)"), başka hiçbir şeye dokunmaz,
+   tekrar çalıştırılırsa bir şey yapmaz. Provada sonuç: yazılan 22, fark 0,
+   uyumsuz fiş 0. Canlı komutu (yalnızca müşteri "çalıştır" derse):
+   `kubectl exec -i -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t' < k8s/sql/kasa-hareket-tamamla.sql`
+   Not: "açılış tediyeleri −11.512 $" ayrı konu — o kayıtlar doğru, kasa
+   bakiyesinde zaten hesaba katılmış; ekranda "Açılış / eski sistem
+   aktarımı" olarak ayrı görünür.
 3. **"Eski kodları düzelt"** — canlıda sürüm kurulunca müşteri listesinde
    düğme çıkar; müşteri isteyince basılır.
 
