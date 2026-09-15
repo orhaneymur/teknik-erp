@@ -36,6 +36,7 @@ BETIKLER=(
   "excel-kod-test:hayir"
   "excel-lot-test:hayir"
   "fifo-test-kur:hayir"
+  "excel-onkontrol-test:evet"
   "elle-stok-katman-test:evet"
   "duzeltmeler-test:evet"
   "fis-kur-test:evet"
@@ -73,7 +74,23 @@ tablolari_bosalt() {
 # ── Backend ────────────────────────────────────────────────────────────
 BACKEND_PID=""
 BACKEND_LOG="$(mktemp)"
+# Portu dinleyen sureclerin PID'leri (Windows ve Linux)
+port_pidleri() {
+  if command -v netstat >/dev/null 2>&1 && [ "$(uname -s | cut -c1-5)" = "MINGW" ]; then
+    netstat -ano 2>/dev/null | awk -v p=":${API_PORT}" '$2 ~ p"$" && $4=="LISTENING" {print $5}' | sort -u
+  else
+    lsof -tiTCP:"$API_PORT" -sTCP:LISTEN 2>/dev/null
+  fi
+}
 backend_baslat() {
+  # 14 Eylul 2026: port dolu kalmis eski bir backend'e karsi test kosuldu,
+  # yeni uc 404 verdi. Dolu porta ASLA baslama — yanlis sunucuya karsi
+  # gecen test, gecmemis testten kotudur.
+  local dolu; dolu="$(port_pidleri)"
+  if [ -n "$dolu" ]; then
+    echo "HATA: port $API_PORT dolu (PID: $(echo "$dolu" | xargs)). Eski bir backend calisiyor; kapat ve tekrar dene." >&2
+    return 1
+  fi
   log "Backend baslatiliyor (port $API_PORT, KUR_FARKI=$KUR_FARKI)"
   npx tsx src/index.ts >"$BACKEND_LOG" 2>&1 &
   BACKEND_PID=$!
@@ -86,10 +103,14 @@ backend_baslat() {
 }
 backend_kapat() {
   [ -n "$BACKEND_PID" ] || return 0
+  # Once surec agaci, sonra portu hala tutan ne varsa — Windows'ta npx ->
+  # node zinciri agac olarak gorunmeyebiliyor, port uzerinden de kapat
   if command -v taskkill >/dev/null 2>&1; then
-    taskkill //PID "$BACKEND_PID" //T //F >/dev/null 2>&1   # Windows: alt sureclerle birlikte
+    taskkill //PID "$BACKEND_PID" //T //F >/dev/null 2>&1
+    for p in $(port_pidleri); do taskkill //PID "$p" //T //F >/dev/null 2>&1; done
   else
     kill "$BACKEND_PID" 2>/dev/null
+    for p in $(port_pidleri); do kill "$p" 2>/dev/null; done
   fi
   BACKEND_PID=""
 }

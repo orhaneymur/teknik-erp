@@ -11,9 +11,26 @@ type ImportResult = {
   errors: string[];
 };
 
+/** Yukleme oncesi on kontrol yaniti (yalnizca stok listesi) */
+type OnKontrol = {
+  toplamSatir: number;
+  guncellenecek: number;
+  yeniAcilacak: number;
+  adiMevcutOlanYeni: number;
+  ornekler: string[];
+  dosyaIciMukerrerAd: number;
+};
+
 type ExcelActionsProps = {
   exportPath: string;
   importPath: string;
+  /**
+   * Verilirse dosya once buraya gonderilir ve yalnizca SAYILIR. "Yeni
+   * acilacak ama adi mevcut urunle ayni" satir varsa kullaniciya sorulur;
+   * vazgecerse yukleme hic baslamaz. 9 ve 11 Eylul 2026'da iki kez
+   * yasanan "5.000 urun ikinci kez acildi" olayinin onlemi.
+   */
+  precheckPath?: string;
   /**
    * Dosyanın taban adı — ör. "stoklar.xlsx". İndirilirken başına firma
    * kısaltması, sonuna tarih-saat damgası eklenir:
@@ -30,6 +47,7 @@ type ExcelActionsProps = {
 export default function ExcelActions({
   exportPath,
   importPath,
+  precheckPath,
   exportFilename,
   exportQuery,
   importTimeoutMs = 120_000,
@@ -74,6 +92,38 @@ export default function ExcelActions({
     formData.append('file', file);
 
     try {
+      if (precheckPath) {
+        const kontrol = await axios.post<{ success: boolean; data: OnKontrol }>(
+          `${API_BASE}${precheckPath}`,
+          formData,
+          { headers: { 'Content-Type': 'multipart/form-data' }, timeout: importTimeoutMs }
+        );
+        const k = kontrol.data.data;
+        const uyarilar: string[] = [];
+        if (k.adiMevcutOlanYeni > 0) {
+          uyarilar.push(
+            `${k.adiMevcutOlanYeni} satırın adı sistemde zaten olan bir ürünle AYNI ama Id / StokKodu eşleşmiyor. ` +
+              `Bunlar YENİ ÜRÜN olarak ikinci kez açılacak.\n` +
+              `Örnek: ${k.ornekler.join(' · ')}\n\n` +
+              `Doğru yol: sistemden Excel indir, değişiklikleri onun üstüne işle, Id ve StokKodu dolu hâlde geri yükle.`
+          );
+        }
+        if (k.dosyaIciMukerrerAd > 0) {
+          uyarilar.push(`Dosyanın kendi içinde aynı adla birden fazla yazılmış ${k.dosyaIciMukerrerAd} satır var.`);
+        }
+        if (uyarilar.length > 0) {
+          const devam = window.confirm(
+            `DİKKAT — ${k.toplamSatir} satır: ${k.guncellenecek} güncellenecek, ${k.yeniAcilacak} yeni açılacak.\n\n` +
+              uyarilar.join('\n\n') +
+              `\n\nYine de yüklensin mi?`
+          );
+          if (!devam) {
+            onNotify?.('error', 'Excel yüklemesi iptal edildi; hiçbir şey değişmedi.');
+            return;
+          }
+        }
+      }
+
       const response = await axios.post<{ success: boolean; data: ImportResult; message: string }>(
         `${API_BASE}${importPath}`,
         formData,

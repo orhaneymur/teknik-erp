@@ -12,6 +12,7 @@ import {
   appearanceLabel,
   exportCustomersExcel,
   exportInvoicesExcel,
+  excelOnKontrol,
   exportProductsExcel,
   importCustomersExcel,
   importInvoicesExcel,
@@ -5040,6 +5041,25 @@ app.get<{
     'attachment; filename="stoklar.xlsx"'
   );
   return buffer;
+});
+
+/*
+ * Yukleme oncesi on kontrol — dosya okunur, sayilir, HICBIR SEY YAZILMAZ.
+ * Ekran once buraya gonderir; "yeni acilacak ama adi mevcut" satir varsa
+ * kullaniciya sorar, onaylarsa asagidaki gercek yukleme ucunu cagirir.
+ */
+app.post('/api/products/import/excel/kontrol', async (request, reply) => {
+  const upload = await request.file();
+  if (!upload) {
+    return reply.status(400).send({
+      success: false,
+      message: 'Excel dosyası gerekli.',
+      errors: null,
+    });
+  }
+  const buffer = await upload.toBuffer();
+  const sonuc = await excelOnKontrol(prisma, buffer);
+  return { success: true, data: sonuc, message: null };
 });
 
 app.post('/api/products/import/excel', async (request, reply) => {

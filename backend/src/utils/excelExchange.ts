@@ -725,6 +725,104 @@ export async function exportProductsExcel(
   return toBuffer(workbook);
 }
 
+/**
+ * Stok Excel'i YUKLEMEDEN ONCE ne olacagini soyler.
+ *
+ * 9 ve 11 Eylul 2026'da ayni hata iki kez yasandi: sistemden indirilmemis
+ * bir Excel yuklendi, Id ve StokKodu bos oldugu icin hicbir satir
+ * eslesmedi ve program dosyadaki her satiri YENI URUN olarak acti — ikinci
+ * seferinde 5387 urun ikinci kez. Yukleme silmez (v1.11.0 karari), ad
+ * uzerinden eslestirme de yapmaz; bu iki kural dogru ama birlikte
+ * "sessizce ikiye katlama" yolunu aciyor.
+ *
+ * Bu fonksiyon dosyayi importProductsExcel ile AYNI sekilde okur, ayni
+ * eslestirme sirasini (Id -> StokKodu -> yeni) uygular ve yalnizca SAYAR;
+ * veritabanina yazmaz. Ekran, "yeni acilacak ama adi mevcut bir urunle
+ * ayni" satir varsa kullaniciya sorar. Silme yok, otomatik birlestirme
+ * yok — yalnizca uyari.
+ */
+export type ExcelOnKontrol = {
+  toplamSatir: number;
+  /** Id ya da StokKodu ile mevcut bir urune baglanacak satirlar */
+  guncellenecek: number;
+  /** Hicbir kayda baglanmayan satirlar — yeni urun olarak ACILIR */
+  yeniAcilacak: number;
+  /** Yeni acilacaklardan adi mevcut bir urunle birebir ayni olanlar */
+  adiMevcutOlanYeni: number;
+  /** Ornek adlar (en fazla 5) */
+  ornekler: string[];
+  /** Dosyanin kendi icinde ayni adla birden fazla yazilmis satir sayisi */
+  dosyaIciMukerrerAd: number;
+};
+
+export async function excelOnKontrol(
+  prisma: PrismaClient,
+  buffer: Buffer
+): Promise<ExcelOnKontrol> {
+  const rows = readRows<ProductExcelRow>(buffer);
+  const satirlar = rows
+    .map((row) => {
+      const record = row as Record<string, unknown>;
+      return {
+        name: asString(cell(record, 'StokAdi', 'StokAd', 'UrunAdi', 'UrunAd')),
+        sku: asString(cell(record, 'StokKodu', 'StokKod', 'SKU')),
+        excelId: asNumber(cell(record, 'Id'), 0),
+      };
+    })
+    .filter((r) => r.name);
+
+  const idler = [...new Set(satirlar.map((r) => r.excelId).filter((id) => Number.isInteger(id) && id > 0))];
+  const kodlar = [...new Set(satirlar.map((r) => r.sku).filter(Boolean))];
+  const [idIleBulunan, kodIleBulunan, mevcutAdlar] = await Promise.all([
+    idler.length ? prisma.product.findMany({ where: { id: { in: idler } }, select: { id: true } }) : [],
+    kodlar.length ? prisma.product.findMany({ where: { sku: { in: kodlar } }, select: { sku: true } }) : [],
+    prisma.product.findMany({ where: { deletedAt: null }, select: { name: true } }),
+  ]);
+  const idSeti = new Set(idIleBulunan.map((p) => p.id));
+  const kodSeti = new Set(kodIleBulunan.map((p) => p.sku));
+  // Turkce i/I tuzagi: 'iph'.toLocaleUpperCase('tr-TR') 'IPH' degil 'İPH'
+  // verir ve 'IPH-12' ile eslesmez. Uc i'yi de I'ya indirip oyle buyut;
+  // amac mukerreri yakalamak, harf inceligi degil.
+  const adAnahtari = (ad: string) =>
+    ad.trim().replace(/\s+/g, ' ').replace(/[iİı]/g, 'I').toUpperCase();
+  const mevcutAdSeti = new Set(mevcutAdlar.map((p) => adAnahtari(p.name)));
+
+  let guncellenecek = 0;
+  let yeniAcilacak = 0;
+  let adiMevcutOlanYeni = 0;
+  const ornekler: string[] = [];
+  const dosyaAdSayaci = new Map<string, number>();
+
+  for (const r of satirlar) {
+    const anahtar = adAnahtari(r.name);
+    dosyaAdSayaci.set(anahtar, (dosyaAdSayaci.get(anahtar) ?? 0) + 1);
+
+    if (idSeti.has(r.excelId) || (r.sku && kodSeti.has(r.sku))) {
+      guncellenecek += 1;
+      continue;
+    }
+    yeniAcilacak += 1;
+    if (mevcutAdSeti.has(anahtar)) {
+      adiMevcutOlanYeni += 1;
+      if (ornekler.length < 5) ornekler.push(r.name);
+    }
+  }
+
+  let dosyaIciMukerrerAd = 0;
+  for (const sayi of dosyaAdSayaci.values()) {
+    if (sayi > 1) dosyaIciMukerrerAd += sayi - 1;
+  }
+
+  return {
+    toplamSatir: satirlar.length,
+    guncellenecek,
+    yeniAcilacak,
+    adiMevcutOlanYeni,
+    ornekler,
+    dosyaIciMukerrerAd,
+  };
+}
+
 export async function importProductsExcel(
   prisma: PrismaClient,
   buffer: Buffer

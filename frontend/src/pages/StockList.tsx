@@ -446,6 +446,7 @@ export default function StockList({
           <ExcelActions
             exportPath="/api/products/export/excel"
             importPath="/api/products/import/excel"
+            precheckPath="/api/products/import/excel/kontrol"
             exportFilename="stoklar.xlsx"
             /* Ekranda ne filtrelendiyse Excel'de o iner. Aynı parametreler
                listeyi çeken sorguda da kullanılıyor. */
