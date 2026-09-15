@@ -10,7 +10,7 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **v1.22.1 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
+> **v1.22.2 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
 > (v1.22.0 da Docker Hub'da; v1.22.1 onu kapsar, doğrudan v1.22.1 kurulur.)
 
 ### Yapıldı (14–15 Eylül)
@@ -335,12 +335,12 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 
 ### Sıradaki adım
 
-> **v1.22.1 provaya, sonra canlıya.** Canlı ve prova şu an v1.21.4.
+> **v1.22.2 provaya, sonra canlıya.** Canlı ve prova şu an v1.21.4.
 > Prova 15 Eylül 07:30'da canlının kopyasıyla dolduruldu (BIREBIR TUTTU).
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.1 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.2 shenzhen-test`
 4. Provada dene:
    - Stok Listesi → Excel İndir → **değiştirmeden** Excel Yükle → katman
      farkı sorgusu (aşağıda) **0** olmalı
@@ -352,7 +352,7 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
    - Satış ekranında F2 → "iph 11" yaz: önce ekranlar, sonra piller;
      Net Toplam'ın altında TL satırı
    - Anasayfa: "Bugün satış" bugünün fişlerini toplamalı, "Bu hafta" kartı
-5. Canlıya: `bash k8s/update-all-tenants.sh v1.22.1 shenzhen`, ardından
+5. Canlıya: `bash k8s/update-all-tenants.sh v1.22.2 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):
