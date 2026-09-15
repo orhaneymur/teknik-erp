@@ -118,6 +118,11 @@ async function main() {
   kontrol('anasayfa bugun 90', yakin(d.bugun, 90), `bugun=${d.bugun}`);
   kontrol('bugun 1 fis, 10 adet', d.fis === 1 && d.adet === 10, `fis=${d.fis} adet=${d.adet}`);
   kontrol('Kar-Zarar ciro 90 (ISKONTOLU), kar 40', yakin(k.thisMonth.totalRevenue, 90) && yakin(k.thisMonth.totalProfit, 40), `ciro=${k.thisMonth.totalRevenue} kar=${k.thisMonth.totalProfit}`);
+  // Duzenleme ekraninin F8 "Maliyet" sutunu: kalemin unitCost'u ve urunun costPrice'i donmeli
+  // (16 Eylul 2026: costPrice eksikti, ekran satis fiyatini maliyet diye gosteriyordu)
+  const detRes = await fetch(`${API}/api/sales/invoices/${f1.id}`, { headers: H });
+  const det = ((await detRes.json()) as { data: { items: Array<{ unitCost: number | null; product: { costPrice?: number; priceUsd: number } }> } }).data;
+  kontrol('fatura detayi: kalem unitCost 5, urun costPrice 5 (satis fiyati 10 DEGIL)', yakin(det.items[0]?.unitCost ?? -1, 5) && yakin(det.items[0]?.product.costPrice ?? -1, 5), `unitCost=${det.items[0]?.unitCost} costPrice=${det.items[0]?.product.costPrice} priceUsd=${det.items[0]?.product.priceUsd}`);
 
   // ── 2. On siparis ─────────────────────────────────────────────────────
   console.log('\n[2] On siparis 10 x 30 $ (Cari, teslim bekliyor)');

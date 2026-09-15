@@ -487,6 +487,8 @@ export default function SalesCreate({
               quantity: number;
               unitPrice: number;
               discountPercent: number;
+              /** Satis aninda dondurulan birim maliyet; eski kayitta bos */
+              unitCost?: number | null;
               returnedQty?: number;
               product: Product;
             }>;
@@ -552,7 +554,16 @@ export default function SalesCreate({
             quantity: toIntegerQty(line.quantity, 1),
             unitPriceUsd: roundPrice(line.unitPrice / rate),
             discountPercent: line.discountPercent ?? 0,
-            costUsd: productCostUsd(line.product),
+            /*
+             * Kayitli fiste maliyet = satis aninda dondurulan katman
+             * maliyeti (unitCost). Kart maliyeti sonradan degisse de fisin
+             * maliyeti oynamaz; kar raporu da bunu kullanir. Eski kayitta
+             * bos olabilir, o zaman kart maliyeti.
+             */
+            costUsd:
+              line.unitCost != null && line.unitCost > 0
+                ? roundPrice(line.unitCost)
+                : productCostUsd(line.product),
           }))
         );
       } catch {

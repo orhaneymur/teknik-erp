@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.10 derlendi, provaya kurulacak.**
-> (v1.22.0–v1.22.9 de Docker Hub'da; v1.22.10 hepsini kapsar, doğrudan o kurulur.)
+> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.11 derlendi, provaya kurulacak.**
+> (v1.22.0–v1.22.10 de Docker Hub'da; v1.22.11 hepsini kapsar, doğrudan o kurulur.)
 > **Müşterinin kararı (15 Eylül akşamı):** önce provada dene → dükkan
 > kapanınca canlı kopyasını provaya yükle, her şeyi gerçek veriyle gör →
 > sonra canlı. Canlı veriye dokunan hiçbir adım onaysız atılmaz.
@@ -212,14 +212,19 @@ Doğrulama: `on-siparis-rapor-test` 19 kontrol (bugün fiş/adet: ön sipariş
 saymaz, tamamlanınca sayar, silinince düşer); `tsc` + `vite build` temiz.
 **Maliyet sorusu** (fişte 46 $, kartta 40 $) ayrı — aşağıda "Maliyet".
 
-**Maliyet — fiş ≠ stok listesi (müşteri sorusu, 16 Eylül).** Stok
-listesindeki "Maliyet" ürün **kartındaki** varsayılan (`Product.costPrice`,
-Excel AlisFiyati / elle). Fişteki maliyet o adedin **çıktığı FIFO
-katmanının** maliyeti (`lotTuket`, v1.19'dan beri; kart son alışa
-eşitlenmez). Kart 40, alış 46'dan yapıldıysa ve stok o alıştan geliyorsa
-fişte 46 doğrudur. EKR00858 için katman/hareket sorgusu verildi; çıktı
-bekleniyor. Karar gerekirse: stok listesine "katman maliyeti" sütunu
-(eldeki malın gerçek ortalama maliyeti) eklenebilir.
+**v1.22.11 — düzenleme ekranında "Maliyet" satış fiyatını gösteriyordu
+(müşteri sorusu, 16 Eylül: "fişte 46, stok listesinde 40").** Sorgu
+sonucu: EKR00858'in tek katmanı 40 $ (11 Eylül açılışı), fiş
+260915184312'de kayıtlı maliyet **40** — veri doğru, kâr raporu doğru.
+46 = ürünün önceki fişlerdeki **satış fiyatı**. Sebep: `/api/sales/invoices/:id`
+ürünün `costPrice`'ını göndermiyordu; düzenleme ekranı (F8 Maliyet
+sütunu) maliyeti bulamayınca `priceUsd`'ye düşüyordu. Artık uç `costPrice`
+gönderir, ekran önce kalemin kayıtlı `unitCost`'unu (satış anındaki
+katman maliyeti), yoksa kart maliyetini gösterir. Test eklendi
+(`on-siparis-rapor-test`: detayda unitCost 5 / costPrice 5, satış fiyatı 10 değil).
+Aynı sorguda görülen: 260915094213 (4 adet) `unitCost NULL` — "25 kalem
+boş maliyet" listesinden, düzeltme SQL'i onay bekliyor; stok 3 / katman 7
+ayrışması da o fişten (v1.22.5 öncesi ön sipariş tamamlama).
 
 **STOK EKSİĞİ — BEKLEMEDE (16 Eylül).** Müşteri "stoklarımda eksikler var"
 dedi. Bilinenler:
@@ -549,9 +554,10 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.10 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.11 shenzhen-test`
    (veriyi tazelemeye gerek yok — kopya duruyor, sürüm değişince veri değişmez)
 4. Provada dene:
+   - **v1.22.11:** 260915184312'yi düzenlemede aç, F8 → Maliyet 40 (46 değil)
    - **v1.22.10:** Stok Kartı → Kalite'ye "cof" yaz → "Cof Orijinal" önerilmeli;
      Stok Listesi → düzenle → Kalite alanı var
    - **v1.22.9:** Sol menü Ana Sayfa aynı sekmede; anasayfada "Bugün fiş / adet";
@@ -584,7 +590,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
      dolu olmalı; katman sorgusunda o ürün görünmemeli
    - **Provada Excel indir-yükle turu yapıldı (15 Eylül):** 5.439 ürün
      güncellendi, katman farkı yalnızca 15 eksi stokluda kaldı (beklenen)
-5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.10 shenzhen`, ardından
+5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.11 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):

@@ -2865,6 +2865,14 @@ app.get<{ Params: { id: string } }>('/api/sales/invoices/:id', async (request, r
               model: true,
               priceTl: true,
               priceUsd: true,
+              /*
+               * costPrice: duzenleme ekraninin F8 "Maliyet" sutunu icin.
+               * Eksikti; ekran maliyeti bulamayinca SATIS FIYATINA
+               * dusuyordu ve fiste maliyet 40 iken 46 gorunuyordu
+               * (musteri bildirdi, 16 Eylul 2026). Kalemin kendi
+               * unitCost'u zaten donuyor; ekran once onu kullanir.
+               */
+              costPrice: true,
             },
           },
         },
