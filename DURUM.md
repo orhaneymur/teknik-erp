@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **11 Eylül 2026**
+Son güncelleme: **15 Eylül 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -9,9 +9,64 @@ oturuma başlarken önce buraya bak.
 
 ## 0. TAM ŞU AN NEREDE KALDIK
 
-> **12 EYLÜL CUMARTESİ SABAHI SHENZHEN MARKET GERÇEK SATIŞA BAŞLIYOR.**
-> Bugüne kadar hep test yapıyorlardı. Bu tarihe kadar yapılan her şey
-> o sabahı hazırlamak içindir.
+> **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
+> **v1.22.0 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
+
+### Yapıldı (14–15 Eylül)
+
+**İlk üç günün denetimi (14 Eylül).** Cumartesi 67 satış + 1 iade
+(11.413 $), Pazar kapalı, Pazartesi öğlene kadar 29 satış. Silinen fiş
+yok, kursuz fiş yok, mükerrer fiş yok, TL tahsilat kuruşuna doğru
+(10.000 TL → 205,89 $, kur 48,57). Harem akışı 72 saatte bir kez kopup
+kendiliğinden bağlanmış. Alış hiç kesilmemiş. Denetimin ortaya
+çıkardığı üç sorun ve karşılıkları aşağıda.
+
+**Çalışma düzeni kuruldu.** Üç katman:
+
+| Katman | Veri | Ne için |
+|---|---|---|
+| Yerel (`cd backend && npm test`) | Betiğin ürettiği | Para/stok hesabına dokunan her değişiklik önce burada |
+| Prova (`test.shenzhenmarket.com.tr`) | Canlının kopyası: `bash k8s/prova-tazele.sh shenzhen` | Gerçek veriyle ekrandan deneme |
+| Canlı | — | Provada onaylanan sürüm |
+
+`npm test` (`backend/test/kos.sh`): yerel MySQL kabını kendisi kurar,
+**her betiği boş veritabanında** koşar, gerekince backend'i başlatıp
+kapatır. 10 betik, 90+ kontrol. İki tuzağı var ve ikisi de yaşandı:
+üst üste koşulan betiğin artığı "ikinci fatura açıldı" diye yanıltıcı
+KALDI verdi (boş tablo kuralı bunun için); port 3000'de kalmış eski bir
+backend'e karşı test koşuldu, yeni uç 404 verdi (koşucu artık dolu porta
+başlamayı reddediyor).
+
+`prova-tazele.sh`: canlıyı `mysqldump --single-transaction` ile okur
+(kilitlemez), `tenant-<ad>-test`'e yükler, backend'i yeniden başlatır
+(bekleyen migration varsa uygulanır), sayımları karşılaştırır. Hedef adı
+betiğin içinde `-test` sonekiyle kurulur — **canlıya yazamaz**. Firma
+adı, logo, kur farkı ConfigMap'te olduğu için provada "(TEST)" kalır.
+Henüz sunucuda çalıştırılmadı.
+
+**v1.22.0 — dört düzeltme** (imajlar Docker Hub'da, provaya kurulmadı):
+
+| # | Sorun | Kaynağı | Ne yapıldı |
+|---|---|---|---|
+| 1 | **58 üründe stok ile maliyet katmanı ayrışmış** | 14 Eylül denetimi | "Stok Kartı Oluştur" (`POST /api/products`) ve ürün kartındaki stok düzenleme (`PUT /api/products/:id/stock`) stoğu yazıyor ama katman açmıyordu; satışta maliyet varsayılana düşüyordu. İkisi de artık Excel'le aynı `katmanlariStogaEsitle` kuralından geçer. Mevcut 58 ürün için: sürüm kurulunca **sistemden Excel indir, değiştirmeden geri yükle** — yükleme katmanları stoğa eşitler |
+| 2 | **Excel'de mükerrer ad uyarısı** | 9 ve 11 Eylül olayları | `POST /api/products/import/excel/kontrol`: dosya yüklemeyle aynı sırayla (Id → StokKodu → yeni) eşleştirilir ama yalnızca sayılır. "Yeni açılacak ama adı mevcut ürünle aynı" satır varsa ekran yüklemeden önce sorar; vazgeçilirse hiçbir şey değişmez. Silme yok, birleştirme yok — yalnızca uyarı. Türkçe i/I tuzağı: `toLocaleUpperCase('tr-TR')` "iph"i "İPH" yapıp "IPH" ile eşleştirmiyordu; üç i de I'ya indiriliyor |
+| 3 | **Dolar kasası bakiyesi ile hareket toplamı 1.191 $ ayrışmış** | 14 Eylül denetimi | `reconcileInvoiceFinancials` (fatura düzenleme) kasa bakiyesini değiştiriyor ama hareket yazmıyordu. v1.21.2'nin "tekrar Kaydet aynı fişi günceller" akışında personel kalem ekleyip yeniden kaydedince bakiye artıyor, listede ilk tutar kalıyordu. Artık fark tek hareket olarak yazılır (`<no> düzenleme farkı`); kasa değiştiyse eskisine ters, yenisine düz |
+| 4 | `npm test` altyapısı | — | yukarıda |
+
+Doğrulama: `elle-stok-katman-test` (12), `excel-onkontrol-test` (14),
+`kasa-hareket-test` (19 — her adımda `Safe.balance == SUM(GIRIS) − SUM(CIKIS)`),
+mevcut 7 betik değişmeden geçiyor. `excel-lot-test` yalnızca ekrana
+yazıyordu, gerçek kontrol eklendi.
+
+**Kasa — açılış kayıtları.** 11 Eylül akşamı 50 adet "ESKİ SİSTEMDEN
+AKTARILDI" kaydı: borçlu müşteriler tediye (ÇIKIŞ, 26.372 $), alacaklılar
+tahsilat (GİRİŞ, 14.860 $). Cari bakiyeler için doğru; ama her tediye
+kasadan para çıkarır — **net −11.512 $ kasadan çıkmış görünüyor.** Kasa
+bakiyesi 1.051,91 $ görünüyor; yukarıdaki 3. madde düzeltilmeden hareket
+toplamı −139,34 $ idi. Düzeltme rakamı iki sorgunun çıktısıyla
+netleşecek (nakit satış toplamı vs fatura kaynaklı hareket toplamı);
+sonra sunucudan tek satır SQL ile `Safe.balance` düzeltilir. Bu kayıtlar
+silinmez — cari bakiyeler onlara dayanıyor.
 
 ### Yapıldı (11 Eylül)
 
@@ -266,12 +321,37 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 
 ### Sıradaki adım
 
-> **11 Eylül akşamı itibarıyla prova ve canlı v1.21.4 + fiyat v1.6.0.**
-> İki ortam da sıfırlanıp Excel yeniden yüklendi. 12 Eylül sabahı gerçek
-> kullanım başlıyor.
+> **v1.22.0 provaya, sonra canlıya.** Canlı ve prova şu an v1.21.4.
 
-**İlk gün izlenecekler** — bunlar denendi ama gerçek kullanımda tekrar
-görülmeli:
+1. Sunucuda `cd /root/teknikerp && git pull`
+2. Provayı canlının kopyasıyla doldur: `bash k8s/prova-tazele.sh shenzhen`
+   (ilk çalıştırma — çıktıdaki "BIREBIR TUTTU" satırına bak)
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.0 shenzhen-test`
+4. Provada dene:
+   - Stok Listesi → Excel İndir → **değiştirmeden** Excel Yükle → katman
+     farkı sorgusu (aşağıda) **0** olmalı
+   - Aynı dosyanın `Id` ve `StokKodu` sütunlarını silip yükle → "DİKKAT …
+     satırın adı sistemde zaten olan bir ürünle AYNI" sorusu çıkmalı,
+     **İptal** → ürün sayısı değişmemeli
+   - Nakit satış kes, kalem ekleyip tekrar Kaydet → Kasa hareketlerinde
+     "düzenleme farkı" satırı görünmeli
+5. Canlıya: `bash k8s/update-all-tenants.sh v1.22.0 shenzhen`, ardından
+   müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
+
+Katman farkı sorgusu (tek satır):
+
+```bash
+kubectl exec -n tenant-shenzhen-test deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "SELECT COUNT(*) katman_farkli FROM ProductStock ps WHERE ABS(ps.quantity - IFNULL((SELECT SUM(l.quantity) FROM StockLot l WHERE l.productId=ps.productId AND l.branchId=ps.branchId),0)) > 0.001"'
+```
+
+**Sonraki sürüm (v1.23.0) — personel yetkisi.** `admin` / `satis`;
+hangi ekranların satışa kapanacağı müşteriye sorulacak. Düz metin şifre
+dalı da bu sürümde kapanır.
+
+**Kod dışı bekleyenler:** repo private (5 dk), yedekleri Backblaze B2'ye
+(`rclone`), kasa düzeltmesi (tek satır SQL, rakam bekleniyor).
+
+**İlk gün izlenecekler** (14 Eylül'de dördü de temiz çıktı; kalsın):
 
 1. **Mükerrer fiş** — "Kaydet"e ikinci kez basınca ikinci fatura
    açılmamalı; üstte "kaydedildi · tekrar Kaydet aynı fişi günceller"
