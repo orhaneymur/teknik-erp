@@ -39,3 +39,4 @@ backend/prisma/*.db-journal
 # ayrintilarini listeliyor. Depo PUBLIC oldugu surece commitlenmez.
 # Repo private olduktan sonra bu satir kaldirilabilir.
 docs/isletme-notlari.html
+!k8s/sql/*.sql
