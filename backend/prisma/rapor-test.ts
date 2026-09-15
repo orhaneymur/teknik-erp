@@ -231,6 +231,21 @@ async function main() {
   const sh = ((await shRes.json()) as { urunToplam: { giris: number; cikis: number; mevcut: number } | null }).urunToplam;
   kontrol('urun toplam: giris 10, cikis 10, mevcut 100 (sayfalamadan bagimsiz)', !!sh && sh.giris === 10 && sh.cikis === 10 && sh.mevcut === 100, JSON.stringify(sh));
 
+  // ── 12. Ekstre: fis kaynakli nakit hareketi fis satirina katlanir (16 Eylul 2026) ──
+  const ekRes = await fetch(`${API}/api/reports/customer-statement?customerId=${musteri.id}`, { headers: H });
+  const ek = ((await ekRes.json()) as { data: { lines: Array<{ kind: string; invoiceNo?: string; description: string; debit: number; credit: number; nakit?: { giris: number; cikis: number }; receiptNo?: string | null }> } }).data.lines;
+  const fisKaynakliSatir = ek.filter((l) => l.kind === 'payment' && !l.receiptNo && /^\d{12}\b/.test(l.description));
+  kontrol('ekstrede ayri "satis tahsilati" satiri YOK', fisKaynakliSatir.length === 0, `${fisKaynakliSatir.length} satir: ${fisKaynakliSatir.map((l) => l.description).join(' | ')}`);
+  const f1Satir = ek.find((l) => l.kind === 'invoice' && l.invoiceNo === f1.invoiceNo);
+  kontrol('nakit satis satiri: borc 110, alacak 110, nakit.giris 110', !!f1Satir && yakin(f1Satir.debit, 110) && yakin(f1Satir.credit, 110) && yakin(f1Satir.nakit?.giris ?? 0, 110), JSON.stringify({ debit: f1Satir?.debit, credit: f1Satir?.credit, nakit: f1Satir?.nakit }));
+  const f3Satir = ek.find((l) => l.kind === 'invoice' && l.invoiceNo === f3.invoiceNo);
+  kontrol('cari satis satiri: borc 30, alacak 0, nakit yok', !!f3Satir && yakin(f3Satir.debit, 30) && yakin(f3Satir.credit, 0) && !f3Satir.nakit, JSON.stringify({ debit: f3Satir?.debit, credit: f3Satir?.credit }));
+  const cariTahsilat = ek.filter((l) => l.kind === 'payment' && l.receiptNo);
+  kontrol('cari tahsilat/odeme satirlari duruyor (3: 25 giris, 5 cikis, 15 eski sistem)', cariTahsilat.length === 3, `${cariTahsilat.length}`);
+  const bakiyeToplam = ek.reduce((t, l) => t + l.debit - l.credit, 0);
+  const gercek = await prisma.customer.findUniqueOrThrow({ where: { id: musteri.id } });
+  kontrol('ekstre toplami = musteri bakiyesi', yakin(bakiyeToplam, gercek.balance), `ekstre=${bakiyeToplam} bakiye=${gercek.balance}`);
+
   console.log(hata === 0 ? '\nHEPSI GECTI' : `\n${hata} KONTROL KALDI`);
   process.exitCode = hata === 0 ? 0 : 1;
 }

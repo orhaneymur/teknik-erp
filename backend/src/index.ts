@@ -7723,19 +7723,58 @@ app.get<{ Querystring: { customerId?: string } }>(
       safeId?: number;
       receiptNo?: string | null;
       items?: StatementItem[];
+      /**
+       * Fisin kendi nakit hareketi (satis tahsilati / alis odemesi / iade
+       * odemesi + duzenleme farklari), fis satirina KATLANMIS: giris ve
+       * cikis toplami. Ayri satir olarak listelenmez.
+       */
+      nakit?: { giris: number; cikis: number };
     };
 
     const lines: StatementLine[] = [];
 
+    /*
+     * FIS KAYNAKLI kasa hareketleri ayri satir olmaz (musteri istegi,
+     * 16 Eylul 2026): nakit satis ekstrede "12 $ satis" + "12 $ tahsilat"
+     * diye iki satir cikiyordu. Artik fisin satirina katlanir: borc 12,
+     * alacak 12, "Nakit tahsil edildi" rozeti. Yuruyen bakiye degismez
+     * (ayni toplamlar tek satirda). Cari tahsilat/odeme fisleri (receiptNo
+     * dolu) eskisi gibi ayri satirdir.
+     *
+     * Eslesme: aciklama fis numarasiyla baslar ("260915184312 satis
+     * tahsilati (Nakit)"); receiptNo bostur. Fisi listede olmayan hareket
+     * (silinmis fis: tahsilat + iptal birbirini goturur) toplami sifirsa
+     * dusurulur, degilse eskisi gibi satir olarak kalir ki bakiye kaymasin.
+     */
+    const fisNakit = new Map<string, { giris: number; cikis: number; kayitlar: typeof payments }>();
+    const bagimsizOdemeler: typeof payments = [];
+    for (const pay of payments) {
+      const m = !pay.receiptNo ? /^(\d{12})\b/.exec(pay.description) : null;
+      if (!m) {
+        bagimsizOdemeler.push(pay);
+        continue;
+      }
+      const kayit = fisNakit.get(m[1]) ?? { giris: 0, cikis: 0, kayitlar: [] };
+      if (pay.type === 'GIRIS') kayit.giris += pay.amount;
+      else kayit.cikis += pay.amount;
+      kayit.kayitlar.push(pay);
+      fisNakit.set(m[1], kayit);
+    }
+
     for (const inv of invoices) {
       const isDebit = inv.type === 'SATIS';
+      const nakit = fisNakit.get(inv.invoiceNo);
+      if (nakit) fisNakit.delete(inv.invoiceNo);
       lines.push({
         id: inv.id,
         date: inv.createdAt,
         kind: 'invoice',
         description: `${inv.invoiceNo} (${inv.type})`,
-        debit: isDebit ? inv.totalAmountTl : 0,
-        credit: !isDebit ? inv.totalAmountTl : 0,
+        debit: (isDebit ? inv.totalAmountTl : 0) + (nakit?.cikis ?? 0),
+        credit: (!isDebit ? inv.totalAmountTl : 0) + (nakit?.giris ?? 0),
+        ...(nakit && nakit.giris + nakit.cikis > 0
+          ? { nakit: { giris: nakit.giris, cikis: nakit.cikis } }
+          : {}),
         invoiceNo: inv.invoiceNo,
         invoiceType: inv.type,
         isPreOrder: inv.isPreOrder,
@@ -7756,7 +7795,12 @@ app.get<{ Querystring: { customerId?: string } }>(
       });
     }
 
-    for (const pay of payments) {
+    // Fisi listede olmayan fis-kaynakli hareketler: toplami sifir degilse geri koy
+    for (const kayit of fisNakit.values()) {
+      if (Math.abs(kayit.giris - kayit.cikis) > 0.005) bagimsizOdemeler.push(...kayit.kayitlar);
+    }
+
+    for (const pay of bagimsizOdemeler) {
       lines.push({
         id: pay.id,
         date: pay.createdAt,

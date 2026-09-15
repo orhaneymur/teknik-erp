@@ -72,6 +72,8 @@ type StatementLine = {
   safeId?: number;
   receiptNo?: string | null;
   items?: StatementItem[];
+  /** Fisin kendi nakit hareketi fis satirina katlanmis (ayri satir degil) */
+  nakit?: { giris: number; cikis: number };
 };
 
 type PaymentMethodOption = 'Nakit' | 'Kredi Kartı' | 'EFT/Havale';
@@ -857,7 +859,8 @@ export default function CustomerStatement({
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                {/* Satirlar arasinda belirgin cizgi — musteri istegi (16 Eylul 2026) */}
+                <tbody className="divide-y divide-slate-200">
                   {lines.map((line) => {
                     const key = lineKey(line);
                     const expanded = expandedKeys.has(key);
@@ -865,11 +868,13 @@ export default function CustomerStatement({
                     const isInvoice = line.kind === 'invoice';
                     const itemCount = line.items?.length ?? 0;
                     const isPending = isInvoice && Boolean(line.isPreOrder);
-                    const rowClass = selected
-                      ? 'bg-indigo-50/40'
-                      : isPending
-                        ? 'bg-red-50 hover:bg-red-100'
-                        : 'hover:bg-slate-50/60';
+                    const rowClass = `border-b border-slate-200 ${
+                      selected
+                        ? 'bg-indigo-50/40'
+                        : isPending
+                          ? 'bg-red-50 hover:bg-red-100'
+                          : 'hover:bg-slate-50/60'
+                    }`;
 
                     return (
                       <Fragment key={key}>
@@ -949,6 +954,19 @@ export default function CustomerStatement({
                                 {itemCount > 0 && (
                                   <span className="ml-1 text-caption text-slate-400">
                                     · {itemCount} kalem
+                                  </span>
+                                )}
+                                {line.nakit && (
+                                  <span
+                                    className="ml-1.5 inline-flex items-center rounded bg-emerald-100 px-1.5 py-0.5 text-caption font-semibold text-emerald-800"
+                                    title="Fişin nakit/kart hareketi bu satıra dahil; ayrı tahsilat satırı yoktur"
+                                  >
+                                    {line.invoiceType === 'SATIS'
+                                      ? `Tahsil edildi ${formatMoney(line.nakit.giris - line.nakit.cikis)}`
+                                      : line.invoiceType === 'ALIS'
+                                        ? `Ödendi ${formatMoney(line.nakit.cikis - line.nakit.giris)}`
+                                        : `Nakit iade ${formatMoney(line.nakit.cikis - line.nakit.giris)}`}
+                                    {line.paymentMethod ? ` · ${line.paymentMethod}` : ''}
                                   </span>
                                 )}
                                 {line.orderNotes?.trim() && (
