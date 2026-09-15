@@ -16,6 +16,7 @@ import {
   importCustomersExcel,
   importInvoicesExcel,
   importProductsExcel,
+  katmanlariStogaEsitle,
   qualityLabel,
   syncBrandModelsFromProducts,
 } from './utils/excelExchange.js';
@@ -4916,13 +4917,17 @@ app.post<{
       });
 
       const merkezDepoId = await getDepotBranchId(tx, 'MERKEZ');
+      const baslangicStok = initialQuantity ?? 0;
       await tx.productStock.create({
         data: {
           productId: created.id,
           branchId: merkezDepoId,
-          quantity: initialQuantity ?? 0,
+          quantity: baslangicStok,
         },
       });
+      // Baslangic adedi fatura olusturmaz; katmani burada acilir ki ilk
+      // satista maliyet bulunsun (Excel yuklemesiyle ayni kural)
+      await katmanlariStogaEsitle(tx, created.id, merkezDepoId, baslangicStok, costPrice);
 
       await tx.productStock.create({
         data: {
@@ -5507,6 +5512,11 @@ app.put<{
             data: { productId: id, branchId, quantity },
           });
         }
+
+        // Elle girilen adet bir sayimdir: katmanlar ona uydurulur.
+        // Artan kisim urun kartindaki maliyetle acilir, azalan kisim en
+        // yeni katmandan dusulur — Excel yuklemesiyle birebir ayni kural.
+        await katmanlariStogaEsitle(tx, id, branchId, quantity, existing.costPrice);
       }
 
       return tx.product.findUnique({

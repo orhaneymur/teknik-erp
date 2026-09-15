@@ -537,12 +537,18 @@ async function addToStock(
  * Bu yuzden Excel bir SAYIM gibi davranir: ne yazildiysa stok o olur ve
  * katmanlar ona uyar.
  *
+ * Ayni kural elle stok girisi icin de gecerli: "Stok Karti Olustur"daki
+ * baslangic adedi ve urun kartindaki stok duzenleme de fatura olusturmaz.
+ * 12 Eylul 2026'da canlida 30'dan fazla urunde stok ile katman ayrismisti;
+ * sebebi o iki ucun katmana hic dokunmamasiydi. Ikisi de artik buradan
+ * gecer (index.ts, POST /api/products ve PUT /api/products/:id/stock).
+ *
  *   stok katmandan FAZLA  -> fark kadar yeni katman acilir; maliyeti
  *                            Excel'deki AlisFiyati (kullanicinin girdigi)
  *   stok katmandan AZ     -> fazlalik EN YENI katmandan geriye dogru
  *                            dusulur; en eski (gercek) alislar korunur
  */
-async function katmanlariStogaEsitle(
+export async function katmanlariStogaEsitle(
   tx: Prisma.TransactionClient,
   productId: number,
   branchId: number,
