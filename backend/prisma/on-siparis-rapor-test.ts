@@ -93,11 +93,11 @@ async function main() {
   const bugunSatis = async () => {
     const r = await fetch(`${API}/api/sales/dashboard`, { headers: H });
     const d = (await r.json()) as {
-      data: { insights: { dailySales: Array<{ date: string; total: number }>; topCustomers: Array<{ customerId: number; amount: number }> } };
+      data: { bugun: { fisSayisi: number; urunAdedi: number }; insights: { dailySales: Array<{ date: string; total: number }>; topCustomers: Array<{ customerId: number; amount: number }> } };
     };
     const g = d.data.insights.dailySales.find((x) => x.date === gun(new Date()));
     const m = d.data.insights.topCustomers.find((x) => x.customerId === musteri.id);
-    return { bugun: g?.total ?? -1, musteri: m?.amount ?? 0 };
+    return { bugun: g?.total ?? -1, musteri: m?.amount ?? 0, fis: d.data.bugun.fisSayisi, adet: d.data.bugun.urunAdedi };
   };
   const karZarar = async () => {
     const r = await fetch(`${API}/api/reports/profit`, { headers: H });
@@ -116,6 +116,7 @@ async function main() {
   let d = await bugunSatis();
   let k = await karZarar();
   kontrol('anasayfa bugun 90', yakin(d.bugun, 90), `bugun=${d.bugun}`);
+  kontrol('bugun 1 fis, 10 adet', d.fis === 1 && d.adet === 10, `fis=${d.fis} adet=${d.adet}`);
   kontrol('Kar-Zarar ciro 90 (ISKONTOLU), kar 40', yakin(k.thisMonth.totalRevenue, 90) && yakin(k.thisMonth.totalProfit, 40), `ciro=${k.thisMonth.totalRevenue} kar=${k.thisMonth.totalProfit}`);
 
   // ── 2. On siparis ─────────────────────────────────────────────────────
@@ -125,6 +126,7 @@ async function main() {
   k = await karZarar();
   const kr = await kirilim();
   kontrol('anasayfa bugun HALA 90', yakin(d.bugun, 90), `bugun=${d.bugun}`);
+  kontrol('bugun HALA 1 fis, 10 adet', d.fis === 1 && d.adet === 10, `fis=${d.fis} adet=${d.adet}`);
   kontrol('en iyi musteri HALA 90', yakin(d.musteri, 90), `musteri=${d.musteri}`);
   kontrol('Kar-Zarar HALA 90', yakin(k.thisMonth.totalRevenue, 90), `ciro=${k.thisMonth.totalRevenue}`);
   kontrol('Satis Kirilimi 90, 1 fis', yakin(kr.toplam.ciro, 90) && kr.fisSayisi === 1, `ciro=${kr.toplam.ciro} fis=${kr.fisSayisi}`);
@@ -157,6 +159,7 @@ async function main() {
   d = await bugunSatis();
   k = await karZarar();
   kontrol('anasayfa bugun 390', yakin(d.bugun, 390), `bugun=${d.bugun}`);
+  kontrol('bugun 2 fis, 20 adet', d.fis === 2 && d.adet === 20, `fis=${d.fis} adet=${d.adet}`);
   kontrol('Kar-Zarar 390, kar 40 + 100 = 140', yakin(k.thisMonth.totalRevenue, 390) && yakin(k.thisMonth.totalProfit, 140), `ciro=${k.thisMonth.totalRevenue} kar=${k.thisMonth.totalProfit}`);
   kontrol('Satis Kirilimi 390, 2 fis', yakin((await kirilim()).toplam.ciro, 390), `ciro=${(await kirilim()).toplam.ciro}`);
 
@@ -166,6 +169,7 @@ async function main() {
   d = await bugunSatis();
   k = await karZarar();
   kontrol('anasayfa bugun 300', yakin(d.bugun, 300), `bugun=${d.bugun}`);
+  kontrol('bugun 1 fis, 10 adet (silinen dustu)', d.fis === 1 && d.adet === 10, `fis=${d.fis} adet=${d.adet}`);
   kontrol('Kar-Zarar 300 (SILINEN HARIC)', yakin(k.thisMonth.totalRevenue, 300) && yakin(k.allTime.totalRevenue, 300), `ay=${k.thisMonth.totalRevenue} tum=${k.allTime.totalRevenue}`);
 
   console.log(hata === 0 ? '\nHEPSI GECTI' : `\n${hata} KONTROL KALDI`);

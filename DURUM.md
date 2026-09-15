@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **Prova v1.22.7 + canlının 15 Eylül akşam kopyası; v1.22.8 derlendi, provaya kurulacak.**
-> (v1.22.0–v1.22.7 de Docker Hub'da; v1.22.8 hepsini kapsar, doğrudan o kurulur.)
+> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.9 derlendi, provaya kurulacak.**
+> (v1.22.0–v1.22.8 de Docker Hub'da; v1.22.9 hepsini kapsar, doğrudan o kurulur.)
 > **Müşterinin kararı (15 Eylül akşamı):** önce provada dene → dükkan
 > kapanınca canlı kopyasını provaya yükle, her şeyi gerçek veriyle gör →
 > sonra canlı. Canlı veriye dokunan hiçbir adım onaysız atılmaz.
@@ -188,6 +188,29 @@ sonucu 0 değilse o iadeler elle incelenir. **15 Eylül 20:40'ta canlıda çalı
 ```bash
 kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "SELECT COUNT(*) on_siparise_iade FROM InvoiceItem ii JOIN InvoiceItem src ON src.id=ii.sourceInvoiceItemId JOIN Invoice s ON s.id=src.invoiceId WHERE s.isPreOrder=1 AND s.deletedAt IS NULL"'
 ```
+
+**v1.22.9 — müşterinin beş isteği (16 Eylül gecesi).**
+
+| # | İstek | Ne yapıldı |
+|---|---|---|
+| 1 | Sol menüde Ana Sayfa yeni sekmede açılmasın | Yalnızca Ana Sayfa aynı sekmede (`Sidebar.onNavigateHome`); Ctrl/orta tık yine yeni sekme. Diğer menüler değişmedi |
+| 2 | Anasayfada bugünkü fiş ve satılan adet sayısı | Özet satırının altına ikinci satır: "Bugün fiş" ve "Bugün satılan adet" (yerel 00:00'dan, teslim edilmiş satışlar; `dashboard.bugun`) |
+| 3 | Düzenlenen fiş anasayfada en üstte, başka yerde tarih sırası bozulmasın | Yalnızca `/api/sales/dashboard` son faturalar `updatedAt desc`; satırda kesim tarihi kalır, yanına "· düzenlendi <tarih>" (1 dk'dan fazla fark varsa). Fatura listesi, ekstre, raporlar `createdAt` |
+| 4 | Kayıtlı fişe girince "kaydedilmiş" ibaresi | `KayitliFisRozeti`: Fatura Özeti'nin üstünde "KAYITLI FİŞ · no · tarih · Kaydet bu fişi günceller". Satış, alış, iade (yeni + düzenleme). İşlev değişmedi |
+| 5 | Kaydetmeden önce Nakit/Cari onayı | `OdemeOnayModal`: doğrulamalar geçince yöntem büyük harfle sorulur (NAKİT / CARİ / KART / EFT; alışta KAPALI·NAKİT / AÇIK·CARİ; iadede İADE·NAKİT / İADE·CARİ; ön siparişte ÖN SİPARİŞ·CARİ). Varsayılan odak "Hayır" — Enter'la geçilemez; E = evet, H/Esc = hayır. Düzenlemede de sorar |
+
+Doğrulama: `on-siparis-rapor-test` 19 kontrol (bugün fiş/adet: ön sipariş
+saymaz, tamamlanınca sayar, silinince düşer); `tsc` + `vite build` temiz.
+**Maliyet sorusu** (fişte 46 $, kartta 40 $) ayrı — aşağıda "Maliyet".
+
+**Maliyet — fiş ≠ stok listesi (müşteri sorusu, 16 Eylül).** Stok
+listesindeki "Maliyet" ürün **kartındaki** varsayılan (`Product.costPrice`,
+Excel AlisFiyati / elle). Fişteki maliyet o adedin **çıktığı FIFO
+katmanının** maliyeti (`lotTuket`, v1.19'dan beri; kart son alışa
+eşitlenmez). Kart 40, alış 46'dan yapıldıysa ve stok o alıştan geliyorsa
+fişte 46 doğrudur. EKR00858 için katman/hareket sorgusu verildi; çıktı
+bekleniyor. Karar gerekirse: stok listesine "katman maliyeti" sütunu
+(eldeki malın gerçek ortalama maliyeti) eklenebilir.
 
 **STOK EKSİĞİ — BEKLEMEDE (16 Eylül).** Müşteri "stoklarımda eksikler var"
 dedi. Bilinenler:
@@ -517,9 +540,12 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.8 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.9 shenzhen-test`
    (veriyi tazelemeye gerek yok — kopya duruyor, sürüm değişince veri değişmez)
 4. Provada dene:
+   - **v1.22.9:** Sol menü Ana Sayfa aynı sekmede; anasayfada "Bugün fiş / adet";
+     fiş düzenle → anasayfada en üstte "düzenlendi"; kayıtlı fişi aç → yeşil
+     "KAYITLI FİŞ" rozeti; Kaydet → ödeme onay penceresi (Enter geçmez)
    - **v1.22.8:** Ön sipariş kaydet → Ana Sayfa "Bugün satış" DEĞİŞMEMELİ;
      Stok Düş → artmalı. Satış İade'de ön sipariş ürününü seç → "hiç
      alınmamış" uyarısı. Kâr-Zarar: iskontolu satışta ciro iskontolu
@@ -547,7 +573,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
      dolu olmalı; katman sorgusunda o ürün görünmemeli
    - **Provada Excel indir-yükle turu yapıldı (15 Eylül):** 5.439 ürün
      güncellendi, katman farkı yalnızca 15 eksi stokluda kaldı (beklenen)
-5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.8 shenzhen`, ardından
+5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.9 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):

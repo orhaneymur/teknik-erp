@@ -3,6 +3,8 @@ import axios from 'axios';
 import { Printer, Save, Search, ShoppingCart, X, ArrowLeft, FileText } from 'lucide-react';
 import NumericInput from '../components/NumericInput';
 import SavedBanner from '../components/SavedBanner';
+import KayitliFisRozeti from '../components/KayitliFisRozeti';
+import OdemeOnayModal from '../components/OdemeOnayModal';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import ProductStockHistoryModal from '../components/ProductStockHistoryModal';
 import InvoiceTrashButton from '../components/InvoiceTrashButton';
@@ -128,6 +130,12 @@ export default function PurchaseCreate({
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');
   /** Açık = cari, Kapalı = kasadan ödeme */
   const [settlementType, setSettlementType] = useState<SettlementType>('ACIK');
+  /*
+   * Kaydetmeden once odeme yontemi onayi (musteri istegi, 16 Eylul 2026).
+   * handleSubmit dogrulamalari gecince once pencereyi acar; "Evet" ayni
+   * fonksiyonu onayli=true ile yeniden cagirir, kayit o zaman yapilir.
+   */
+  const [odemeOnayi, setOdemeOnayi] = useState<{ yontem: string; aciklama: string } | null>(null);
   const [paymentType, setPaymentType] = useState<PaymentType>('Peşin');
   const paymentMethod: PaymentMethod =
     settlementType === 'KAPALI' ? 'Nakit' : 'Cari';
@@ -498,7 +506,7 @@ export default function PurchaseCreate({
     setCart((prev) => prev.filter((item) => item.rowId !== rowId));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (onayli = false) => {
     if (!selectedSupplier) {
       notify('error', 'Lütfen tedarikçi seçin.');
       return;
@@ -526,6 +534,15 @@ export default function PurchaseCreate({
       paymentMethod === 'Cari'
         ? (branchSafes[0]?.id ?? Number(selectedSafe))
         : Number(selectedSafe);
+
+    if (!onayli) {
+      setOdemeOnayi(
+        settlementType === 'KAPALI'
+          ? { yontem: 'KAPALI · NAKİT', aciklama: 'Tutar kasadan çıkar' }
+          : { yontem: 'AÇIK · CARİ', aciklama: 'Tedarikçiye borç yazılır, kasadan para çıkmaz' }
+      );
+      return;
+    }
 
     if (!safeId) {
       notify('error', 'Geçerli bir kasa bulunamadı.');
@@ -704,6 +721,16 @@ export default function PurchaseCreate({
   return (
     <div className="space-y-4 print:space-y-0">
       <SavedBanner message={savedNotice} />
+      <OdemeOnayModal
+        acik={odemeOnayi !== null}
+        yontem={odemeOnayi?.yontem ?? ''}
+        aciklama={odemeOnayi?.aciklama}
+        onHayir={() => setOdemeOnayi(null)}
+        onEvet={() => {
+          setOdemeOnayi(null);
+          void handleSubmit(true);
+        }}
+      />
       {/* A4 / PDF — ortak çerçeve: components/ReceiptSlip.tsx */}
       <ReceiptPdf
         partyLines={receiptPartyLines}
@@ -1199,6 +1226,10 @@ export default function PurchaseCreate({
             Fatura Özeti
           </h2>
 
+          {isEditMode && displayInvoiceNo && (
+            <KayitliFisRozeti fisNo={displayInvoiceNo} tarih={invoiceDate} />
+          )}
+
           <div className="text-center">
             <p className="text-xs text-slate-500 uppercase tracking-wide">
               Toplam Ürün Adedi
@@ -1266,7 +1297,7 @@ export default function PurchaseCreate({
 
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={() => void handleSubmit()}
             disabled={submitting || cart.length === 0}
             className="btn btn-lg btn-primary btn-block uppercase tracking-wide print:hidden"
           >

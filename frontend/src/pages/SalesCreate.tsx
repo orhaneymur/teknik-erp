@@ -3,6 +3,8 @@ import axios from 'axios';
 import { ArrowLeft, CheckCircle, FileText, Printer, Save, Search, ShoppingCart, X } from 'lucide-react';
 import NumericInput from '../components/NumericInput';
 import SavedBanner from '../components/SavedBanner';
+import KayitliFisRozeti from '../components/KayitliFisRozeti';
+import OdemeOnayModal from '../components/OdemeOnayModal';
 import AlternativeSuggestions, {
   type AlternativeProduct,
 } from '../components/AlternativeSuggestions';
@@ -201,6 +203,12 @@ export default function SalesCreate({
   const [selectedBranch, setSelectedBranch] = useState<number | ''>('');
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Nakit');
+  /*
+   * Kaydetmeden once odeme yontemi onayi (musteri istegi, 16 Eylul 2026).
+   * handleSubmit dogrulamalari gecince once pencereyi acar; "Evet" ayni
+   * fonksiyonu onayli=true ile yeniden cagirir, kayit o zaman yapilir.
+   */
+  const [odemeOnayi, setOdemeOnayi] = useState<{ yontem: string; aciklama: string } | null>(null);
   const [paymentType, setPaymentType] = useState<PaymentType>('Peşin');
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('Mağazadan Teslim');
   const [invoiceDate, setInvoiceDate] = useState(() =>
@@ -799,7 +807,7 @@ export default function SalesCreate({
     setPaymentMethod(defaultPaymentMethodForCustomer(customer));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (onayli = false) => {
     let customer = selectedCustomer;
     let method = paymentMethod;
     if (!customer) {
@@ -839,6 +847,19 @@ export default function SalesCreate({
 
     if (!safeId) {
       notify('error', 'Geçerli bir kasa bulunamadı.');
+      return;
+    }
+
+    if (!onayli) {
+      const etiket =
+        method === 'Cari'
+          ? { yontem: isPreOrder ? 'ÖN SİPARİŞ · CARİ' : 'CARİ', aciklama: isPreOrder ? 'Teslimde müşteri borçlanır; şimdi stok, kasa ve cari değişmez' : 'Müşteri borçlanır, kasaya para girmez' }
+          : method === 'Nakit'
+            ? { yontem: 'NAKİT', aciklama: 'Tutar kasaya girer' }
+            : method === 'Kart'
+              ? { yontem: 'KART', aciklama: 'Tutar kasaya (POS) girer' }
+              : { yontem: 'EFT / HAVALE', aciklama: 'Tutar banka kasasına girer' };
+      setOdemeOnayi(etiket);
       return;
     }
 
@@ -1052,6 +1073,16 @@ export default function SalesCreate({
   return (
     <div className="space-y-4 print:space-y-0">
       <SavedBanner message={savedNotice} />
+      <OdemeOnayModal
+        acik={odemeOnayi !== null}
+        yontem={odemeOnayi?.yontem ?? ''}
+        aciklama={odemeOnayi?.aciklama}
+        onHayir={() => setOdemeOnayi(null)}
+        onEvet={() => {
+          setOdemeOnayi(null);
+          void handleSubmit(true);
+        }}
+      />
       {alternatives && (
         <AlternativeSuggestions
           sourceName={alternatives.sourceName}
@@ -1646,6 +1677,10 @@ export default function SalesCreate({
             Fatura Özeti
           </h2>
 
+          {isEditMode && displayInvoiceNo && (
+            <KayitliFisRozeti fisNo={displayInvoiceNo} tarih={invoiceDate} />
+          )}
+
           <div className="text-center">
             <p className="text-xs text-slate-500 uppercase tracking-wide">
               Toplam Ürün Adedi
@@ -1758,7 +1793,7 @@ export default function SalesCreate({
 
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={() => void handleSubmit()}
             disabled={submitting || cart.length === 0}
             className="btn btn-lg btn-primary btn-block uppercase tracking-wide print:hidden"
           >

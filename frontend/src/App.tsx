@@ -572,6 +572,7 @@ function App() {
         onToggleMenu={toggleMenu}
         onLogout={handleLogout}
         onMobileClose={() => setMobileNavOpen(false)}
+        onNavigateHome={() => navigateTo('dashboard')}
       />
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col print:block print:min-w-0">

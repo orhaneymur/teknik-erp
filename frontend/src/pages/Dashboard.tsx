@@ -7,7 +7,9 @@ import {
   Eye,
   Package,
   Pencil,
+  Receipt,
   Save,
+  ShoppingBag,
   TrendingUp,
   Users,
   Wallet,
@@ -51,6 +53,7 @@ type RecentInvoice = {
   totalAmountUsd?: number;
   exchangeRate?: number;
   createdAt: string;
+  updatedAt?: string;
   customer: { id: number; code: string; name: string; city?: string | null };
 };
 
@@ -191,6 +194,8 @@ type DashboardData = {
   safeBalances: SafeBalance[];
   recentInvoices: RecentInvoice[];
   recentPayments: RecentPayment[];
+  /** Bugun (00:00'dan itibaren) kesilen satis fisi ve satilan urun adedi */
+  bugun: { fisSayisi: number; urunAdedi: number };
   insights: DashboardInsights;
 };
 
@@ -251,6 +256,7 @@ export default function Dashboard({
           safeBalances: ensureArray(payload.safeBalances),
           recentInvoices: ensureArray(payload.recentInvoices).slice(0, 10),
           recentPayments: ensureArray(payload.recentPayments).slice(0, 10),
+          bugun: payload.bugun ?? { fisSayisi: 0, urunAdedi: 0 },
           insights: {
             dailySales: ensureArray(insights.dailySales),
             weeklySales: insights.weeklySales ?? { thisWeek: 0, lastWeek: 0 },
@@ -542,6 +548,26 @@ export default function Dashboard({
         />
       </section>
 
+      {/* Bugunun sayilari — musteri istegi (16 Eylul 2026): tutarin yaninda
+          kac fis kesildi, kac adet satildi da gorunsun. Ayri satir; ust
+          satiri sikistirmiyor. 00:00'dan itibaren, teslim edilmis satislar. */}
+      <section className="order-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <OzetKart
+          etiket="Bugün fiş"
+          deger={`${data.bugun.fisSayisi}`}
+          altBilgi="00:00'dan beri kesilen satış fişi"
+          Ikon={Receipt}
+          sayfa="invoices"
+        />
+        <OzetKart
+          etiket="Bugün satılan adet"
+          deger={`${data.bugun.urunAdedi}`}
+          altBilgi="00:00'dan beri satılan ürün adedi"
+          Ikon={ShoppingBag}
+          sayfa="report-sales-breakdown"
+        />
+      </section>
+
       <section className="order-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -740,9 +766,14 @@ export default function Dashboard({
       <div className="order-5 grid grid-cols-1 gap-4 md:grid-cols-2">
         <section className="rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/5">
           <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5">
-            <h2 className="text-sm font-semibold text-slate-800">
-              Son Fatura Hareketleri
-            </h2>
+            <div>
+              <h2 className="text-sm font-semibold text-slate-800">
+                Son Fatura Hareketleri
+              </h2>
+              <p className="text-caption text-slate-400">
+                Son değişiklik sırasıyla — düzenlenen fiş en üstte
+              </p>
+            </div>
             <SeeAllLink page="invoices" />
           </div>
           <ul className="divide-y divide-slate-50">
@@ -802,6 +833,14 @@ export default function Dashboard({
                     {inv.customer.city ? ` · ${inv.customer.city}` : ''}
                     {' · '}
                     {formatDate(inv.createdAt)}
+                    {/* Duzenlenmis fis: kesim tarihi kalir, yanina "duzenlendi" */}
+                    {inv.updatedAt &&
+                      new Date(inv.updatedAt).getTime() - new Date(inv.createdAt).getTime() > 60_000 && (
+                        <span className="text-violet-600">
+                          {' · düzenlendi '}
+                          {formatDate(inv.updatedAt)}
+                        </span>
+                      )}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

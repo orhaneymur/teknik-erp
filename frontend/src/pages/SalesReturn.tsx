@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import NumericInput from '../components/NumericInput';
 import SavedBanner from '../components/SavedBanner';
+import KayitliFisRozeti from '../components/KayitliFisRozeti';
+import OdemeOnayModal from '../components/OdemeOnayModal';
 import ProductSearchPopover from '../components/ProductSearchPopover';
 import InlineCustomerSearchInput from '../components/InlineCustomerSearchInput';
 import F2ProductList from '../components/F2ProductList';
@@ -195,6 +197,12 @@ export default function SalesReturn({
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');
   /** Açık = cari, Kapalı = kasadan para çıkışı */
   const [settlementType, setSettlementType] = useState<'ACIK' | 'KAPALI'>('ACIK');
+  /*
+   * Kaydetmeden once odeme yontemi onayi (musteri istegi, 16 Eylul 2026).
+   * handleSubmit dogrulamalari gecince once pencereyi acar; "Evet" ayni
+   * fonksiyonu onayli=true ile yeniden cagirir, kayit o zaman yapilir.
+   */
+  const [odemeOnayi, setOdemeOnayi] = useState<{ yontem: string; aciklama: string } | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [searchModal, setSearchModal] = useState(false);
@@ -802,10 +810,19 @@ export default function SalesReturn({
     setOrderNotes('');
   }, []);
 
-  const handleEditSave = async () => {
+  const handleEditSave = async (onayli = false) => {
     if (!activeInvoiceId || editCustomerId === '') return;
     if (editLines.length === 0) {
       notify('error', 'En az bir kalem olmalı.');
+      return;
+    }
+
+    if (!onayli) {
+      setOdemeOnayi(
+        editPaymentMethod === 'Cari'
+          ? { yontem: 'İADE · CARİ', aciklama: 'Müşterinin borcundan düşülür, kasadan para çıkmaz' }
+          : { yontem: 'İADE · NAKİT', aciklama: 'İade tutarı kasadan ödenir' }
+      );
       return;
     }
 
@@ -852,7 +869,7 @@ export default function SalesReturn({
   const settlementLabel =
     settlementType === 'KAPALI' ? 'Kapalı Fatura (Kasadan)' : 'Açık Fatura (Cari)';
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (onayli = false) => {
     let customer = selectedCustomer;
     if (!customer) {
       customer = pickCustomerFromSearch(customerSearch, customerResults);
@@ -881,6 +898,15 @@ export default function SalesReturn({
 
     if (activeLines.length === 0) {
       notify('error', 'İade için en az bir ürün ekleyin.');
+      return;
+    }
+
+    if (!onayli) {
+      setOdemeOnayi(
+        settlementType === 'KAPALI'
+          ? { yontem: 'İADE · NAKİT', aciklama: 'İade tutarı kasadan ödenir' }
+          : { yontem: 'İADE · CARİ', aciklama: 'Müşterinin borcundan düşülür, kasadan para çıkmaz' }
+      );
       return;
     }
 
@@ -1041,6 +1067,16 @@ export default function SalesReturn({
     return (
       <div className="space-y-4 print:space-y-0">
         <SavedBanner message={savedNotice} />
+        <OdemeOnayModal
+          acik={odemeOnayi !== null}
+          yontem={odemeOnayi?.yontem ?? ''}
+          aciklama={odemeOnayi?.aciklama}
+          onHayir={() => setOdemeOnayi(null)}
+          onEvet={() => {
+            setOdemeOnayi(null);
+            void handleEditSave(true);
+          }}
+        />
         {/* A4 / PDF — ortak çerçeve: components/ReceiptSlip.tsx */}
         <ReceiptPdf
           partyLines={receiptPartyLines}
@@ -1396,6 +1432,9 @@ export default function SalesReturn({
           </div>
 
           <div className="space-y-3 border-t border-slate-100 pt-3">
+            {displayInvoiceNo && (
+              <KayitliFisRozeti fisNo={displayInvoiceNo} tarih={editInvoiceDate} />
+            )}
             <p className="text-sm font-semibold text-slate-700">
               Toplam: {formatUsd(editTotalTl)}
             </p>
@@ -1411,7 +1450,7 @@ export default function SalesReturn({
               </button>
               <button
                 type="button"
-                onClick={handleEditSave}
+                onClick={() => void handleEditSave()}
                 disabled={submitting}
                 className="btn btn-lg btn-primary inline-flex items-center gap-2"
               >
@@ -1495,6 +1534,16 @@ export default function SalesReturn({
   return (
     <div className="space-y-4 print:space-y-0">
       <SavedBanner message={savedNotice} />
+      <OdemeOnayModal
+        acik={odemeOnayi !== null}
+        yontem={odemeOnayi?.yontem ?? ''}
+        aciklama={odemeOnayi?.aciklama}
+        onHayir={() => setOdemeOnayi(null)}
+        onEvet={() => {
+          setOdemeOnayi(null);
+          void handleSubmit(true);
+        }}
+      />
       {/*
         A4 / PDF — ortak çerçeve: components/ReceiptSlip.tsx
         Müşteri bloğu eklendi: termal fişte vardı, A4'te unutulmuştu.
@@ -2061,7 +2110,7 @@ export default function SalesReturn({
           </label>
           <button
             type="button"
-            onClick={handleSubmit}
+            onClick={() => void handleSubmit()}
             disabled={submitting || postSonrasiKilit || activeLines.length === 0}
             className="btn btn-lg btn-primary btn-block uppercase tracking-wide print:hidden"
           >

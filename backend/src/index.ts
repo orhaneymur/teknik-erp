@@ -2485,7 +2485,7 @@ app.get('/api/exchange-rates', async () => {
 });
 
 app.get('/api/sales/dashboard', async () => {
-  const [safes, recentInvoices, recentPayments, analytics] = await Promise.all([
+  const [safes, recentInvoices, recentPayments, analytics, bugun] = await Promise.all([
     prisma.safe.findMany({
       select: {
         id: true,
@@ -2499,7 +2499,12 @@ app.get('/api/sales/dashboard', async () => {
     prisma.invoice.findMany({
       take: 10,
       where: ACTIVE_INVOICE_FILTER,
-      orderBy: { createdAt: 'desc' },
+      /*
+       * YALNIZCA BURADA son degisiklik sirasi: duzenlenen fis en uste
+       * cikar (musteri istegi, 16 Eylul 2026). Fatura listesi, ekstre ve
+       * raporlar olusturulma tarihine gore kalir.
+       */
+      orderBy: { updatedAt: 'desc' },
       include: {
         // city: ana sayfada müşteri adının yanında şehir gösterilir —
         // aynı isimli müşterileri ayırt etmeyi kolaylaştırıyor
@@ -2515,6 +2520,23 @@ app.get('/api/sales/dashboard', async () => {
       },
     }),
     buildAnalyticsReport(),
+    // Bugun (yerel 00:00'dan itibaren) kac fis kesildi, kac adet urun satildi
+    (async () => {
+      const now = new Date();
+      const gunBasi = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const [fis, kalemler] = await Promise.all([
+        prisma.invoice.count({
+          where: { type: 'SATIS', createdAt: { gte: gunBasi }, ...SATIS_RAKAMI_FILTER },
+        }),
+        prisma.invoiceItem.aggregate({
+          _sum: { quantity: true },
+          where: {
+            invoice: { type: 'SATIS', createdAt: { gte: gunBasi }, ...SATIS_RAKAMI_FILTER },
+          },
+        }),
+      ]);
+      return { fisSayisi: fis, urunAdedi: kalemler._sum.quantity ?? 0 };
+    })(),
   ]);
 
   return {
@@ -2523,6 +2545,7 @@ app.get('/api/sales/dashboard', async () => {
       safeBalances: safes,
       recentInvoices,
       recentPayments,
+      bugun,
       insights: {
         dailySales: analytics.charts.dailySales,
         weeklySales: analytics.charts.weeklySales,

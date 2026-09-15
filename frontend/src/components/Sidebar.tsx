@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import { ChevronDown, Keyboard, LogOut, X, Zap } from 'lucide-react';
 import type { MenuCategoryId, PageId } from '../lib/navigation';
 import { getTenantConfig } from '../lib/tenantConfig';
@@ -18,6 +19,8 @@ type SidebarProps = {
   onToggleMenu: (id: MenuCategoryId) => void;
   onLogout: () => void;
   onMobileClose?: () => void;
+  /** Ana Sayfa AYNI sekmede acilir; verilmezse yeni sekme (eski davranis) */
+  onNavigateHome?: () => void;
 };
 
 export default function Sidebar({
@@ -29,6 +32,7 @@ export default function Sidebar({
   onToggleMenu,
   onLogout,
   onMobileClose,
+  onNavigateHome,
 }: SidebarProps) {
   const DashboardIcon = dashboardItem.icon;
 
@@ -48,6 +52,18 @@ export default function Sidebar({
   /** Sol menü her zaman yeni sekmede açılır; sayfa içi gezinme geri butonu ile çalışır */
   const handleMenuClick = () => {
     onMobileClose?.();
+  };
+
+  /*
+   * Ana Sayfa istisna: bulunulan sekmede acilir (musteri istegi, 16 Eylul
+   * 2026 — her tiklamada yeni sekme birikiyordu). Ctrl/orta tik yine yeni
+   * sekme acar; tarayicinin varsayilanina dokunmuyoruz.
+   */
+  const handleHomeClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    onMobileClose?.();
+    if (!onNavigateHome || e.ctrlKey || e.metaKey || e.button === 1) return;
+    e.preventDefault();
+    onNavigateHome();
   };
 
   return (
@@ -86,9 +102,7 @@ export default function Sidebar({
       <nav className="scrollbar-thin flex-1 space-y-1 overflow-y-auto px-2 py-3">
         <a
           href={buildPageUrl('dashboard')}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={handleMenuClick}
+          onClick={handleHomeClick}
           className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all no-underline ${
             isItemActive('dashboard')
               ? 'bg-indigo-500/20 text-indigo-200 ring-1 ring-indigo-400/30'
