@@ -394,9 +394,41 @@ Numara **ConfigMap'ten** gelir, sürüm gerektirmez:
 helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen --reuse-values --set-string tenant.whatsapp="0549 497 47 47"
 ```
 
+### TAM ŞU AN — 15 Eylül akşamı, kaldığımız yer
+
+**Prova v1.22.5 kurulu, canlı v1.21.4.** Canlıya geçiş müşterinin
+kararıyla bekliyor ("şimdi değil"). Müşteriye bugünün tam dökümü
+verildi (ne değişti, canlıda ne olur, sırada ne var); "canlıya geçelim"
+derse aşağıdaki 1–5 sırası uygulanır.
+
+**Onay bekleyen üç canlı-veri işi** (hepsi salt kalem/etiket, tutar ve
+bakiye değişmez):
+
+1. **25 kalemin boş maliyeti** — ön siparişten tamamlanmış 20 fiş. Kural:
+   elde kalan malın katman maliyeti varsa o, yoksa ürün kartındaki alış.
+   Liste görüldü (21'i kart=katman, 4'ünde katman yok, BAT00383'te kart
+   4,80 / katman 6,50 → 6,50). Tek satır, `degisen` 25 vermeli:
+
+```bash
+kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "UPDATE InvoiceItem ii JOIN Invoice i ON i.id=ii.invoiceId JOIN Product p ON p.id=ii.productId SET ii.unitCost = COALESCE((SELECT ROUND(SUM(l.quantity*l.unitCost)/SUM(l.quantity),4) FROM StockLot l WHERE l.productId=p.id AND l.quantity>0), p.costPrice) WHERE i.type=\"SATIS\" AND i.isPreOrder=0 AND i.deletedAt IS NULL AND ii.unitCost IS NULL; SELECT ROW_COUNT() degisen"'
+```
+
+2. **Dolar kasası düzeltmesi** — rakam için iki sorgu çıktısı bekleniyor
+   (nakit satış toplamı vs fatura kaynaklı hareket toplamı). Bilinenler:
+   açılış tediyeleri net −11.512 $ kasadan çıkmış gösteriyor; fiş
+   düzenlemeleri 1.191 $ hareket yazmadan bakiyeye girmiş (v1.22.0 ile
+   kapandı). Sorgular yukarıda "Kasa — açılış kayıtları" bölümünde.
+3. **"Eski kodları düzelt"** — canlıda sürüm kurulunca müşteri listesinde
+   düğme çıkar; müşteri isteyince basılır.
+
+**Provada denenip geçenler:** Excel indir-yükle turu (5.439 güncellendi,
+katman farkı yalnızca 15 eksi stokluda). Henüz ekrandan bakılmayanlar:
+F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
+"düzenleme farkı", müşteri kodu düğmesi, ön sipariş tamamlama.
+
 ### Sıradaki adım
 
-> **v1.22.5 provaya; canlı müşterinin kararıyla bekliyor.** Canlı v1.21.4, prova v1.22.3.
+> **v1.22.5 provaya kuruldu; canlı müşterinin kararıyla bekliyor.** Canlı v1.21.4.
 > Prova 15 Eylül 07:30'da canlının kopyasıyla dolduruldu (BIREBIR TUTTU).
 
 1. Sunucuda `cd /root/teknikerp && git pull`
