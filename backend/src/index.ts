@@ -54,6 +54,34 @@ type StoreItem = {
 const ACTIVE_INVOICE_FILTER = { deletedAt: null } as const;
 
 /**
+ * SATIS RAKAMINA GIREN fisler: silinmemis VE teslim edilmis.
+ *
+ * Teslim bekleyen on siparis (isPreOrder=true) kayitta stok, cari ve kasa
+ * degistirmez; satis degildir. Tamamlaninca isPreOrder=false olur ve fis
+ * kendi tarihine yazilir. 15 Eylul 2026'ya kadar anasayfa "bugun satis",
+ * Kar-Zarar ve personel cirosu on siparisleri kayit aninda sayiyordu;
+ * Satis Kirilimi saymiyordu — iki ekran ayni gun icin farkli rakam
+ * veriyordu (musteri sordu). Satis toplayan her sorgu bunu kullanir.
+ */
+const SATIS_RAKAMI_FILTER = { deletedAt: null, isPreOrder: false } as const;
+
+/**
+ * Satir tutari: iskonto uygulanmis `totalPrice` varsa o, yoksa
+ * miktar x birim fiyat (eski kayitlarda totalPrice bos olabilir).
+ * Kar-Zarar raporu eskiden miktar x birim fiyat aliyordu — iskontolu
+ * satislarda ciro ve kar oldugundan yuksek cikiyordu.
+ */
+function satirTutari(item: {
+  totalPrice: number | null;
+  quantity: number;
+  unitPrice: number;
+}): number {
+  return item.totalPrice && item.totalPrice > 0
+    ? item.totalPrice
+    : item.quantity * item.unitPrice;
+}
+
+/**
  * Cop kutusundaki urunler hicbir listede gorunmez.
  *
  * Fatura kalemleri urune ISARET ETMEYE devam eder — gizlenen urunun
@@ -853,10 +881,11 @@ async function findReturnableInvoiceItem(
   customerId: number,
   productId: number
 ): Promise<ReturnableItemLookup> {
+  // Teslim edilmemis on siparis iade edilemez: mal daha cikmadi
   const items = await prisma.invoiceItem.findMany({
     where: {
       productId,
-      invoice: { customerId, type: 'SATIS', ...ACTIVE_INVOICE_FILTER },
+      invoice: { customerId, type: 'SATIS', ...SATIS_RAKAMI_FILTER },
     },
     orderBy: { invoice: { createdAt: 'desc' } },
     include: {
@@ -934,6 +963,7 @@ async function getRecentSoldProducts(
     where: {
       invoice: {
         type: 'SATIS',
+        ...ACTIVE_INVOICE_FILTER,
         ...(customerId ? { customerId } : {}),
       },
     },
@@ -1022,7 +1052,7 @@ async function getLastPartyPriceMap(
   const items = await prisma.invoiceItem.findMany({
     where: {
       productId: { in: productIds },
-      invoice: { customerId, type: invoiceType },
+      invoice: { customerId, type: invoiceType, ...ACTIVE_INVOICE_FILTER },
     },
     orderBy: { invoice: { createdAt: 'desc' } },
     select: { productId: true, unitPrice: true },
@@ -1789,7 +1819,7 @@ async function buildAnalyticsReport() {
       type: 'SATIS',
       userId: { not: null },
       createdAt: { gte: startOfYear },
-      ...ACTIVE_INVOICE_FILTER,
+      ...SATIS_RAKAMI_FILTER,
     },
     select: {
       userId: true,
@@ -1846,16 +1876,16 @@ async function buildAnalyticsReport() {
   const [chartSales, chartPurchases, topProductRows, topCustomerInvoices, lowStockRows] =
     await Promise.all([
       prisma.invoice.findMany({
-        where: { type: 'SATIS', createdAt: { gte: fourteenDaysAgo }, ...ACTIVE_INVOICE_FILTER },
+        where: { type: 'SATIS', createdAt: { gte: fourteenDaysAgo }, ...SATIS_RAKAMI_FILTER },
         select: { totalAmountUsd: true, totalAmountTl: true, exchangeRate: true, createdAt: true },
       }),
       prisma.invoice.findMany({
-        where: { type: 'SATIS', createdAt: { gte: sixMonthsAgo }, ...ACTIVE_INVOICE_FILTER },
+        where: { type: 'SATIS', createdAt: { gte: sixMonthsAgo }, ...SATIS_RAKAMI_FILTER },
         select: { totalAmountUsd: true, totalAmountTl: true, exchangeRate: true, createdAt: true },
       }),
       prisma.invoiceItem.findMany({
         where: {
-          invoice: { type: 'SATIS', createdAt: { gte: thirtyDaysAgo }, ...ACTIVE_INVOICE_FILTER },
+          invoice: { type: 'SATIS', createdAt: { gte: thirtyDaysAgo }, ...SATIS_RAKAMI_FILTER },
         },
         select: {
           quantity: true,
@@ -1866,7 +1896,7 @@ async function buildAnalyticsReport() {
         where: {
           type: 'SATIS',
           createdAt: { gte: thirtyDaysAgo },
-          ...ACTIVE_INVOICE_FILTER,
+          ...SATIS_RAKAMI_FILTER,
         },
         select: {
           totalAmountUsd: true,
@@ -4636,6 +4666,14 @@ app.post<{
       if (sourceInvoice.deletedAt) {
         throw new Error('Kaynak satış faturası silinmiş.');
       }
+      /*
+       * Teslim bekleyen on siparisin iadesi: stok hic dusmemisken iadeyle
+       * ARTAR, cari hic borclanmamisken alacaklanir. Ekran bu fisleri
+       * zaten listelemez (findReturnableInvoiceItem); burasi ikinci kilit.
+       */
+      if (sourceInvoice.isPreOrder) {
+        throw new Error('Teslim edilmemiş ön sipariş iade edilemez; önce "Stok Düş" ile tamamlayın.');
+      }
 
       if (sourceInvoice.customerId !== customerId) {
         throw new Error('Seçilen fatura bu müşteriye ait değil.');
@@ -6260,22 +6298,12 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
   async (request) => {
     const { from, toEnd } = raporAraligi(request.query.from, request.query.to);
 
-    const lineTotal = (item: {
-      totalPrice: number | null;
-      quantity: number;
-      unitPrice: number;
-    }) =>
-      item.totalPrice && item.totalPrice > 0
-        ? item.totalPrice
-        : item.quantity * item.unitPrice;
-
     const items = await prisma.invoiceItem.findMany({
       where: {
         invoice: {
           type: { in: ['SATIS', 'IADE'] },
-          isPreOrder: false,
           createdAt: { gte: from, lte: toEnd },
-          ...ACTIVE_INVOICE_FILTER,
+          ...SATIS_RAKAMI_FILTER,
         },
       },
       // Fis listesi kayit sirasiyla; ayni fisin kalemleri de girildigi sirada
@@ -6386,7 +6414,7 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
     };
 
     for (const item of items) {
-      const tutar = lineTotal(item);
+      const tutar = satirTutari(item);
       const maliyet = satirMaliyeti(item) * item.quantity;
 
       if (item.invoice.type === 'SATIS') {
@@ -6515,9 +6543,14 @@ app.get('/api/reports/profit', async () => {
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+  /*
+   * Silinmis fisler ve teslim bekleyen on siparisler haric (15 Eylul 2026'ya
+   * kadar ikisi de sayiliyordu). Satir tutari iskontolu (`satirTutari`).
+   * Iadeler bu raporda YOK — Satis Kirilimi'nde ayri gosterilir.
+   */
   const invoiceItems = await prisma.invoiceItem.findMany({
     where: {
-      invoice: { type: 'SATIS' },
+      invoice: { type: 'SATIS', ...SATIS_RAKAMI_FILTER },
     },
     include: {
       product: {
@@ -6550,9 +6583,8 @@ app.get('/api/reports/profit', async () => {
     let totalProfit = 0;
 
     for (const item of items) {
-      const revenue = item.quantity * item.unitPrice;
-      const costBase = satirMaliyeti(item);
-      const profit = (item.unitPrice - costBase) * item.quantity;
+      const revenue = satirTutari(item);
+      const profit = revenue - satirMaliyeti(item) * item.quantity;
       totalRevenue += revenue;
       totalProfit += profit;
     }
@@ -6575,8 +6607,8 @@ app.get('/api/reports/profit', async () => {
   const productMap = new Map<number, ProductProfit>();
 
   for (const item of monthItems) {
-    const revenue = item.quantity * item.unitPrice;
-    const profit = (item.unitPrice - satirMaliyeti(item)) * item.quantity;
+    const revenue = satirTutari(item);
+    const profit = revenue - satirMaliyeti(item) * item.quantity;
 
     const existing = productMap.get(item.productId);
     if (existing) {

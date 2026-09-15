@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **Prova v1.22.5; v1.22.7 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
-> (v1.22.0–v1.22.6 de Docker Hub'da; v1.22.7 hepsini kapsar, doğrudan o kurulur.)
+> **Prova v1.22.7 + canlının 15 Eylül akşam kopyası; v1.22.8 derlendi, provaya kurulacak.**
+> (v1.22.0–v1.22.7 de Docker Hub'da; v1.22.8 hepsini kapsar, doğrudan o kurulur.)
 > **Müşterinin kararı (15 Eylül akşamı):** önce provada dene → dükkan
 > kapanınca canlı kopyasını provaya yükle, her şeyi gerçek veriyle gör →
 > sonra canlı. Canlı veriye dokunan hiçbir adım onaysız atılmaz.
@@ -160,6 +160,34 @@ açıyordu; artık mevcut satırın adedi 1 artar ve adet kutusu seçili gelir
 aynı fatura kalemi, elle satırda aynı ürün; "Ayrı kalem" düğmesi
 bilerek ayrı satır açmaya devam eder (Çin iade tiki satır bazlı).
 Yalnızca ekran davranışı, sunucu değişmedi; `tsc` + `vite build` temiz.
+
+**v1.22.8 — ön sipariş satış rakamlarına giriyordu + iade edilebiliyordu
+(müşteri sorusu "ön sipariş bugünün satışına ekleniyor mu?", 15 Eylül
+akşamı; ardından "gözden kaçan var mı" denetimi).** Fatura okuyan 20
+sorgu tek tek kontrol edildi. Bulgular ve karşılıkları:
+
+| # | Bulgu | Etkisi | Düzeltme |
+|---|---|---|---|
+| 1 | Anasayfa (bugün/hafta/ay/6 ay grafiği/en çok satan/en iyi müşteri) ve personel cirosu teslim bekleyen ön siparişi **kayıt anında** satış sayıyordu | "Bugün satış" şişik; Satış Kırılımı ile farklı rakam | `SATIS_RAKAMI_FILTER = { deletedAt: null, isPreOrder: false }` — satış toplayan her sorguda |
+| 2 | **Kâr-Zarar** silinen fişleri ve ön siparişleri sayıyordu | Silinen satış kârda kalıyordu | Aynı süzgeç |
+| 3 | **Kâr-Zarar** iskontoyu yok sayıyordu (`adet × birim fiyat`) | %10 iskontolu 100 $ satış 100 $ ciro / 50 $ kâr görünüyordu (doğrusu 90 / 40) | `satirTutari()` — iskontolu `totalPrice`; Satış Kırılımı zaten öyleydi, ortak yardımcı oldu |
+| 4 | **Teslim edilmemiş ön sipariş İADE edilebiliyordu** | Stok hiç düşmemişken iadeyle **artıyordu** (testte 100 → 101); Cari ise hiç borçlanmamış müşteri alacaklanıyordu | İade ekranı ön siparişi listelemez (`findReturnableInvoiceItem`), sunucu da reddeder: "Teslim edilmemiş ön sipariş iade edilemez; önce Stok Düş" |
+| 5 | F2 "son satılanlar" ve "son fiyat" önerisi silinen fişlere de bakıyordu | Yalnızca öneri, tutar değil | `deletedAt: null` |
+
+Değişmeyen, bilerek: anasayfa "Bugün satış" **brüt** satıştır, iade
+düşülmez (Satış Kırılımı'nda İade ve Net Ciro ayrı). Kâr-Zarar'da iade
+yok. Ekstre ve müşteri bakiyesi zaten doğruydu (ön sipariş hariç).
+
+Doğrulama: `on-siparis-rapor-test.ts` (15 kontrol). Aynı test **eski
+kodla 9 kontrolde kalıyor** — hata gerçekti, düzeltme gerçek. Veriye
+yazan tek değişiklik iade reddi (yani bir yazmayı **engelliyor**).
+
+**Canlıda iz var mı?** Kontrol sorgusu (salt okuma, tek satır) —
+sonucu 0 değilse o iadeler elle incelenir:
+
+```bash
+kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "SELECT COUNT(*) on_siparise_iade FROM InvoiceItem ii JOIN InvoiceItem src ON src.id=ii.sourceInvoiceItemId JOIN Invoice s ON s.id=src.invoiceId WHERE s.isPreOrder=1 AND s.deletedAt IS NULL"'
+```
 
 **Kasa — açılış kayıtları.** 11 Eylül akşamı 50 adet "ESKİ SİSTEMDEN
 AKTARILDI" kaydı: borçlu müşteriler tediye (ÇIKIŞ, 26.372 $), alacaklılar
@@ -424,7 +452,7 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 
 ### TAM ŞU AN — 15 Eylül akşamı, kaldığımız yer
 
-**Prova v1.22.5 kurulu (v1.22.7 derlendi, kurulacak), canlı v1.21.4.** Canlıya geçiş müşterinin
+**Prova v1.22.7 + canlı kopyası (15 Eylül 20:15); v1.22.8 derlendi, kurulacak. Canlı v1.21.4.** Canlıya geçiş müşterinin
 kararıyla bekliyor ("şimdi değil"). Müşteriye bugünün tam dökümü
 verildi (ne değişti, canlıda ne olur, sırada ne var); "canlıya geçelim"
 derse aşağıdaki 1–5 sırası uygulanır.
@@ -456,13 +484,19 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
 
 ### Sıradaki adım
 
-> **v1.22.7 derlendi, provaya kurulacak; canlı müşterinin kararıyla bekliyor.** Canlı v1.21.4.
-> Prova 15 Eylül 07:30'da canlının kopyasıyla dolduruldu (BIREBIR TUTTU).
+> **v1.22.8 derlendi, provaya kurulacak; canlı müşterinin kararıyla bekliyor.** Canlı v1.21.4.
+> Prova 15 Eylül 20:15'te (dükkan kapandıktan sonra) canlının kopyasıyla
+> dolduruldu (BIREBIR TUTTU: 5439 ürün, 216 müşteri, 291 fatura, 214 hareket).
+> Kopyanın dökümü sunucuda: `/root/prova-kaynak-shenzhen-20260915-1715.sql.gz`.
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.7 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.8 shenzhen-test`
+   (veriyi tazelemeye gerek yok — kopya duruyor, sürüm değişince veri değişmez)
 4. Provada dene:
+   - **v1.22.8:** Ön sipariş kaydet → Ana Sayfa "Bugün satış" DEĞİŞMEMELİ;
+     Stok Düş → artmalı. Satış İade'de ön sipariş ürününü seç → "hiç
+     alınmamış" uyarısı. Kâr-Zarar: iskontolu satışta ciro iskontolu
    - **v1.22.7:** Satış ve İade ekranında aynı ürünü iki kez seç → tek
      satır, adet 2, adet kutusu seçili
    - **v1.22.6:** Anasayfa Kasa kartı dolar bakiyesini göstermeli (0 değil);
@@ -487,7 +521,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
      dolu olmalı; katman sorgusunda o ürün görünmemeli
    - **Provada Excel indir-yükle turu yapıldı (15 Eylül):** 5.439 ürün
      güncellendi, katman farkı yalnızca 15 eksi stokluda kaldı (beklenen)
-5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.7 shenzhen`, ardından
+5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.8 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):
