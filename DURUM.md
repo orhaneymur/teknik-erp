@@ -563,9 +563,9 @@ dalı da bu sürümde kapanır.
 **Kod dışı bekleyenler:** repo private (5 dk), yedekleri Backblaze B2'ye
 (`rclone`), kasa düzeltmesi (tek satır SQL, rakam bekleniyor).
 **Stok eksiği:** doğru Excel bekleniyor (yukarıda). PV reclaim policy: canlının iki
-diski (`pvc-d1748def…` mysql, `pvc-16f8c584…` yedek) `Delete`; Retain'e
-çeviren `kubectl patch pv` komutu 15 Eylül'de verildi, **çalıştırıldığı
-doğrulanmadı** — `kubectl get pv` ile bak.
+diski (`pvc-d1748def…` mysql, `pvc-16f8c584…` yedek) **Retain** (16 Eylül,
+müşteri çalıştırdı) — PVC silinse de disk sunucuda kalır. Demo ve prova
+`Delete` (bilerek). Sunucunun kendisi giderse koruma yok → Backblaze B2 işi.
 **Excel ön kontrolüne eklenecek:** "N satırda hem Bakiye hem GelenAdet
 dolu — Bakiye yok sayılacak" ve "N üründe stok azalacak" uyarıları.
 
