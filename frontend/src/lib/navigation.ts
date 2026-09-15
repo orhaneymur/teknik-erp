@@ -244,6 +244,7 @@ const VALID_PAGES = new Set<PageId>([
   'customer-balance',
   'report-sales',
   'report-analytics',
+  'report-sales-breakdown',
   'report-stock-value',
   'report-cash-flow',
   'report-customer-statement',

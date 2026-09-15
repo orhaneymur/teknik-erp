@@ -416,13 +416,17 @@ export default function Dashboard({
   const gecenAySatis = insights.monthlySales.at(-2)?.total ?? 0;
 
   /*
-   * Kasalar farkli para birimlerinde olabilir; toplamak yaniltir.
-   * Ozet, ana para birimindeki (TRY) kasalari toplar; digerleri
-   * asagidaki kasa seridinde kendi birimiyle gorunur.
+   * Kasa karti butun kasalarin bakiye toplamidir.
+   *
+   * Eskiden yalnizca `currency === 'TRY'` olan kasalar toplaniyordu; bu
+   * uygulamada butun tutarlar USD tutulur ve kasalar "USD" etiketiyle
+   * acilir, o yuzden kart canlida hep 0 gosteriyordu (musteri bildirdi,
+   * 15 Eylul 2026). Kasa etiketi gosterim icindir, tutari degistirmez.
    */
-  const tryKasaToplami = data.safeBalances
-    .filter((safe) => safe.currency === 'TRY')
-    .reduce((toplam, safe) => toplam + safe.balance, 0);
+  const kasaToplami = data.safeBalances.reduce(
+    (toplam, safe) => toplam + safe.balance,
+    0
+  );
 
   /** Onceki doneme gore yuzde degisim; onceki 0 ise oran anlamsizdir */
   const degisim = (simdi: number, onceki: number): number | null => {
@@ -518,9 +522,13 @@ export default function Dashboard({
           Ikon={TrendingUp}
         />
         <OzetKart
-          etiket="Kasa (TL)"
-          deger={formatMoney(tryKasaToplami, 'TRY')}
-          altBilgi={`${data.safeBalances.length} kasa`}
+          etiket="Kasa"
+          deger={formatMoney(kasaToplami)}
+          altBilgi={
+            data.safeBalances.length === 1
+              ? data.safeBalances[0].name
+              : `${data.safeBalances.length} kasa toplamı`
+          }
           Ikon={Wallet}
           sayfa="report-cash-flow"
         />

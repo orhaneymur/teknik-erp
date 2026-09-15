@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **v1.22.5 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
-> (v1.22.0–v1.22.4 de Docker Hub'da; v1.22.5 hepsini kapsar, doğrudan o kurulur.)
+> **Prova v1.22.5; v1.22.6 derlendi, provaya kurulacak** — aşağıda "Sıradaki adım".
+> (v1.22.0–v1.22.5 de Docker Hub'da; v1.22.6 hepsini kapsar, doğrudan o kurulur.)
 > **Canlıya geçiş müşterinin kararıyla ertelendi (15 Eylül): "şimdi değil."**
 
 ### Yapıldı (14–15 Eylül)
@@ -132,6 +132,22 @@ değişmez, ekstrede görünmez, yalnızca Faturalar → Ön Siparişler'de
 (kırmızı). Tamamlanınca stok + katman düşer, maliyet yazılır, Cari ise
 bakiyeye / nakit ise kasaya işlenir, ekstrede görünür. Tamamlanmış fiş
 tekrar tamamlanamaz.
+
+**v1.22.6 — raporlar ve kasa (müşteri isteği, 15 Eylül akşamı).**
+
+| # | İstek / sorun | Ne yapıldı |
+|---|---|---|
+| 1 | "Tarih aralığında satılan tüm ürünler, yapılan satışlar, satılan ürünler sırayla" | Raporlar → Satış Kırılımı'na iki sekme: **Ürün Bazlı** (ürün, stok kodu, adet, iade adedi, kaç fişte, ciro, kâr, marj; ciro/adet/kâr sırası seçilir) ve **Satış Fişleri** (kayıt sırasıyla tarih, fiş no, müşteri, ödeme, satan, kalem/adet, tutar, kâr; satır açılınca kalemler girildiği sırada; fiş no'ya tıklayınca fiş penceresi). Özet kutularına "Satılan adet" ve fiş/çeşit sayısı eklendi |
+| 2 | Anasayfada Kasa **0** görünüyor | Kart yalnızca `currency === 'TRY'` kasaları topluyordu; Shenzhen'in kasası USD etiketli. Artık bütün kasaların toplamı (`Dashboard.tsx`) |
+| 3 | "Toplam giriş / çıkış neye göre? Kasaya giren-çıkan para mı, işlem tutarları mı?" | **Kasaya fiilen giren-çıkan para.** Kasa Raporu'nun üstünde açıklama kutusu; her hareket **kaynağına** göre etiketlenip gruplanıyor (satış tahsilatı, cari tahsilat, alış ödemesi, iade ödemesi, cari ödeme, fiş iptali, düzenleme farkı, açılış/eski sistem aktarımı, diğer); kasa başına dönem giriş/çıkış + bugünkü bakiye tablosu; kasa / tip / kaynak süzgeçleri; listeye Tip ve Müşteri sütunu; CSV'ye kaynak ve müşteri. Sınıflandırma sunucuda (`hareketKaynagi`, açıklama metninden — açıklamalar kodda üretilir) |
+| 4 | Satış Kırılımı'nda teslim bekleyen ön siparişler ciroya giriyordu | `isPreOrder: false` süzgeci eklendi (kayıtta stok/cari/kasa değişmediği için satış değildir; tamamlanınca girer). **Kategori ve müşteri sekmelerinin rakamı da buna göre değişir** |
+| 5 | Rapor tarih penceresi UTC'den başlıyordu | `new Date("2026-09-01")` = Türkiye 03:00; ilk günün 00:00–03:00 fişleri dışarıda kalıyordu. `raporAraligi()` yerel gün alır; ekrandaki tarih kutuları da `yerelGunDizgisi()` (UTC `toISOString` gece yarısından sonra dünü veriyordu) |
+| 6 | Satış Kırılımı sayfası yenilenince anasayfaya düşüyordu | `VALID_PAGES` listesinde `report-sales-breakdown` yoktu |
+
+Doğrulama: `rapor-test.ts` (31 kontrol — fiş sırası, kalem sırası, ürün
+toplamları, iade adedi, ön sipariş hariç/tamamlanınca dahil, tarih
+penceresi, altı kaynak sınıfı, kasa bakiyesi = gerçek bakiye, safeId
+süzgeci). Ekrandan henüz bakılmadı — provada bakılacak.
 
 **Kasa — açılış kayıtları.** 11 Eylül akşamı 50 adet "ESKİ SİSTEMDEN
 AKTARILDI" kaydı: borçlu müşteriler tediye (ÇIKIŞ, 26.372 $), alacaklılar
@@ -396,7 +412,7 @@ helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen
 
 ### TAM ŞU AN — 15 Eylül akşamı, kaldığımız yer
 
-**Prova v1.22.5 kurulu, canlı v1.21.4.** Canlıya geçiş müşterinin
+**Prova v1.22.5 kurulu (v1.22.6 derlendi, kurulacak), canlı v1.21.4.** Canlıya geçiş müşterinin
 kararıyla bekliyor ("şimdi değil"). Müşteriye bugünün tam dökümü
 verildi (ne değişti, canlıda ne olur, sırada ne var); "canlıya geçelim"
 derse aşağıdaki 1–5 sırası uygulanır.
@@ -428,13 +444,18 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
 
 ### Sıradaki adım
 
-> **v1.22.5 provaya kuruldu; canlı müşterinin kararıyla bekliyor.** Canlı v1.21.4.
+> **v1.22.6 derlendi, provaya kurulacak; canlı müşterinin kararıyla bekliyor.** Canlı v1.21.4.
 > Prova 15 Eylül 07:30'da canlının kopyasıyla dolduruldu (BIREBIR TUTTU).
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.5 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.6 shenzhen-test`
 4. Provada dene:
+   - **v1.22.6:** Anasayfa Kasa kartı dolar bakiyesini göstermeli (0 değil);
+     Raporlar → Satış Kırılımı → "Ürün Bazlı" ve "Satış Fişleri" sekmeleri,
+     fiş satırı açılınca kalemler; Raporlar → Kasa Raporu → açıklama kutusu,
+     "Kaynağa göre" tablosunda açılış aktarımları ayrı satırda, "Kasaya
+     göre" bakiye = anasayfadaki kasa
    - Stok Listesi → Excel İndir → **değiştirmeden** Excel Yükle → katman
      farkı sorgusu (aşağıda) **0** olmalı
    - Aynı dosyanın `Id` ve `StokKodu` sütunlarını silip yükle → "DİKKAT …
@@ -452,7 +473,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
      dolu olmalı; katman sorgusunda o ürün görünmemeli
    - **Provada Excel indir-yükle turu yapıldı (15 Eylül):** 5.439 ürün
      güncellendi, katman farkı yalnızca 15 eksi stokluda kaldı (beklenen)
-5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.5 shenzhen`, ardından
+5. Canlıya (müşteri onayıyla): `bash k8s/update-all-tenants.sh v1.22.6 shenzhen`, ardından
    müşteriye Excel indir-yükle turunu yaptır (58 ürünün katmanı düzelir)
 
 Katman farkı sorgusu (tek satır):

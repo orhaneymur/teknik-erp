@@ -6216,9 +6216,40 @@ app.get('/api/reports/balances', async () => {
 });
 
 /**
- * SATIS KIRILIM RAPORU — kategori, musteri, iade ve Cin iade tek yerde.
+ * Rapor tarih araligi: ekrandan "YYYY-MM-DD" gelir, YEREL gunun 00:00'i ve
+ * 23:59:59.999'u alinir.
+ *
+ * `new Date("2026-09-01")` UTC gece yarisini verir; Turkiye'de o 03:00'tur
+ * ve ilk gunun 00:00-03:00 arasindaki fisler raporun disinda kaliyordu
+ * (anasayfadaki "bugun" tuzaginin aynisi). Gecersiz/bos deger gelirse
+ * yedek alinir.
+ */
+function raporAraligi(
+  fromRaw: string | undefined,
+  toRaw: string | undefined
+): { from: Date; toEnd: Date } {
+  const now = new Date();
+  const yerelGun = (value: string | undefined): Date | null => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  const from = yerelGun(fromRaw) ?? new Date(now.getFullYear(), now.getMonth(), 1);
+  const to = yerelGun(toRaw) ?? now;
+  const toEnd = new Date(to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999);
+  return { from, toEnd };
+}
+
+/**
+ * SATIS KIRILIM RAPORU — kategori, musteri, urun, fis listesi, iade ve
+ * Cin iade tek yerde.
  *
  * Tarih araligi verilmezse icinde bulunulan ay alinir. Tutarlar USD.
+ *
+ * Teslim bekleyen on siparisler (isPreOrder) DAHIL DEGILDIR: kayitta stok,
+ * cari ve kasa degismez, o yuzden satis sayilmaz; tamamlaninca
+ * isPreOrder=false olur ve rapora girer.
  *
  * Gelir hesabinda satir toplami (`totalPrice`) tercih edilir; iskonto
  * uygulanmis gercek tutar odur. Eski kayitlarda bos olabilecegi icin
@@ -6227,21 +6258,7 @@ app.get('/api/reports/balances', async () => {
 app.get<{ Querystring: { from?: string; to?: string } }>(
   '/api/reports/sales-breakdown',
   async (request) => {
-    const now = new Date();
-    const parseDate = (value: string | undefined, fallback: Date) => {
-      if (!value) return fallback;
-      const parsed = new Date(value);
-      return Number.isNaN(parsed.getTime()) ? fallback : parsed;
-    };
-
-    const from = parseDate(
-      request.query.from,
-      new Date(now.getFullYear(), now.getMonth(), 1)
-    );
-    const to = parseDate(request.query.to, now);
-    const toEnd = new Date(
-      to.getFullYear(), to.getMonth(), to.getDate(), 23, 59, 59, 999
-    );
+    const { from, toEnd } = raporAraligi(request.query.from, request.query.to);
 
     const lineTotal = (item: {
       totalPrice: number | null;
@@ -6256,10 +6273,13 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
       where: {
         invoice: {
           type: { in: ['SATIS', 'IADE'] },
+          isPreOrder: false,
           createdAt: { gte: from, lte: toEnd },
           ...ACTIVE_INVOICE_FILTER,
         },
       },
+      // Fis listesi kayit sirasiyla; ayni fisin kalemleri de girildigi sirada
+      orderBy: [{ invoice: { createdAt: 'asc' } }, { id: 'asc' }],
       select: {
         quantity: true,
         unitPrice: true,
@@ -6270,6 +6290,8 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
         product: {
           select: {
             id: true,
+            sku: true,
+            name: true,
             costPrice: true,
             categoryId: true,
             category: { select: { id: true, name: true } },
@@ -6278,7 +6300,11 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
         invoice: {
           select: {
             id: true,
+            invoiceNo: true,
             type: true,
+            createdAt: true,
+            paymentMethod: true,
+            processedBy: true,
             customer: { select: { id: true, code: true, name: true, city: true } },
           },
         },
@@ -6296,10 +6322,36 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
       faturaSayisi: number;
     };
 
+    /** Fis listesi satiri — "yapilan satislar, satilan urunler sirayla" */
+    type SatisKalemi = {
+      productId: number;
+      sku: string;
+      ad: string;
+      adet: number;
+      birimFiyat: number;
+      tutar: number;
+    };
+    type Satis = {
+      id: number;
+      fisNo: string;
+      tarih: Date;
+      musteri: { id: number; ad: string } | null;
+      odeme: string;
+      satici: string | null;
+      kalemler: SatisKalemi[];
+      adet: number;
+      tutar: number;
+      maliyet: number;
+      kar: number;
+    };
+
     const kategoriler = new Map<number, Kirilim>();
     const musteriler = new Map<number, Kirilim>();
+    const urunler = new Map<number, Kirilim & { iadeAdet: number }>();
     const iadeler = new Map<number, Kirilim>();
+    const satislar = new Map<number, Satis>();
     const faturaKumeleri = new Map<number, Set<number>>();
+    const urunFaturaKumeleri = new Map<number, Set<number>>();
 
     let toplamCiro = 0;
     let toplamMaliyet = 0;
@@ -6360,6 +6412,56 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
           faturaKumeleri.set(musteri.id, kume);
           kayit.faturaSayisi = kume.size;
         }
+
+        // Urun bazli: ek alanina stok kodu; kac ayri fiste satildigi da sayilir
+        const urunId = item.product?.id ?? 0;
+        let urunKaydi = urunler.get(urunId);
+        if (!urunKaydi) {
+          urunKaydi = {
+            id: urunId,
+            ad: item.product?.name ?? 'Silinmiş ürün',
+            ek: item.product?.sku ?? null,
+            adet: 0, ciro: 0, maliyet: 0, kar: 0, faturaSayisi: 0,
+            iadeAdet: 0,
+          };
+          urunler.set(urunId, urunKaydi);
+        }
+        urunKaydi.adet += item.quantity;
+        urunKaydi.ciro += tutar;
+        urunKaydi.maliyet += maliyet;
+        urunKaydi.kar = urunKaydi.ciro - urunKaydi.maliyet;
+        const urunKume = urunFaturaKumeleri.get(urunId) ?? new Set<number>();
+        urunKume.add(item.invoice.id);
+        urunFaturaKumeleri.set(urunId, urunKume);
+        urunKaydi.faturaSayisi = urunKume.size;
+
+        // Fis listesi: her satis fisi bir kez, kalemleri girildigi sirada
+        let fis = satislar.get(item.invoice.id);
+        if (!fis) {
+          fis = {
+            id: item.invoice.id,
+            fisNo: item.invoice.invoiceNo,
+            tarih: item.invoice.createdAt,
+            musteri: musteri ? { id: musteri.id, ad: musteri.name } : null,
+            odeme: item.invoice.paymentMethod,
+            satici: item.invoice.processedBy,
+            kalemler: [],
+            adet: 0, tutar: 0, maliyet: 0, kar: 0,
+          };
+          satislar.set(item.invoice.id, fis);
+        }
+        fis.kalemler.push({
+          productId: urunId,
+          sku: item.product?.sku ?? '',
+          ad: item.product?.name ?? 'Silinmiş ürün',
+          adet: item.quantity,
+          birimFiyat: item.unitPrice,
+          tutar,
+        });
+        fis.adet += item.quantity;
+        fis.tutar += tutar;
+        fis.maliyet += maliyet;
+        fis.kar = fis.tutar - fis.maliyet;
       } else {
         toplamIade += tutar;
         const musteri = item.invoice.customer;
@@ -6369,6 +6471,8 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
             item.quantity, tutar, maliyet
           );
         }
+        const iadeUrun = urunler.get(item.product?.id ?? 0);
+        if (iadeUrun) iadeUrun.iadeAdet += item.quantity;
         if (item.isChinaReturn) {
           cinIadeToplam += tutar;
           cinIadeAdet += item.quantity;
@@ -6396,7 +6500,11 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
         cinIade: { tutar: cinIadeToplam, adet: cinIadeAdet },
         kategoriler: sirala(kategoriler),
         musteriler: sirala(musteriler),
+        urunler: sirala(urunler),
         iadeler: sirala(iadeler),
+        // Map'e ekleme sirasi = sorgunun createdAt sirasi (eski -> yeni)
+        satislar: [...satislar.values()],
+        fisSayisi: satislar.size,
       },
       message: 'Sales breakdown retrieved successfully.',
     };
@@ -7174,24 +7282,83 @@ app.get('/api/reports/stock-value', async (request, reply) => {
   };
 });
 
-app.get<{ Querystring: { from?: string; to?: string } }>(
+/**
+ * Kasa hareketinin KAYNAGI — "bu para neden girdi/cikti?"
+ *
+ * Kasa raporundaki Toplam Giris / Toplam Cikis, kasaya FIILEN giren ve cikan
+ * paradir (nakit, kart, havale); fatura tutarlari degildir. Cari (veresiye)
+ * satis kasaya girmez, tahsil edilince girer. Musteri 15 Eylul 2026'da
+ * "bu neye gore?" diye sordu; ekran artik her hareketi kaynagina gore
+ * gruplayip gosteriyor.
+ *
+ * Kaynak, hareket yazilirken verilen aciklamadan cikarilir (aciklamalar
+ * kodda uretilir, serbest metin degildir). Cari fisler `receiptNo` tasir.
+ * Eski sistemden aktarilan acilis kayitlari ayri gruptur: cari bakiyeleri
+ * kurar ama o gun kasadan para cikmamistir.
+ */
+type HareketKaynagi =
+  | 'SATIS_TAHSILAT'
+  | 'CARI_TAHSILAT'
+  | 'ALIS_ODEME'
+  | 'IADE_ODEME'
+  | 'CARI_ODEME'
+  | 'IPTAL'
+  | 'DUZENLEME'
+  | 'ACILIS'
+  | 'DIGER';
+
+const HAREKET_KAYNAGI_ETIKETI: Record<HareketKaynagi, string> = {
+  SATIS_TAHSILAT: 'Satış tahsilatı (nakit/kart)',
+  CARI_TAHSILAT: 'Cari tahsilat',
+  ALIS_ODEME: 'Alış ödemesi',
+  IADE_ODEME: 'İade ödemesi',
+  CARI_ODEME: 'Cari ödeme (tediye)',
+  IPTAL: 'Fiş iptali',
+  DUZENLEME: 'Fiş düzenleme farkı',
+  ACILIS: 'Açılış / eski sistem aktarımı',
+  DIGER: 'Diğer',
+};
+
+function hareketKaynagi(tx: {
+  type: string;
+  description: string;
+  receiptNo: string | null;
+}): HareketKaynagi {
+  const d = tx.description;
+  if (d.toLocaleUpperCase('tr-TR').includes('ESKİ SİSTEM')) return 'ACILIS';
+  if (d.includes('satış tahsilatı')) return 'SATIS_TAHSILAT';
+  if (d.includes('alış ödemesi')) return 'ALIS_ODEME';
+  if (d.includes('iade ödemesi')) return 'IADE_ODEME';
+  if (d.includes('iptali')) return 'IPTAL';
+  if (d.includes('düzenleme farkı')) return 'DUZENLEME';
+  if (tx.receiptNo) return tx.type === 'GIRIS' ? 'CARI_TAHSILAT' : 'CARI_ODEME';
+  return 'DIGER';
+}
+
+app.get<{ Querystring: { from?: string; to?: string; safeId?: string } }>(
   '/api/reports/cash-flow',
   async (request, reply) => {
-    const now = new Date();
-    const from = request.query.from
-      ? new Date(request.query.from)
-      : new Date(now.getFullYear(), now.getMonth(), 1);
-    const to = request.query.to ? new Date(request.query.to) : now;
-    to.setHours(23, 59, 59, 999);
+    const { from, toEnd: to } = raporAraligi(request.query.from, request.query.to);
+    const safeIdRaw = Number(request.query.safeId);
+    const safeId = Number.isFinite(safeIdRaw) && safeIdRaw > 0 ? safeIdRaw : undefined;
 
-    const transactions = await prisma.transaction.findMany({
-      where: { createdAt: { gte: from, lte: to } },
-      orderBy: { createdAt: 'desc' },
-      include: {
-        safe: { select: { id: true, name: true, currency: true } },
-        customer: { select: { id: true, code: true, name: true } },
-      },
-    });
+    const [rows, safes] = await Promise.all([
+      prisma.transaction.findMany({
+        where: { createdAt: { gte: from, lte: to }, ...(safeId ? { safeId } : {}) },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          safe: { select: { id: true, name: true, currency: true } },
+          customer: { select: { id: true, code: true, name: true } },
+        },
+      }),
+      prisma.safe.findMany({
+        where: safeId ? { id: safeId } : undefined,
+        select: { id: true, name: true, currency: true, balance: true },
+        orderBy: { id: 'asc' },
+      }),
+    ]);
+
+    const transactions = rows.map((tx) => ({ ...tx, kaynak: hareketKaynagi(tx) }));
 
     const summary = transactions.reduce(
       (acc, tx) => {
@@ -7202,13 +7369,53 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
       { totalIn: 0, totalOut: 0 }
     );
 
+    // Kaynak bazli: her kaynagin giris/cikis toplami ve hareket sayisi
+    const kaynakHaritasi = new Map<
+      HareketKaynagi,
+      { kaynak: HareketKaynagi; etiket: string; giris: number; cikis: number; adet: number }
+    >();
+    for (const tx of transactions) {
+      const k = kaynakHaritasi.get(tx.kaynak) ?? {
+        kaynak: tx.kaynak,
+        etiket: HAREKET_KAYNAGI_ETIKETI[tx.kaynak],
+        giris: 0, cikis: 0, adet: 0,
+      };
+      if (tx.type === 'GIRIS') k.giris += tx.amount;
+      else k.cikis += tx.amount;
+      k.adet += 1;
+      kaynakHaritasi.set(tx.kaynak, k);
+    }
+    const kaynakSirasi = Object.keys(HAREKET_KAYNAGI_ETIKETI) as HareketKaynagi[];
+    const kaynaklar = kaynakSirasi
+      .map((k) => kaynakHaritasi.get(k))
+      .filter((k): k is NonNullable<typeof k> => Boolean(k));
+
+    // Kasa bazli: donemdeki giris/cikis + kasanin BUGUNKU bakiyesi
+    const kasalar = safes.map((safe) => {
+      const kendi = transactions.filter((tx) => tx.safe.id === safe.id);
+      const giris = kendi.filter((tx) => tx.type === 'GIRIS').reduce((t, tx) => t + tx.amount, 0);
+      const cikis = kendi.filter((tx) => tx.type === 'CIKIS').reduce((t, tx) => t + tx.amount, 0);
+      return {
+        id: safe.id,
+        ad: safe.name,
+        paraBirimi: safe.currency,
+        bakiye: safe.balance,
+        giris,
+        cikis,
+        net: giris - cikis,
+        adet: kendi.length,
+      };
+    });
+
     if (request.headers.accept?.includes('text/csv')) {
-      const header = 'Tarih;Tip;Kasa;Tutar;Açıklama';
+      const header = 'Tarih;Tip;Kaynak;Kasa;Müşteri;Tutar;Açıklama';
       const lines = transactions.map((tx) =>
         [
           tx.createdAt.toISOString(),
-          tx.type,
+          tx.type === 'GIRIS' ? 'Giriş' : 'Çıkış',
+          HAREKET_KAYNAGI_ETIKETI[tx.kaynak],
           tx.safe.name,
+          tx.customer ? `${tx.customer.code} ${tx.customer.name}` : '',
           tx.amount,
           tx.description.replace(/;/g, ','),
         ].join(';')
@@ -7227,6 +7434,8 @@ app.get<{ Querystring: { from?: string; to?: string } }>(
         from,
         to,
         summary: { ...summary, net: summary.totalIn - summary.totalOut },
+        kaynaklar,
+        kasalar,
         transactions,
       },
       message: 'Cash flow report retrieved successfully.',

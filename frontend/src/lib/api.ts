@@ -206,6 +206,18 @@ export function formatMoney(value: number, _currency?: string) {
   return formatUsd(value);
 }
 
+/**
+ * Tarih kutusu icin "YYYY-MM-DD" — YEREL gun.
+ *
+ * `toISOString().slice(0, 10)` UTC verir: Turkiye'de gece 00:00-03:00 arasi
+ * bir onceki gunu dondurur ve rapor "bugun"u disarida birakirdi.
+ */
+export function yerelGunDizgisi(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+    d.getDate()
+  ).padStart(2, '0')}`;
+}
+
 export function formatDate(value: string) {
   return new Intl.DateTimeFormat('tr-TR', {
     day: '2-digit',
