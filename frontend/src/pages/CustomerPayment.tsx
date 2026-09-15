@@ -42,7 +42,7 @@ type PaymentMethod = 'Nakit' | 'Kredi Kartı' | 'EFT/Havale';
 
 const PAYMENT_METHODS: PaymentMethod[] = ['Nakit', 'Kredi Kartı', 'EFT/Havale'];
 
-import { type PaymentCurrency, amountToStoredUsd } from '../lib/paymentCurrency';
+import { type PaymentCurrency, CURRENCY_SYMBOL, amountToStoredUsd } from '../lib/paymentCurrency';
 import { PaymentAmountField } from '../components/PaymentAmountField';
 
 type CustomerPaymentProps = {
