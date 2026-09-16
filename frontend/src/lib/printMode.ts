@@ -24,3 +24,26 @@ export function printDocument(dosyaAdi?: string) {
   // afterprint bazi tarayicilarda gelmez; kisa sure sonra yine de geri al
   window.setTimeout(geriAl, 2000);
 }
+
+/**
+ * Müşteriyle ilgili çıktının PDF dosya adı — müşteri isteği (17 Eylül 2026):
+ * "bir müşteriyle ilgili bir şey yazdırıyorsam firmanın adı ve fatura
+ * numarası yazsın". Ekstre için aynı kalıp 16 Eylül'de kurulmuştu.
+ *
+ *     ERSA ANKARA - Satış - 260916132625
+ *     ERSA ANKARA - Tahsilat - TAH-0012
+ *
+ * Firma adı boşsa yalnızca tür ve numara; numara da yoksa undefined döner
+ * ve tarayıcı sekme başlığını kullanır. Dosya adında geçersiz karakterler
+ * (/ \ : * ? " < > |) tire olur.
+ */
+export function musteriDosyaAdi(
+  firma: string | null | undefined,
+  tur: string,
+  no: string | null | undefined
+): string | undefined {
+  const temiz = (s: string) => s.replace(/[\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim();
+  const parcalar = [firma, tur, no].map((p) => (p ? temiz(String(p)) : '')).filter(Boolean);
+  if (parcalar.length < 2) return undefined;
+  return parcalar.join(' - ');
+}

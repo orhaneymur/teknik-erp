@@ -34,7 +34,7 @@ import {
   ReceiptPdf,
   PdfMoneyLine,
 } from '../components/ReceiptSlip';
-import { printDocument } from '../lib/printMode';
+import { printDocument, musteriDosyaAdi } from '../lib/printMode';
 import { buildReceiptPartyLines } from '../lib/receiptParty';
 import { pickCustomerFromSearch } from '../lib/customerSearch';
 
@@ -76,6 +76,8 @@ type PaymentReceipt = {
   description: string;
   createdAt: string;
   customerLabel: string;
+  /** Yalnızca firma adı — PDF dosya adı için */
+  customerName?: string | null;
   /** Diğer fişlerdeki müşteri bloğunun aynısı (kod/ünvan, yetkili, tel, VKN, adres) */
   partyLines: string[];
   safeName: string;
@@ -294,7 +296,13 @@ export default function CustomerPayment({
 
   const printPaymentReceipt = useCallback((receipt: PaymentReceipt) => {
     setPrintReceipt(receipt);
-    window.setTimeout(() => printDocument(), 80);
+    // PDF adi: "<Musteri> - Tahsilat - <fis no>" / "... - Ödeme - ..."
+    const ad = musteriDosyaAdi(
+      receipt.customerName ?? receipt.customerLabel,
+      receipt.type === 'GIRIS' ? 'Tahsilat' : 'Ödeme',
+      receipt.receiptNo
+    );
+    window.setTimeout(() => printDocument(ad), 80);
   }, []);
 
   const printPaymentRow = useCallback(
@@ -327,6 +335,7 @@ export default function CustomerPayment({
           description: payment.description,
           createdAt: payment.createdAt,
           customerLabel,
+          customerName: payment.customer?.name ?? null,
           partyLines: fullCustomer
             ? buildReceiptPartyLines(fullCustomer)
             : payment.customer
@@ -440,6 +449,7 @@ export default function CustomerPayment({
               : `${customer.code} cari ödeme`),
           createdAt: new Date().toISOString(),
           customerLabel: `${customer.code} — ${customer.name}`,
+          customerName: customer.name,
           partyLines: buildReceiptPartyLines(customer),
           safeName: selectedSafeData?.name ?? '—',
           tryRate:

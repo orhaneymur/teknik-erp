@@ -50,7 +50,7 @@ import {
   buildReceiptPartyLines,
   type ReceiptParty,
 } from '../lib/receiptParty';
-import { printDocument } from '../lib/printMode';
+import { printDocument, musteriDosyaAdi } from '../lib/printMode';
 import { productDisplayName } from '../lib/productDisplayName';
 import { buildPageUrl } from '../lib/navigation';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
@@ -284,11 +284,18 @@ export default function SalesCreate({
   } | null>(null);
   const showCosts = useHoldKeyReveal('F8');
 
-  const handlePrint = useCallback(() => {
-    printDocument();
-  }, []);
+  /** PDF adı: "<Müşteri> - Satış - <fiş no>" (lib/printMode) */
+  const pdfDosyaAdi = musteriDosyaAdi(
+    (printParty ?? selectedCustomer)?.name,
+    isPreOrder ? 'Ön Sipariş' : 'Satış',
+    displayInvoiceNo
+  );
 
-  useAutoPrint(autoPrint && isEditMode, !editLoading && cart.length > 0, onCancelEdit);
+  const handlePrint = useCallback(() => {
+    printDocument(pdfDosyaAdi);
+  }, [pdfDosyaAdi]);
+
+  useAutoPrint(autoPrint && isEditMode, !editLoading && cart.length > 0, onCancelEdit, pdfDosyaAdi);
 
   const customerSearchRef = useRef<HTMLInputElement>(null);
   const lastAddedRowId = useRef<string | null>(null);
@@ -1085,7 +1092,10 @@ export default function SalesCreate({
 
         if (shouldPrint) {
           window.setTimeout(() => {
-            printDocument();
+            // displayInvoiceNo state'i henuz bu kapanista yok; yanittaki no kullanilir
+            printDocument(
+              musteriDosyaAdi(customer.name, isPreOrder ? 'Ön Sipariş' : 'Satış', savedInvoiceNo)
+            );
             const onAfterPrint = () => {
               afterSale();
               window.removeEventListener('afterprint', onAfterPrint);

@@ -46,7 +46,7 @@ import {
   buildReceiptPartyLines,
   type ReceiptParty,
 } from '../lib/receiptParty';
-import { printDocument } from '../lib/printMode';
+import { printDocument, musteriDosyaAdi } from '../lib/printMode';
 import InvoiceTrashButton from '../components/InvoiceTrashButton';
 import {
   ReceiptSlip,
@@ -255,11 +255,18 @@ export default function SalesReturn({
 
   const showCosts = useHoldKeyReveal('F8');
 
-  const handlePrint = useCallback(() => {
-    printDocument();
-  }, []);
+  /** PDF adı: "<Müşteri> - İade - <fiş no>" (lib/printMode) */
+  const pdfDosyaAdi = musteriDosyaAdi(
+    (printParty ?? selectedCustomer)?.name,
+    'İade',
+    displayInvoiceNo
+  );
 
-  useAutoPrint(autoPrint && isEditMode, !editLoading && editLines.length > 0, onCancelEdit);
+  const handlePrint = useCallback(() => {
+    printDocument(pdfDosyaAdi);
+  }, [pdfDosyaAdi]);
+
+  useAutoPrint(autoPrint && isEditMode, !editLoading && editLines.length > 0, onCancelEdit, pdfDosyaAdi);
 
   const getCartRowIds = useCallback(() => cart.map((line) => line.rowId), [cart]);
   const {
@@ -1062,7 +1069,7 @@ export default function SalesReturn({
 
       if (shouldPrint) {
         window.setTimeout(() => {
-          printDocument();
+          printDocument(musteriDosyaAdi(customer.name, 'İade', invoiceLabel));
           const onAfterPrint = () => {
             afterReturn();
             window.removeEventListener('afterprint', onAfterPrint);

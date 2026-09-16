@@ -41,7 +41,7 @@ import {
   buildReceiptPartyLines,
   type ReceiptParty,
 } from '../lib/receiptParty';
-import { printDocument } from '../lib/printMode';
+import { printDocument, musteriDosyaAdi } from '../lib/printMode';
 import { productDisplayName } from '../lib/productDisplayName';
 import { buildPageUrl } from '../lib/navigation';
 import { kalemIdleriniEsle } from '../lib/kalemEsleme';
@@ -186,11 +186,18 @@ export default function PurchaseCreate({
     after: number;
   } | null>(null);
 
-  const handlePrint = useCallback(() => {
-    printDocument();
-  }, []);
+  /** PDF adı: "<Tedarikçi> - Alış - <fiş no>" (lib/printMode) */
+  const pdfDosyaAdi = musteriDosyaAdi(
+    (printParty ?? selectedSupplier)?.name,
+    'Alış',
+    displayInvoiceNo
+  );
 
-  useAutoPrint(autoPrint && isEditMode, !editLoading && cart.length > 0, onCancelEdit);
+  const handlePrint = useCallback(() => {
+    printDocument(pdfDosyaAdi);
+  }, [pdfDosyaAdi]);
+
+  useAutoPrint(autoPrint && isEditMode, !editLoading && cart.length > 0, onCancelEdit, pdfDosyaAdi);
 
   const totalQuantity = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity, 0),
@@ -710,7 +717,7 @@ export default function PurchaseCreate({
 
         if (shouldPrint) {
           window.setTimeout(() => {
-            printDocument();
+            printDocument(musteriDosyaAdi(selectedSupplier.name, 'Alış', savedInvoiceNo));
             const onAfterPrint = () => {
               afterPurchase();
               window.removeEventListener('afterprint', onAfterPrint);

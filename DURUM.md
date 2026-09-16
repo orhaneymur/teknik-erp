@@ -9,8 +9,8 @@ oturuma başlarken önce buraya bak.
 
 ## 0. TAM ŞU AN NEREDE KALDIK
 
-> **v1.22.18 DERLENDİ (17 Eylül) — v1.22.17 + fiş sıralaması.** Provaya bu
-> kurulacak. 260915094213 (ön sipariş, ERSA ANKARA) provada temizlendi:
+> **v1.22.19 DERLENDİ (17 Eylül) — v1.22.17 katlanma düzeltmesi + fiş
+> sıralaması (v1.22.18) + PDF dosya adları.** Provaya bu kurulacak. 260915094213 (ön sipariş, ERSA ANKARA) provada temizlendi:
 > 80 kopya silindi, 329 → 249 kalem, bakiye değişmedi (ön sipariş cariye
 > işlememiş). Müşteriden teyit bekleniyor; canlıda **Stok Düş'ten önce**
 > temizlenmeli.
@@ -253,6 +253,16 @@ DURUM'daki "50 kayıt / 14.860 giriş" bunların toplamıydı; +2 deneme kaydı
 5 $). Betik iki kalıbı da kapsar. Provada sonuç: 49 kasasız, kasa
 2.767,46 → **14.579,47 $**, hareket toplamı = bakiye. Bu rakam = 12
 Eylül'den beri kasaya net giren para (başlangıç nakdi 0 varsayımıyla).
+
+**v1.22.19 — PDF DOSYA ADLARI (müşteri isteği, 17 Eylül).** "Müşteriyle
+ilgili bir şey yazdırıyorsam firmanın adı ve fatura numarası yazsın."
+Fişler sekme başlığıyla iniyordu (`Satış Yap · Shenzhen Market.pdf`, hepsi
+aynı ad). `musteriDosyaAdi()` (lib/printMode.ts): `<Firma> - <Tür> - <No>`,
+geçersiz karakterler tire. Satış / Ön Sipariş / Alış / İade (Kaydet+Yazdır,
+düzenlemede Yazdır, listeden Yazdır — `useAutoPrint` ad alır) ve
+Tahsilat / Ödeme fişi (`<Firma> - Tahsilat - TAH-…`). Ekstre zaten
+`<Firma> - Ekstre - <tarih>` idi. Barkod yazdırma müşteriyle ilgili değil,
+dokunulmadı.
 
 **v1.22.18 — FİŞ KALEM SIRASI (müşteri isteği, 17 Eylül).** Fiş
 çıktısı Ağustos'tan beri düz alfabetikti; 15 Eylül'deki kategori kuralı

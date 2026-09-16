@@ -12,10 +12,18 @@ import { printDocument } from '../lib/printMode';
  * kez tetiklenir; afterprint gelmezse (bazı tarayıcılar) 1,5 sn sonra
  * yine de döner.
  */
-export function useAutoPrint(enabled: boolean, ready: boolean, onDone?: () => void) {
+export function useAutoPrint(
+  enabled: boolean,
+  ready: boolean,
+  onDone?: () => void,
+  /** PDF dosya adı (lib/printMode musteriDosyaAdi) */
+  dosyaAdi?: string
+) {
   const fired = useRef(false);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  const dosyaAdiRef = useRef(dosyaAdi);
+  dosyaAdiRef.current = dosyaAdi;
 
   useEffect(() => {
     if (!enabled || !ready || fired.current) return;
@@ -32,7 +40,7 @@ export function useAutoPrint(enabled: boolean, ready: boolean, onDone?: () => vo
     // Fişin DOM'a yerleşmesi için kısa bekleme; sonra yazdır
     const t = window.setTimeout(() => {
       window.addEventListener('afterprint', bitir);
-      printDocument();
+      printDocument(dosyaAdiRef.current);
       window.setTimeout(bitir, 1500);
     }, 250);
 
