@@ -59,6 +59,7 @@ import {
 import { productDisplayName } from '../lib/productDisplayName';
 import { buildPageUrl } from '../lib/navigation';
 import { kalemIdleriniEsle } from '../lib/kalemEsleme';
+import { fisKalemleriSirala } from '../lib/fisSirasi';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 import SalesCreate from './SalesCreate';
 
@@ -111,6 +112,8 @@ type ReturnCartLine = {
   productId: number;
   productName: string;
   productSku: string;
+  /** Fiş sıralaması için kategori adı (lib/fisSirasi.ts) */
+  productCategory?: string | null;
   sourceInvoiceItemId: number;
   invoiceId: number;
   invoiceNo: string;
@@ -161,11 +164,23 @@ type EditReturnLine = {
   productId: number;
   productName: string;
   productSku: string;
+  /** Fiş sıralaması için kategori adı (lib/fisSirasi.ts) */
+  productCategory?: string | null;
   quantity: number;
   unitPriceTl: number;
   /** true ise stok CIN_IADE_DEPO'ya isler */
   isChinaReturn: boolean;
 };
+
+/** Satırları fiş sırasına dizer (lib/fisSirasi.ts) — çıktı ve kayıtlı fiş */
+function satirlariFisSirasinaDiz<T extends { productName: string; productCategory?: string | null }>(
+  satirlar: readonly T[]
+): T[] {
+  return fisKalemleriSirala(satirlar, (satir) => ({
+    ad: satir.productName,
+    kategori: satir.productCategory,
+  }));
+}
 
 export default function SalesReturn({
   f2Trigger = 0,
@@ -314,22 +329,14 @@ export default function SalesReturn({
     return { before, after };
   }, [receiptParty, settlementType, totalUsd]);
 
-  /** Fiş/PDF çıktısı alfabetik — ekrandaki sepet ekleme sırasında kalır */
-  const receiptLines = useMemo(
-    () =>
-      [...activeLines].sort((a, b) =>
-        a.productName.localeCompare(b.productName, 'tr')
-      ),
-    [activeLines]
-  );
+  /**
+   * Fiş/PDF çıktısı HER ZAMAN fiş sırasında (kategori → doğal ad,
+   * lib/fisSirasi.ts). Ekrandaki sepet yeni iade yazılırken ekleme
+   * sırasında kalır; kayıttan sonra (düzenleme görünümü) fiş sırasına geçer.
+   */
+  const receiptLines = useMemo(() => satirlariFisSirasinaDiz(activeLines), [activeLines]);
 
-  const receiptEditLines = useMemo(
-    () =>
-      [...editLines].sort((a, b) =>
-        a.productName.localeCompare(b.productName, 'tr')
-      ),
-    [editLines]
-  );
+  const receiptEditLines = useMemo(() => satirlariFisSirasinaDiz(editLines), [editLines]);
 
   const chinaReturnCount = activeLines.filter((r) => r.isChinaReturn).length;
   const stockReturnCount = activeLines.length - chinaReturnCount;
@@ -427,6 +434,7 @@ export default function SalesReturn({
                 name: string;
                 brand?: string | null;
                 model?: string | null;
+                category?: { name: string } | null;
               };
             }>;
           };
@@ -466,7 +474,9 @@ export default function SalesReturn({
         setEditNotes(data.orderNotes ?? '');
         setEditInvoiceDate(data.createdAt.slice(0, 10));
         setRemovedItemIds([]);
+        // Kayitli fis fis sirasinda acilir (kategori -> dogal ad)
         setEditLines(
+          satirlariFisSirasinaDiz(
           data.items.map((line) => {
             const rate = data.exchangeRate > 0 ? data.exchangeRate : 1;
             return {
@@ -475,11 +485,13 @@ export default function SalesReturn({
               productId: line.product.id,
               productName: productDisplayName(line.product),
               productSku: line.product.sku,
+              productCategory: line.product.category?.name ?? null,
               quantity: toIntegerQty(line.quantity, 1),
               unitPriceTl: roundPrice(line.unitPrice / rate),
               isChinaReturn: Boolean(line.isChinaReturn),
             };
           })
+          )
         );
       } catch {
         if (!cancelled) {
@@ -594,6 +606,7 @@ export default function SalesReturn({
           productId: product.id,
           productName: productDisplayName(product),
           productSku: product.sku,
+          productCategory: product.category?.name ?? null,
           sourceInvoiceItemId: 0,
           invoiceId: 0,
           invoiceNo: '—',
@@ -688,6 +701,7 @@ export default function SalesReturn({
             productId: data.product.id,
             productName: productDisplayName(data.product),
             productSku: data.product.sku,
+            productCategory: product.category?.name ?? null,
             sourceInvoiceItemId: data.sourceInvoiceItemId,
             invoiceId: data.invoiceId,
             invoiceNo: data.invoiceNo,
@@ -782,6 +796,7 @@ export default function SalesReturn({
           productId: product.id,
           productName: productDisplayName(product),
           productSku: product.sku,
+          productCategory: product.category?.name ?? null,
           quantity: 1,
           unitPriceTl: roundPrice(
             product.priceUsd > 0 ? product.priceUsd : product.priceTl
@@ -866,13 +881,16 @@ export default function SalesReturn({
       const donenKalemler = guncelleme.data?.data?.items;
       if (Array.isArray(donenKalemler) && donenKalemler.length > 0) {
         const liste = donenKalemler as Array<{ id: number; productId: number }>;
+        // Kayit sonrasi satirlar da fis sirasina gecer (musteri istegi, 17 Eylul)
         setEditLines((onceki) =>
-          kalemIdleriniEsle(
-            onceki,
-            liste,
-            (satir) => satir.invoiceItemId,
-            (satir) => satir.productId,
-            (satir, id) => ({ ...satir, invoiceItemId: id })
+          satirlariFisSirasinaDiz(
+            kalemIdleriniEsle(
+              onceki,
+              liste,
+              (satir) => satir.invoiceItemId,
+              (satir) => satir.productId,
+              (satir, id) => ({ ...satir, invoiceItemId: id })
+            )
           )
         );
       }

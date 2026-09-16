@@ -45,6 +45,7 @@ import { printDocument } from '../lib/printMode';
 import { productDisplayName } from '../lib/productDisplayName';
 import { buildPageUrl } from '../lib/navigation';
 import { kalemIdleriniEsle } from '../lib/kalemEsleme';
+import { fisKalemleriSirala } from '../lib/fisSirasi';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
 const EXCHANGE_RATE = 1;
@@ -81,6 +82,14 @@ type CartItem = {
   quantity: number;
   unitPriceUsd: number;
 };
+
+/** Sepeti fiş sırasına dizer (lib/fisSirasi.ts) — çıktı ve kayıtlı fiş */
+function sepetiFisSirasinaDiz(sepet: readonly CartItem[]): CartItem[] {
+  return fisKalemleriSirala(sepet, (satir) => ({
+    ad: productDisplayName(satir.product),
+    kategori: satir.product.category?.name,
+  }));
+}
 type InitData = {
   branches: Branch[];
   safes: Safe[];
@@ -230,14 +239,12 @@ export default function PurchaseCreate({
     [cart]
   );
 
-  /** Fiş/PDF çıktısı alfabetik — ekrandaki sepet ekleme sırasında kalır */
-  const receiptCart = useMemo(
-    () =>
-      [...cart].sort((a, b) =>
-        productDisplayName(a.product).localeCompare(productDisplayName(b.product), 'tr')
-      ),
-    [cart]
-  );
+  /**
+   * Fiş/PDF çıktısı HER ZAMAN fiş sırasında (kategori → doğal ad,
+   * lib/fisSirasi.ts). Ekrandaki sepet yeni fiş yazılırken ekleme
+   * sırasında kalır; kayıttan sonra o da fiş sırasına dizilir.
+   */
+  const receiptCart = useMemo(() => sepetiFisSirasinaDiz(cart), [cart]);
 
   const { rates } = useExchangeRates();
   const receiptTryRate = printTryRate ?? (rates.usd > 0 ? rates.usd : null);
@@ -396,14 +403,17 @@ export default function PurchaseCreate({
         setDueDate(data.dueDate ? data.dueDate.slice(0, 10) : '');
         setInvoiceDate(data.createdAt.slice(0, 10));
         setRemovedItemIds([]);
+        // Kayitli fis fis sirasinda acilir (kategori -> dogal ad)
         setCart(
-          data.items.map((line) => ({
-            rowId: `inv-${line.id}`,
-            sourceInvoiceItemId: line.id,
-            product: line.product,
-            quantity: toIntegerQty(line.quantity, 1),
-            unitPriceUsd: roundPrice(line.unitPrice / rate),
-          }))
+          sepetiFisSirasinaDiz(
+            data.items.map((line) => ({
+              rowId: `inv-${line.id}`,
+              sourceInvoiceItemId: line.id,
+              product: line.product,
+              quantity: toIntegerQty(line.quantity, 1),
+              unitPriceUsd: roundPrice(line.unitPrice / rate),
+            }))
+          )
         );
       } catch {
         if (!cancelled) {
@@ -516,13 +526,16 @@ export default function PurchaseCreate({
   const kalemleriSepeteBagla = (kalemler: unknown) => {
     if (!Array.isArray(kalemler) || kalemler.length === 0) return;
     const liste = kalemler as Array<{ id: number; productId: number }>;
+    // Kayit sonrasi sepet de fis sirasina gecer (musteri istegi, 17 Eylul)
     setCart((onceki) =>
-      kalemIdleriniEsle(
-        onceki,
-        liste,
-        (satir) => satir.sourceInvoiceItemId,
-        (satir) => satir.product.id,
-        (satir, id) => ({ ...satir, sourceInvoiceItemId: id })
+      sepetiFisSirasinaDiz(
+        kalemIdleriniEsle(
+          onceki,
+          liste,
+          (satir) => satir.sourceInvoiceItemId,
+          (satir) => satir.product.id,
+          (satir, id) => ({ ...satir, sourceInvoiceItemId: id })
+        )
       )
     );
   };

@@ -33,6 +33,8 @@ export type F2Product = {
   lastSoldPriceUsd?: number | null;
   /** MERKEZ_DEPO stok adedi — F2 listesinde satır rengini belirler */
   merkezDepoQuantity?: number;
+  /** Fiş sıralaması için (lib/fisSirasi.ts) */
+  category?: { name: string } | null;
 };
 
 type ProductsResponse = {

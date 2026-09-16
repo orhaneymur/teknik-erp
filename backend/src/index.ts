@@ -1097,6 +1097,9 @@ const PRODUCT_SEARCH_SELECT = {
   priceUsd: true,
   // Satis 2 (perakende) — satis ekraninda fiyat kademesi secilebilsin diye doner
   priceUsd2: true,
+  // Fis siralamasi icin (EKR -> BAT -> digerleri): ekran kategori adindan
+  // oneki turetir, sunucudaki f2KategoriSirasi ile ayni kural
+  category: { select: { name: true } },
   stocks: {
     where: { branch: { name: DEPOT_NAMES.MERKEZ } },
     select: {
@@ -1120,6 +1123,7 @@ type ProductSearchRow = {
   priceTl: number;
   priceUsd: number;
   priceUsd2: number;
+  category: { name: string } | null;
   stocks: Array<{
     quantity: unknown;
     branch: { id: number; name: string };
@@ -1168,6 +1172,7 @@ function mapProductSearchExtras(
     lastSoldPriceUsd,
     stocks,
     merkezDepoQuantity: stocks[0]?.quantity ?? 0,
+    category: product.category ? { name: product.category.name } : null,
   };
 }
 
@@ -2877,6 +2882,8 @@ app.get<{ Params: { id: string } }>('/api/sales/invoices/:id', async (request, r
               // marka/model — fatura düzenleme ve fiş ekranı adı sadeleştirir
               brand: true,
               model: true,
+              // fis siralamasi (kategori onceligi) icin
+              category: { select: { name: true } },
               priceTl: true,
               priceUsd: true,
               /*

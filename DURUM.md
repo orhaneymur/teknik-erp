@@ -9,6 +9,12 @@ oturuma başlarken önce buraya bak.
 
 ## 0. TAM ŞU AN NEREDE KALDIK
 
+> **v1.22.18 DERLENDİ (17 Eylül) — v1.22.17 + fiş sıralaması.** Provaya bu
+> kurulacak. 260915094213 (ön sipariş, ERSA ANKARA) provada temizlendi:
+> 80 kopya silindi, 329 → 249 kalem, bakiye değişmedi (ön sipariş cariye
+> işlememiş). Müşteriden teyit bekleniyor; canlıda **Stok Düş'ten önce**
+> temizlenmeli.
+>
 > **v1.22.17 DERLENDİ, PROVAYA KURULACAK (17 Eylül).** Müşteri şikâyeti:
 > "iadeyi kaydedip ürün ekleyip tekrar kaydedince önceki eklenenler tekrar
 > yükleniyor". Kod okundu, yerelde kanıtlandı: **düzenlemede eklenen kalemin
@@ -247,6 +253,24 @@ DURUM'daki "50 kayıt / 14.860 giriş" bunların toplamıydı; +2 deneme kaydı
 5 $). Betik iki kalıbı da kapsar. Provada sonuç: 49 kasasız, kasa
 2.767,46 → **14.579,47 $**, hareket toplamı = bakiye. Bu rakam = 12
 Eylül'den beri kasaya net giren para (başlangıç nakdi 0 varsayımıyla).
+
+**v1.22.18 — FİŞ KALEM SIRASI (müşteri isteği, 17 Eylül).** Fiş
+çıktısı Ağustos'tan beri düz alfabetikti; 15 Eylül'deki kategori kuralı
+yalnızca F2 listesine uygulanmıştı. Karar:
+
+| Nerede | Sıra |
+|---|---|
+| Sepet, yeni fiş yazılırken | **Ekleme sırası** (personel yeni satırı nerede göreceğini bilsin) |
+| Sepet, kayıttan sonra / listeden düzenlemeye açılınca | Fiş sırası |
+| Fiş / A4 / PDF çıktısı | **Her zaman** fiş sırası |
+
+Fiş sırası = EKR → BAT → diğer kategoriler alfabetik → kategorisiz sonda;
+kategori içinde **doğal** ad sırası (IPH-8 < IPH-11). `lib/fisSirasi.ts`
+(`FIS_KATEGORI_ONCELIGI`), sunucudaki `f2KategoriSirasi` ile aynı kural —
+**biri değişirse ikisi birlikte.** Önek kategori adından türetilir
+(`categoryPrefix` kopyası), stok kodundan değil; eski kodlu ürünler de
+doğru kategoriye düşer. Sunucu: F2 yanıtı ve fatura kalemleri `category.name`
+döner. Üç ekran (Satış/Alış/İade) bağlandı; `tsc` + `vite build` temiz.
 
 **v1.22.17 — DÜZENLEMEDE EKLENEN KALEM HER KAYDETTE KATLANIYORDU
 (müşteri şikâyeti, 17 Eylül).** Önce "alışta bazı kalemler iki kez
