@@ -10,8 +10,8 @@ oturuma başlarken önce buraya bak.
 ## 0. TAM ŞU AN NEREDE KALDIK
 
 > **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.15 derlendi, provaya kurulacak — ŞEMA DEĞİŞİKLİĞİ VAR.**
-> (v1.22.0–v1.22.14 de Docker Hub'da; v1.22.15 hepsini kapsar, doğrudan o kurulur.)
+> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.16 derlendi, provaya kurulacak — v1.22.15'in ŞEMA DEĞİŞİKLİĞİ dahil.**
+> (v1.22.0–v1.22.15 de Docker Hub'da; v1.22.16 hepsini kapsar, doğrudan o kurulur.)
 > **Müşterinin kararı (15 Eylül akşamı):** önce provada dene → dükkan
 > kapanınca canlı kopyasını provaya yükle, her şeyi gerçek veriyle gör →
 > sonra canlı. Canlı veriye dokunan hiçbir adım onaysız atılmaz.
@@ -643,7 +643,7 @@ F2 sırası, TL satırı, anasayfa kartları, "DİKKAT" uyarısı, kasa
 
 1. Sunucuda `cd /root/teknikerp && git pull`
 2. (Gerekirse tazele: `bash k8s/prova-tazele.sh shenzhen`)
-3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.15 shenzhen-test`
+3. Provaya kur: `bash k8s/update-all-tenants.sh v1.22.16 shenzhen-test`
    (veriyi tazelemeye gerek yok — kopya duruyor, sürüm değişince veri değişmez)
 4. Provada dene:
    - **v1.22.13:** Alışta aynı ürün iki satır; sepette 9,17 → sol → aşağı → sağ →
