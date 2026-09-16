@@ -62,7 +62,8 @@ type PaymentRow = {
   description: string;
   createdAt: string;
   customer: { id: number; code: string; name: string; balance?: number } | null;
-  safe: { id: number; name: string; currency: string; balance?: number };
+  /** null = KASASIZ cari kaydi (kasaya dokunmaz) */
+  safe: { id: number; name: string; currency: string; balance?: number } | null;
   /** Kayıtta saklanan USD/TL kuru — eski tahsilatlarda boş olabilir */
   tryRate?: number | null;
 };
@@ -101,6 +102,14 @@ export default function CustomerPayment({
   const [amount, setAmount] = useState('');
   const [amountCurrency, setAmountCurrency] = useState<PaymentCurrency>('USD');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Nakit');
+  /*
+   * KASASIZ CARI KAYDI (musteri istegi, 16 Eylul 2026): "musteriye borcluyuz,
+   * carisine alacak yazalim ama kasadan cikmasin" / acilis bakiyeleri /
+   * karsilikli mahsup. Acikken kasa ve odeme yontemi sorulmaz; Giris =
+   * musteri lehine alacak, Cikis = musteri aleyhine borc. Kasa raporunda
+   * gorunmez, ekstrede "cari kaydi" olarak gorunur.
+   */
+  const [kasasiz, setKasasiz] = useState(false);
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -120,6 +129,7 @@ export default function CustomerPayment({
   const [editDescription, setEditDescription] = useState('');
   const [editType, setEditType] = useState<'GIRIS' | 'CIKIS'>('GIRIS');
   const [editSafeId, setEditSafeId] = useState<number | ''>('');
+  const [editKasasiz, setEditKasasiz] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [shouldPrint, setShouldPrint] = useState(false);
   const [printReceipt, setPrintReceipt] = useState<PaymentReceipt | null>(null);
@@ -322,7 +332,7 @@ export default function CustomerPayment({
             : payment.customer
               ? [customerLabel]
               : [],
-          safeName: payment.safe.name,
+          safeName: payment.safe?.name ?? 'Kasasız (yalnızca cari)',
           balanceBefore,
           balanceAfter,
           tryRate: payment.tryRate ?? null,
@@ -346,8 +356,8 @@ export default function CustomerPayment({
       rates.eur
     );
 
-    if (!customer || selectedSafe === '') {
-      onNotify?.('error', 'Lütfen müşteri ve kasa seçin.');
+    if (!customer || (!kasasiz && selectedSafe === '')) {
+      onNotify?.('error', kasasiz ? 'Lütfen müşteri seçin.' : 'Lütfen müşteri ve kasa seçin.');
       return;
     }
 
@@ -369,9 +379,10 @@ export default function CustomerPayment({
           {
             amount: storedAmount,
             type,
-            method: paymentMethod,
+            method: kasasiz ? undefined : paymentMethod,
             description: description.trim() || undefined,
-            safeId: Number(selectedSafe),
+            safeId: kasasiz ? null : Number(selectedSafe),
+            kasasiz,
             customerId: customer.id,
           }
         );
@@ -392,15 +403,22 @@ export default function CustomerPayment({
 
       const response = await axios.post(`${API_BASE}/api/customers/payment`, {
         customerId: customer.id,
-        safeId: Number(selectedSafe),
+        safeId: kasasiz ? null : Number(selectedSafe),
+        kasasiz,
         amount: storedAmount,
         type,
-        method: paymentMethod,
+        method: kasasiz ? undefined : paymentMethod,
         description: description.trim() || undefined,
       });
 
       if (response.data.success) {
-        const label = type === 'GIRIS' ? 'Tahsilat' : 'Ödeme';
+        const label = kasasiz
+          ? type === 'GIRIS'
+            ? 'Alacak kaydı'
+            : 'Borç kaydı'
+          : type === 'GIRIS'
+            ? 'Tahsilat'
+            : 'Ödeme';
         const amountLabel =
           amountCurrency === 'USD'
             ? formatUsd(storedAmount)
@@ -492,7 +510,8 @@ export default function CustomerPayment({
     );
     setEditDescription(payment.description);
     setEditType(payment.type);
-    setEditSafeId(payment.safe.id);
+    setEditSafeId(payment.safe?.id ?? '');
+    setEditKasasiz(payment.safe == null);
   };
 
   const closeEditPayment = () => {
@@ -523,7 +542,7 @@ export default function CustomerPayment({
       onNotify?.('error', 'Geçerli bir tutar girin.');
       return;
     }
-    if (editSafeId === '') {
+    if (!editKasasiz && editSafeId === '') {
       onNotify?.('error', 'Kasa seçin.');
       return;
     }
@@ -535,9 +554,10 @@ export default function CustomerPayment({
         {
           amount: storedAmount,
           type: editType,
-          method: editMethod,
+          method: editKasasiz ? undefined : editMethod,
           description: editDescription.trim() || undefined,
-          safeId: Number(editSafeId),
+          safeId: editKasasiz ? null : Number(editSafeId),
+          kasasiz: editKasasiz,
           customerId: editCustomer.id,
         }
       );
@@ -715,20 +735,37 @@ export default function CustomerPayment({
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Kasa</label>
               <select
-                value={selectedSafe}
+                value={kasasiz ? '' : selectedSafe}
                 onChange={(e) => setSelectedSafe(e.target.value ? Number(e.target.value) : '')}
                 className={inputClass}
+                disabled={kasasiz}
               >
-                <option value="">Kasa seçin</option>
+                <option value="">{kasasiz ? 'Kasaya işlenmez' : 'Kasa seçin'}</option>
                 {safes.map((safe) => (
                   <option key={safe.id} value={safe.id}>
                     {safe.name} ({formatMoney(safe.balance, safe.currency)})
                   </option>
                 ))}
               </select>
+              <label className="mt-2 flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={kasasiz}
+                  onChange={(e) => setKasasiz(e.target.checked)}
+                  className="mt-0.5 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                />
+                <span>
+                  <span className="font-semibold text-amber-900">Kasaya işleme — yalnızca cari</span>
+                  <span className="block text-caption text-amber-800">
+                    Para el değiştirmeden müşterinin hesabına alacak / borç yazar (mahsup,
+                    açılış bakiyesi, iskonto). Kasa raporunda görünmez.
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
 
+          {!kasasiz && (
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Ödeme Yöntemi</label>
             <div className="flex flex-wrap gap-2">
@@ -749,6 +786,7 @@ export default function CustomerPayment({
               ))}
             </div>
           </div>
+          )}
 
           <PaymentAmountField
             label="Tutar"
@@ -827,7 +865,11 @@ export default function CustomerPayment({
               className="btn btn-secondary flex-1 min-w-[200px]"
             >
               <ArrowDownLeft className="w-5 h-5" />
-              {submitting ? 'Kaydediliyor...' : 'Tahsilat Al (Giriş)'}
+              {submitting
+                ? 'Kaydediliyor...'
+                : kasasiz
+                  ? 'Alacak Yaz (müşteri lehine)'
+                  : 'Tahsilat Al (Giriş)'}
             </button>
             <button
               type="button"
@@ -836,7 +878,11 @@ export default function CustomerPayment({
               className="btn flex-1 min-w-[200px] bg-rose-600 text-white hover:bg-rose-500 disabled:bg-slate-400"
             >
               <ArrowUpRight className="w-5 h-5" />
-              {submitting ? 'Kaydediliyor...' : 'Ödeme Yap (Çıkış)'}
+              {submitting
+                ? 'Kaydediliyor...'
+                : kasasiz
+                  ? 'Borç Yaz (müşteri aleyhine)'
+                  : 'Ödeme Yap (Çıkış)'}
             </button>
           </div>
         </section>
@@ -957,11 +1003,19 @@ export default function CustomerPayment({
                             : 'bg-rose-100 text-rose-800'
                         }`}
                       >
-                        {payment.type === 'GIRIS' ? 'Tahsilat' : 'Ödeme'}
+                        {payment.safe == null
+                          ? payment.type === 'GIRIS'
+                            ? 'Alacak kaydı'
+                            : 'Borç kaydı'
+                          : payment.type === 'GIRIS'
+                            ? 'Tahsilat'
+                            : 'Ödeme'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-600">
-                      <span>{payment.safe.name}</span>
+                      <span className={payment.safe == null ? 'italic text-amber-700' : ''}>
+                        {payment.safe?.name ?? 'Kasasız'}
+                      </span>
                       {payment.method && (
                         <span className="mt-0.5 block text-xs text-slate-400">
                           {payment.method}
@@ -1052,40 +1106,54 @@ export default function CustomerPayment({
                   onChange={(e) => setEditType(e.target.value as 'GIRIS' | 'CIKIS')}
                   className="field-input"
                 >
-                  <option value="GIRIS">Tahsilat (Giriş)</option>
-                  <option value="CIKIS">Ödeme (Çıkış)</option>
+                  <option value="GIRIS">{editKasasiz ? 'Alacak (müşteri lehine)' : 'Tahsilat (Giriş)'}</option>
+                  <option value="CIKIS">{editKasasiz ? 'Borç (müşteri aleyhine)' : 'Ödeme (Çıkış)'}</option>
                 </select>
               </div>
-              <div>
-                <label className="field-label">Ödeme Yöntemi</label>
-                <select
-                  value={editMethod}
-                  onChange={(e) => setEditMethod(e.target.value as PaymentMethod)}
-                  className="field-input"
-                >
-                  {PAYMENT_METHODS.map((method) => (
-                    <option key={method} value={method}>
-                      {method}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="field-label">Kasa</label>
-                <select
-                  value={editSafeId}
-                  onChange={(e) =>
-                    setEditSafeId(e.target.value ? Number(e.target.value) : '')
-                  }
-                  className="field-input"
-                >
-                  {safes.map((safe) => (
-                    <option key={safe.id} value={safe.id}>
-                      {safe.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={editKasasiz}
+                  onChange={(e) => setEditKasasiz(e.target.checked)}
+                  className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                />
+                <span className="font-semibold text-amber-900">Kasaya işleme — yalnızca cari</span>
+              </label>
+              {!editKasasiz && (
+                <>
+                  <div>
+                    <label className="field-label">Ödeme Yöntemi</label>
+                    <select
+                      value={editMethod}
+                      onChange={(e) => setEditMethod(e.target.value as PaymentMethod)}
+                      className="field-input"
+                    >
+                      {PAYMENT_METHODS.map((method) => (
+                        <option key={method} value={method}>
+                          {method}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="field-label">Kasa</label>
+                    <select
+                      value={editSafeId}
+                      onChange={(e) =>
+                        setEditSafeId(e.target.value ? Number(e.target.value) : '')
+                      }
+                      className="field-input"
+                    >
+                      <option value="">Kasa seçin</option>
+                      {safes.map((safe) => (
+                        <option key={safe.id} value={safe.id}>
+                          {safe.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
               <PaymentAmountField
                 label="Tutar"
                 amount={editAmount}

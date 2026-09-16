@@ -74,7 +74,8 @@ type RecentPayment = {
   /** Cari tahsilat/tediye fiş no (ÖDM-YYYY-0001); fatura kaynaklı harekette null */
   receiptNo?: string | null;
   createdAt: string;
-  safe: { id: number; name: string; currency: string };
+  /** null = kasasiz cari kaydi */
+  safe: { id: number; name: string; currency: string } | null;
   customer: { id: number; code: string; name: string; city?: string | null } | null;
 };
 
@@ -318,7 +319,7 @@ export default function Dashboard({
     setEditAmount(String(payment.amount));
     setEditDescription(payment.description);
     setEditType(payment.type);
-    setEditSafeId(payment.safe.id);
+    setEditSafeId(payment.safe?.id ?? '');
   }, [notify]);
 
   const closePaymentEdit = useCallback(() => {
@@ -343,20 +344,17 @@ export default function Dashboard({
       notify('error', 'Geçerli bir tutar girin.');
       return;
     }
-    if (editSafeId === '') {
-      notify('error', 'Kasa seçin.');
-      return;
-    }
-
     setEditSubmitting(true);
     try {
+      // Kasa bos = kasasiz cari kaydi (kasaya dokunmaz)
       const response = await axios.put(
         `${API_BASE}/api/customers/payment/${editingPayment.id}`,
         {
           amount: parsedAmount,
           type: editType,
           description: editDescription.trim() || undefined,
-          safeId: Number(editSafeId),
+          safeId: editSafeId === '' ? null : Number(editSafeId),
+          kasasiz: editSafeId === '',
           customerId: editCustomer.id,
         }
       );
@@ -928,7 +926,7 @@ export default function Dashboard({
                         {payment.customer ? ' · ' : null}
                         <span className="font-mono">Fiş: {receiptNo}</span>
                         {' · '}
-                        {payment.safe.name} · {formatDate(payment.createdAt)}
+                        {payment.safe?.name ?? 'Kasasız (cari)'} · {formatDate(payment.createdAt)}
                       </p>
                     </div>
                   </div>
@@ -939,7 +937,7 @@ export default function Dashboard({
                       }`}
                     >
                       {payment.type === 'GIRIS' ? '+' : '-'}
-                      {formatMoney(payment.amount, payment.safe.currency)}
+                      {formatMoney(payment.amount)}
                     </span>
                     {canOpen && (
                       <span className="rounded-lg p-1.5 text-slate-400">
@@ -1026,6 +1024,7 @@ export default function Dashboard({
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 >
+                  <option value="">Kasaya işleme — yalnızca cari</option>
                   {data.safeBalances.map((safe) => (
                     <option key={safe.id} value={safe.id}>
                       {safe.name}

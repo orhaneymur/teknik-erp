@@ -172,23 +172,51 @@ export default function CashFlowReport() {
         </button>
       </div>
 
-      {/* "Bu rakamlar neye göre?" — müşteri sorusunun cevabı ekranda dursun */}
-      <div className="flex gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+      {/* KASADA SU AN — en buyuk rakam; musteri "kasamda ne kadar para var?" diye
+          sordu (16 Eylul 2026). Kasasiz cari kayitlari buraya hic girmez. */}
+      {data && (
+        <section className="rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-50 to-white px-5 py-4 shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-caption font-semibold uppercase tracking-wide text-emerald-700">
+                Kasada şu an
+              </p>
+              <p className="text-3xl font-black tabular-nums text-emerald-900">
+                {formatMoney(data.kasalar.reduce((t, k) => t + k.bakiye, 0))}
+              </p>
+              {data.kasalar.length > 1 && (
+                <p className="mt-1 text-caption text-slate-500">
+                  {data.kasalar.map((k) => `${k.ad}: ${formatMoney(k.bakiye)}`).join(' · ')}
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3 text-sm">
+              <div className="rounded-lg bg-white/80 px-3 py-2 text-right">
+                <p className="text-caption text-slate-500">Dönemde giren</p>
+                <p className="font-bold tabular-nums text-emerald-700">{formatMoney(data.summary.totalIn)}</p>
+              </div>
+              <div className="rounded-lg bg-white/80 px-3 py-2 text-right">
+                <p className="text-caption text-slate-500">Dönemde çıkan</p>
+                <p className="font-bold tabular-nums text-red-600">{formatMoney(data.summary.totalOut)}</p>
+              </div>
+              <div className="rounded-lg bg-white/80 px-3 py-2 text-right">
+                <p className="text-caption text-slate-500">Net</p>
+                <p className={`font-bold tabular-nums ${data.summary.net >= 0 ? 'text-slate-900' : 'text-red-700'}`}>
+                  {formatMoney(data.summary.net)}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <div className="flex gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm text-sky-900">
         <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
-        <div className="space-y-1">
-          <p>
-            <strong>Giriş</strong> ve <strong>Çıkış</strong>, kasaya <strong>fiilen giren ve
-            çıkan paradır</strong> — fatura tutarları değil. Nakit / kart / havale satış
-            kesilince tutar kasaya girer; alış ödemesi ve iade ödemesi kasadan çıkar; cari
-            tahsilat girer, cari ödeme (tediye) çıkar.
-          </p>
-          <p>
-            <strong>Cari (veresiye) satış kasaya girmez</strong> — müşteri ödediğinde "cari
-            tahsilat" olarak girer. Bir fiş silinirse veya tutarı değişirse fark ayrı
-            hareket olarak yazılır. Eski sistemden aktarılan açılış kayıtları cari bakiyeleri
-            kurar; o gün kasadan gerçekten para çıkmamıştır, ayrı grupta gösterilir.
-          </p>
-        </div>
+        <p>
+          Buradaki her rakam kasaya <strong>fiilen giren-çıkan para</strong>dır: nakit/kart
+          satış ve cari tahsilat girer; alış ödemesi, iade ödemesi ve cari ödeme çıkar.
+          Cari (veresiye) satış ve <strong>kasasız cari kayıtları</strong> buraya girmez.
+        </p>
       </div>
 
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -257,33 +285,6 @@ export default function CashFlowReport() {
       </div>
 
       {data && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-xs text-emerald-600">Dönemde kasaya giren</p>
-            <p className="text-xl font-bold text-emerald-800">
-              {formatMoney(data.summary.totalIn)}
-            </p>
-          </div>
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-            <p className="text-xs text-red-600">Dönemde kasadan çıkan</p>
-            <p className="text-xl font-bold text-red-800">
-              {formatMoney(data.summary.totalOut)}
-            </p>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <p className="text-xs text-slate-500">Net (giren − çıkan)</p>
-            <p
-              className={`text-xl font-bold ${
-                data.summary.net >= 0 ? 'text-slate-900' : 'text-red-700'
-              }`}
-            >
-              {formatMoney(data.summary.net)}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {data && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Kaynak bazlı: para NEDEN girdi/çıktı */}
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -334,7 +335,8 @@ export default function CashFlowReport() {
             </table>
           </section>
 
-          {/* Kasa bazlı: dönem hareketi + bugünkü bakiye */}
+          {/* Kasa bazlı: dönem hareketi + bugünkü bakiye — tek kasada gereksiz */}
+          {data.kasalar.length > 1 && (
           <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 px-4 py-3">
               <h2 className="text-sm font-semibold text-slate-800">Kasaya göre</h2>
@@ -381,6 +383,7 @@ export default function CashFlowReport() {
               </tbody>
             </table>
           </section>
+          )}
         </div>
       )}
 

@@ -1,0 +1,11 @@
+-- Kasasız cari kaydı: Transaction.safeId boş olabilir.
+--
+-- Müşteri lehine alacak / aleyhine borç yazmak için kasadan para geçmesi
+-- gerekmiyordu; ama alan zorunlu olduğu için her kayıt bir kasaya
+-- bağlanmak zorundaydı. 11 Eylül 2026 açılış bakiyeleri bu yüzden
+-- tediye/tahsilat olarak girildi ve kasadan 11.512 $ hiç çıkmamış para
+-- çıkmış göründü. Artık NULL = kasaya dokunmayan cari kaydı.
+--
+-- Veri silinmez, taşınmaz; yalnızca sütun NULL kabul eder. Mevcut kayıtlar
+-- olduğu gibi kalır. Dış anahtar korunur.
+ALTER TABLE `Transaction` MODIFY `safeId` INTEGER NULL;

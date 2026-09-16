@@ -50,6 +50,7 @@ BETIKLER=(
   "rapor-test:evet"
   "on-siparis-rapor-test:evet"
   "kalite-test:evet"
+  "kasasiz-cari-test:evet"
   "duzeltmeler-test:evet"
   "fis-kur-test:evet"
   "harem-kur-test:evet"

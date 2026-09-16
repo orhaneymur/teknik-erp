@@ -250,7 +250,11 @@ enum TransactionType {
 
 model Transaction {
   id          Int             @id @default(autoincrement())
-  safeId      Int
+  /// Kasa. NULL = KASASIZ cari kaydi: musteri lehine/aleyhine yazilir,
+  /// kasaya dokunmaz (acilis bakiyeleri, karsilikli mahsup, iskonto).
+  /// 16 Eylul 2026'ya kadar zorunluydu; acilis kayitlari bu yuzden kasadan
+  /// para cikmis gibi girildi (11.512 $ sanal cikis).
+  safeId      Int?
   customerId  Int?
   type        TransactionType
   amount      Float
@@ -264,7 +268,7 @@ model Transaction {
   /// satis kuru. Invoice.tryRate ile ayni kural: gosterim icindir, `amount`
   /// USD'dir ve bakiye bu alandan hesaplanmaz.
   tryRate     Float?
-  safe        Safe            @relation(fields: [safeId], references: [id])
+  safe        Safe?           @relation(fields: [safeId], references: [id])
   customer    Customer?       @relation(fields: [customerId], references: [id])
   createdAt   DateTime        @default(now())
 }

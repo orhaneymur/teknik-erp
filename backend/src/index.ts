@@ -4034,16 +4034,25 @@ app.put<{
 app.post<{
   Body: {
     customerId: number;
-    safeId: number;
+    /** Kasasiz kayitta bos/null */
+    safeId?: number | null;
     amount: number;
     type: 'GIRIS' | 'CIKIS';
     method?: string;
     description?: string;
+    /**
+     * KASASIZ CARI KAYDI (16 Eylul 2026): kasaya dokunmadan musteri lehine
+     * (GIRIS = alacak) ya da aleyhine (CIKIS = borc) yazar. Acilis
+     * bakiyeleri, karsilikli mahsup, iskonto icin. Kasa raporunda gorunmez.
+     */
+    kasasiz?: boolean;
   };
 }>('/api/customers/payment', async (request, reply) => {
-  const { customerId, safeId, amount, type, method, description } = request.body;
+  const { customerId, amount, type, method, description } = request.body;
+  const kasasiz = request.body.kasasiz === true;
+  const safeId = kasasiz ? null : (request.body.safeId ?? null);
 
-  if (!customerId || !safeId || !amount || amount <= 0 || !type) {
+  if (!customerId || (!kasasiz && !safeId) || !amount || amount <= 0 || !type) {
     return reply.status(400).send({
       success: false,
       message: 'Eksik veya geçersiz ödeme bilgileri.',
@@ -4066,14 +4075,14 @@ app.post<{
     const payment = await prisma.$transaction(async (tx) => {
       const [customer, safe] = await Promise.all([
         tx.customer.findUnique({ where: { id: customerId } }),
-        tx.safe.findUnique({ where: { id: safeId } }),
+        safeId ? tx.safe.findUnique({ where: { id: safeId } }) : Promise.resolve(null),
       ]);
 
       if (!customer) {
         throw new Error('Müşteri bulunamadı.');
       }
 
-      if (!safe) {
+      if (!kasasiz && !safe) {
         throw new Error('Kasa bulunamadı.');
       }
 
@@ -4087,19 +4096,23 @@ app.post<{
           where: { id: customerId },
           data: { balance: { decrement: amount } },
         });
-        await tx.safe.update({
-          where: { id: safeId },
-          data: { balance: { increment: amount } },
-        });
+        if (safeId) {
+          await tx.safe.update({
+            where: { id: safeId },
+            data: { balance: { increment: amount } },
+          });
+        }
       } else {
         await tx.customer.update({
           where: { id: customerId },
           data: { balance: { increment: amount } },
         });
-        await tx.safe.update({
-          where: { id: safeId },
-          data: { balance: { decrement: amount } },
-        });
+        if (safeId) {
+          await tx.safe.update({
+            where: { id: safeId },
+            data: { balance: { decrement: amount } },
+          });
+        }
       }
 
       const receiptNo = await generatePaymentReceiptNo(tx);
@@ -4111,13 +4124,17 @@ app.post<{
           type,
           amount,
           tryRate,
-          method: method?.trim() || null,
+          method: kasasiz ? null : method?.trim() || null,
           receiptNo,
           description:
             description?.trim() ||
-            (type === 'GIRIS'
-              ? `${customer.code} cari tahsilat`
-              : `${customer.code} cari ödeme`),
+            (kasasiz
+              ? type === 'GIRIS'
+                ? `${customer.code} cari alacak kaydı (kasasız)`
+                : `${customer.code} cari borç kaydı (kasasız)`
+              : type === 'GIRIS'
+                ? `${customer.code} cari tahsilat`
+                : `${customer.code} cari ödeme`),
         },
         include: {
           customer: { select: { id: true, code: true, name: true, balance: true } },
@@ -4181,11 +4198,13 @@ app.put<{
   Params: { id: string };
   Body: {
     customerId?: number;
-    safeId?: number;
+    safeId?: number | null;
     amount?: number;
     type?: 'GIRIS' | 'CIKIS';
     method?: string;
     description?: string;
+    /** true: kasadan cikarilip kasasiz cari kaydina cevrilir */
+    kasasiz?: boolean;
   };
 }>('/api/customers/payment/:id', async (request, reply) => {
   const id = Number(request.params.id);
@@ -4211,7 +4230,10 @@ app.put<{
       }
 
       const nextCustomerId = body.customerId ?? existing.customerId;
-      const nextSafeId = body.safeId ?? existing.safeId;
+      // kasasiz=true -> kasadan cikarilir; kasasiz=false + safeId -> kasaya baglanir
+      const nextSafeId =
+        body.kasasiz === true ? null : (body.safeId ?? existing.safeId ?? null);
+      const nextKasasiz = nextSafeId == null;
       const nextAmount = body.amount ?? existing.amount;
       const nextType = body.type ?? existing.type;
       const nextDescription =
@@ -4222,8 +4244,8 @@ app.put<{
               : `${existing.customer!.code} cari ödeme`)
           : existing.description;
 
-      if (!nextCustomerId || !nextSafeId || !nextAmount || nextAmount <= 0) {
-        throw new Error('Müşteri, kasa ve tutar zorunludur.');
+      if (!nextCustomerId || !nextAmount || nextAmount <= 0) {
+        throw new Error('Müşteri ve tutar zorunludur.');
       }
 
       if (nextType !== 'GIRIS' && nextType !== 'CIKIS') {
@@ -4232,51 +4254,61 @@ app.put<{
 
       const [nextCustomer, nextSafe] = await Promise.all([
         tx.customer.findUnique({ where: { id: nextCustomerId } }),
-        tx.safe.findUnique({ where: { id: nextSafeId } }),
+        nextSafeId ? tx.safe.findUnique({ where: { id: nextSafeId } }) : Promise.resolve(null),
       ]);
 
       if (!nextCustomer) throw new Error('Müşteri bulunamadı.');
-      if (!nextSafe) throw new Error('Kasa bulunamadı.');
+      if (!nextKasasiz && !nextSafe) throw new Error('Kasa bulunamadı.');
 
+      // Eski etkiyi geri al (kasasiz kayitta kasa yoktur)
       if (existing.type === 'GIRIS') {
         await tx.customer.update({
           where: { id: existing.customerId },
           data: { balance: { increment: existing.amount } },
         });
-        await tx.safe.update({
-          where: { id: existing.safeId },
-          data: { balance: { decrement: existing.amount } },
-        });
+        if (existing.safeId) {
+          await tx.safe.update({
+            where: { id: existing.safeId },
+            data: { balance: { decrement: existing.amount } },
+          });
+        }
       } else {
         await tx.customer.update({
           where: { id: existing.customerId },
           data: { balance: { decrement: existing.amount } },
         });
-        await tx.safe.update({
-          where: { id: existing.safeId },
-          data: { balance: { increment: existing.amount } },
-        });
+        if (existing.safeId) {
+          await tx.safe.update({
+            where: { id: existing.safeId },
+            data: { balance: { increment: existing.amount } },
+          });
+        }
       }
 
+      // Yeni etkiyi uygula
       if (nextType === 'GIRIS') {
         await tx.customer.update({
           where: { id: nextCustomerId },
           data: { balance: { decrement: nextAmount } },
         });
-        await tx.safe.update({
-          where: { id: nextSafeId },
-          data: { balance: { increment: nextAmount } },
-        });
+        if (nextSafeId) {
+          await tx.safe.update({
+            where: { id: nextSafeId },
+            data: { balance: { increment: nextAmount } },
+          });
+        }
       } else {
         // Kasa eksiye düşebilir — bkz. ödeme oluşturma ucundaki not
         await tx.customer.update({
           where: { id: nextCustomerId },
           data: { balance: { increment: nextAmount } },
         });
-        await tx.safe.update({
-          where: { id: nextSafeId },
-          data: { balance: { decrement: nextAmount } },
-        });
+        if (nextSafeId) {
+          await tx.safe.update({
+            where: { id: nextSafeId },
+            data: { balance: { decrement: nextAmount } },
+          });
+        }
       }
 
       // Eski kayıtlarda fiş no yoksa düzenleme sırasında seriye dahil edilir
@@ -4291,9 +4323,11 @@ app.put<{
           amount: nextAmount,
           type: nextType,
           receiptNo,
-          ...(body.method !== undefined
-            ? { method: body.method.trim() || null }
-            : {}),
+          ...(nextKasasiz
+            ? { method: null }
+            : body.method !== undefined
+              ? { method: body.method.trim() || null }
+              : {}),
           description: nextDescription,
         },
         include: {
@@ -7497,6 +7531,7 @@ app.get('/api/reports/stock-value', async (request, reply) => {
  * kurar ama o gun kasadan para cikmamistir.
  */
 type HareketKaynagi =
+  | 'CARI_DUZELTME'
   | 'SATIS_TAHSILAT'
   | 'CARI_TAHSILAT'
   | 'ALIS_ODEME'
@@ -7508,6 +7543,7 @@ type HareketKaynagi =
   | 'DIGER';
 
 const HAREKET_KAYNAGI_ETIKETI: Record<HareketKaynagi, string> = {
+  CARI_DUZELTME: 'Cari kaydı (kasasız)',
   SATIS_TAHSILAT: 'Satış tahsilatı (nakit/kart)',
   CARI_TAHSILAT: 'Cari tahsilat',
   ALIS_ODEME: 'Alış ödemesi',
@@ -7523,7 +7559,9 @@ function hareketKaynagi(tx: {
   type: string;
   description: string;
   receiptNo: string | null;
+  safeId?: number | null;
 }): HareketKaynagi {
+  if (tx.safeId == null) return 'CARI_DUZELTME';
   const d = tx.description;
   if (d.toLocaleUpperCase('tr-TR').includes('ESKİ SİSTEM')) return 'ACILIS';
   if (d.includes('satış tahsilatı')) return 'SATIS_TAHSILAT';
@@ -7544,7 +7582,11 @@ app.get<{ Querystring: { from?: string; to?: string; safeId?: string } }>(
 
     const [rows, safes] = await Promise.all([
       prisma.transaction.findMany({
-        where: { createdAt: { gte: from, lte: to }, ...(safeId ? { safeId } : {}) },
+        // Kasasiz cari kayitlari (safeId NULL) kasa raporuna girmez
+        where: {
+          createdAt: { gte: from, lte: to },
+          safeId: safeId ? safeId : { not: null },
+        },
         orderBy: { createdAt: 'desc' },
         include: {
           safe: { select: { id: true, name: true, currency: true } },
@@ -7592,7 +7634,7 @@ app.get<{ Querystring: { from?: string; to?: string; safeId?: string } }>(
 
     // Kasa bazli: donemdeki giris/cikis + kasanin BUGUNKU bakiyesi
     const kasalar = safes.map((safe) => {
-      const kendi = transactions.filter((tx) => tx.safe.id === safe.id);
+      const kendi = transactions.filter((tx) => tx.safe?.id === safe.id);
       const giris = kendi.filter((tx) => tx.type === 'GIRIS').reduce((t, tx) => t + tx.amount, 0);
       const cikis = kendi.filter((tx) => tx.type === 'CIKIS').reduce((t, tx) => t + tx.amount, 0);
       return {
@@ -7614,7 +7656,7 @@ app.get<{ Querystring: { from?: string; to?: string; safeId?: string } }>(
           tx.createdAt.toISOString(),
           tx.type === 'GIRIS' ? 'Giriş' : 'Çıkış',
           HAREKET_KAYNAGI_ETIKETI[tx.kaynak],
-          tx.safe.name,
+          tx.safe?.name ?? '',
           tx.customer ? `${tx.customer.code} ${tx.customer.name}` : '',
           tx.amount,
           tx.description.replace(/;/g, ','),
@@ -7742,7 +7784,7 @@ app.get<{ Querystring: { customerId?: string } }>(
       orderNotes?: string | null;
       amount?: number;
       safeName?: string | null;
-      safeId?: number;
+      safeId?: number | null;
       receiptNo?: string | null;
       items?: StatementItem[];
       /**

@@ -69,7 +69,7 @@ type StatementLine = {
   amount?: number;
   safeName?: string | null;
   /** Ödeme satırları için — ekstreden düzenleme ve fiş no gösterimi */
-  safeId?: number;
+  safeId?: number | null;
   receiptNo?: string | null;
   items?: StatementItem[];
   /** Fisin kendi nakit hareketi fis satirina katlanmis (ayri satir degil) */
@@ -291,10 +291,6 @@ export default function CustomerStatement({
       notify('error', 'Geçerli bir tutar girin.');
       return;
     }
-    if (paySafeId === '') {
-      notify('error', 'Kasa seçin.');
-      return;
-    }
 
     setPaySubmitting(true);
     try {
@@ -303,8 +299,10 @@ export default function CustomerStatement({
         {
           amount: parsedAmount,
           type: payType,
-          safeId: Number(paySafeId),
-          method: payMethod,
+          // Kasa bos = kasasiz cari kaydi (kasaya dokunmaz)
+          safeId: paySafeId === '' ? null : Number(paySafeId),
+          kasasiz: paySafeId === '',
+          method: paySafeId === '' ? undefined : payMethod,
           description: payDescription.trim() || undefined,
         }
       );
@@ -978,7 +976,13 @@ export default function CustomerStatement({
                             ) : (
                               <div>
                                 <p className="font-medium text-slate-800">
-                                  {line.paymentType === 'GIRIS' ? 'Tahsilat' : 'Ödeme'}
+                                  {line.safeId == null
+                                    ? line.paymentType === 'GIRIS'
+                                      ? 'Alacak kaydı (kasasız)'
+                                      : 'Borç kaydı (kasasız)'
+                                    : line.paymentType === 'GIRIS'
+                                      ? 'Tahsilat'
+                                      : 'Ödeme'}
                                   {line.safeName ? ` · ${line.safeName}` : ''}
                                 </p>
                                 <p className="text-caption text-slate-500">
@@ -1202,7 +1206,7 @@ export default function CustomerStatement({
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 >
-                  <option value="">Kasa seçin</option>
+                  <option value="">Kasaya işleme — yalnızca cari</option>
                   {safes.map((safe) => (
                     <option key={safe.id} value={safe.id}>
                       {safe.name} ({formatMoney(safe.balance, safe.currency)})
