@@ -212,6 +212,18 @@ Doğrulama: `on-siparis-rapor-test` 19 kontrol (bugün fiş/adet: ön sipariş
 saymaz, tamamlanınca sayar, silinince düşer); `tsc` + `vite build` temiz.
 **Maliyet sorusu** (fişte 46 $, kartta 40 $) ayrı — aşağıda "Maliyet".
 
+**⚠ AÇILIŞ KAYITLARI — PROVADA UYGULANDI, SONUÇ BEKLENENDEN FARKLI, MÜŞTERİ
+CEVABI BEKLENİYOR (17 Eylül 00:15).** Betik 37 "ESKİ SİSTEM" kaydını kasasız
+yaptı (doğru), kasa 2.767 → **25.850,57 $** oldu. 11 Eylül'de ayrıca **Genel
+Müşteri (120)'den 13 "cari tahsilat", 11.276,10 $** var (+1 ödeme 5 $) —
+DURUM'daki "14.860 giriş" = 3.584 (ESKİ) + 11.276 (bu). Bunların ne olduğu
+belirsiz:
+- **A)** kasanın açılış parasıysa → kasalı kalmalı, kasa 25.850 doğru;
+  Genel Müşteri'nin −11.276 alacağı tek kasasız borç kaydıyla sıfırlanır
+- **B)** eski sistem müşteri alacaklarıysa → kasasız olmalı, kasa 14.574
+Karar: **dükkandaki fiziksel dolar sayımı** (~25.800 → A, ~14.500 → B).
+Canlıya hiçbir şey gitmedi. Geri alma: `k8s/sql/GERI-AL-acilis-kayitlari.sql`.
+
 **v1.22.15 — KASASIZ CARİ KAYDI (müşteri onayı, 16 Eylül gecesi).**
 Müşterinin üç sorusu: "kasamda ne kadar var?", "müşteri carisine para
 yatırmak istiyor" (bu zaten Tahsilat), "müşteriye borçluyuz, carisine
