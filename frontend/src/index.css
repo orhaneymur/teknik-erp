@@ -274,6 +274,19 @@
     background: transparent !important;
   }
 
+  /*
+   * Ekrandaki her yüzen katman çıktıya girmez: F2 arama penceresi, onay ve
+   * detay pencereleri, bildirimler. 17 Eylül 2026: F2 kutusu açıkken fişte
+   * ve PDF'te ekran görüntüsü gibi basılıyordu — her pencereye tek tek
+   * print:hidden yazmak yerine kural: sabit konumlu ve dialog rollü her
+   * şey gizli. Fiş şablonları (.receipt-slip / .print-pdf-doc) akışta
+   * durur, bu kuraldan etkilenmez.
+   */
+  .fixed,
+  [role="dialog"] {
+    display: none !important;
+  }
+
   .receipt-slip,
   .print-pdf-doc {
     display: none !important;

@@ -9,8 +9,9 @@ oturuma başlarken önce buraya bak.
 
 ## 0. TAM ŞU AN NEREDE KALDIK
 
-> **v1.22.19 DERLENDİ (17 Eylül) — v1.22.17 katlanma düzeltmesi + fiş
-> sıralaması (v1.22.18) + PDF dosya adları.** Provaya bu kurulacak. 260915094213 (ön sipariş, ERSA ANKARA) provada temizlendi:
+> **v1.22.20 DERLENDİ (17 Eylül) — v1.22.17 katlanma düzeltmesi + fiş
+> sıralaması (v1.22.18) + PDF dosya adları (v1.22.19) + yazdırmada açık
+> pencereler basılmıyor.** Provaya bu kurulacak. 260915094213 (ön sipariş, ERSA ANKARA) provada temizlendi:
 > 80 kopya silindi, 329 → 249 kalem, bakiye değişmedi (ön sipariş cariye
 > işlememiş). Müşteriden teyit bekleniyor; canlıda **Stok Düş'ten önce**
 > temizlenmeli.
@@ -253,6 +254,13 @@ DURUM'daki "50 kayıt / 14.860 giriş" bunların toplamıydı; +2 deneme kaydı
 5 $). Betik iki kalıbı da kapsar. Provada sonuç: 49 kasasız, kasa
 2.767,46 → **14.579,47 $**, hareket toplamı = bakiye. Bu rakam = 12
 Eylül'den beri kasaya net giren para (başlangıç nakdi 0 varsayımıyla).
+
+**v1.22.20 — YAZDIRMADA AÇIK PENCERE BASILIYORDU (müşteri, 17 Eylül).**
+F2 arama kutusu açıkken fiş/PDF çıktısında kutu da basılıyordu ("ekran
+görüntüsü gibi"). Gizleme her pencereye tek tek `print:hidden` ile
+yapılıyordu, F2 penceresinde ve başka on kadar pencerede yoktu. Kural
+(`index.css` `@media print`): sabit konumlu (`.fixed`) ve `role="dialog"`
+her şey çıktıda gizli. Fiş şablonları akışta durduğu için etkilenmez.
 
 **v1.22.19 — PDF DOSYA ADLARI (müşteri isteği, 17 Eylül).** "Müşteriyle
 ilgili bir şey yazdırıyorsam firmanın adı ve fatura numarası yazsın."
