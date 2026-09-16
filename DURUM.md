@@ -9,13 +9,32 @@ oturuma başlarken önce buraya bak.
 
 ## 0. TAM ŞU AN NEREDE KALDIK
 
-> **Shenzhen Market 12 Eylül'den beri gerçek satışta.** Canlı v1.21.4.
-> **Prova v1.22.8 + canlının 15 Eylül akşam kopyası; v1.22.16 derlendi, provaya kurulacak — v1.22.15'in ŞEMA DEĞİŞİKLİĞİ dahil.**
-> (v1.22.0–v1.22.15 de Docker Hub'da; v1.22.16 hepsini kapsar, doğrudan o kurulur.)
-> **Müşterinin kararı (15 Eylül akşamı):** önce provada dene → dükkan
-> kapanınca canlı kopyasını provaya yükle, her şeyi gerçek veriyle gör →
-> sonra canlı. Canlı veriye dokunan hiçbir adım onaysız atılmaz.
-> **Canlıya geçiş müşterinin kararıyla ertelendi (15 Eylül): "şimdi değil."**
+> **CANLI v1.22.16 — 17 Eylül 2026 03:45 (Türkiye).** Prova da v1.22.16.
+> Müşteri "canlıya geçelim" dedi; beş adım sırayla uygulandı, her biri
+> provadakiyle birebir çıktı:
+> 1. Yedek: `/root/prova-kaynak-shenzhen-20260916-0041.sql.gz` (291 fatura, 214 hareket)
+> 2. 22 eksik kasa hareketi yazıldı → kasa bakiyesi = hareket toplamı
+> 3. 3 hareketin müşteri etiketi fişe eşitlendi → cari mutabakatı 216/216, fark 0
+> 4. v1.22.16 kuruldu; migration `transaction_kasasiz` uygulandı (00:44:30 UTC)
+> 5. 49 açılış kaydı kasasız yapıldı → **kasa 14.579,47 $**, hareket toplamı aynı
+>
+> **Kalan (müşteri onayıyla):** 25 kalemin boş maliyeti (aşağıda tek satır
+> SQL), Excel indir-yükle turu (58 ürünün katmanı), "Eski kodları düzelt"
+> düğmesi (müşteri listesinde, canlıda henüz basılmadı). Stok eksiği doğru
+> Excel bekliyor. Fiziksel kasa sayımı 14.579 ile karşılaştırılacak.
+
+### Yapıldı (16–17 Eylül gecesi) — v1.22.6 … v1.22.16 tek gecede
+
+Sürüm sürüm ayrıntı aşağıda. Kısa liste: raporlarda ürün bazlı satış ve
+fiş listesi; anasayfa kasa kartı, bugün fiş/adet, düzenlenen fiş üstte,
+Ana Sayfa aynı sekme; kayıtlı fiş rozeti; ödeme onay penceresi; kalite
+yazılabilir; F8 maliyet düzeltmesi; ekstrede TL ile düzenleme, PDF adı,
+nakit fiş tek satır, çizgiler; stok hareketlerinde mevcut stok, Düzenle,
+toplam giriş/çıkış (Excel dahil); kayıt sonrası bakiye tazeleme; alışta
+yeni satır; yön tuşları; fatura listesinde Yazdır; ön sipariş rakamlara
+girmiyor ve iade edilemiyor; Kâr-Zarar silinen/iskonto; **kasasız cari
+kaydı** (şema değişikliği) ve **kasa raporu sadeleşti**; canlı veri
+düzeltmeleri (22 hareket, 3 etiket, 49 açılış kaydı).
 
 ### Yapıldı (14–15 Eylül)
 
