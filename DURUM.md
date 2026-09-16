@@ -9,22 +9,24 @@ oturuma başlarken önce buraya bak.
 
 ## 0. TAM ŞU AN NEREDE KALDIK
 
-> **v1.22.21 DERLENDİ (17 Eylül) — v1.22.17 katlanma düzeltmesi + fiş
-> sıralaması (v1.22.18) + PDF dosya adları (v1.22.19) + yazdırmada açık
-> pencereler basılmıyor (v1.22.20) + anasayfada Yazdır düğmesi.** Provaya
-> bu kurulacak. 260915094213 (ön sipariş, ERSA ANKARA) provada temizlendi:
-> 80 kopya silindi, 329 → 249 kalem, bakiye değişmedi (ön sipariş cariye
-> işlememiş). Müşteriden teyit bekleniyor; canlıda **Stok Düş'ten önce**
-> temizlenmeli.
+> **CANLI v1.22.21 — 16 Eylül 2026 19:08 (Türkiye), kapanıştan sonra.**
+> Prova da v1.22.21. Yedek: `/root/prova-kaynak-shenzhen-20260916-1559.sql.gz`
+> (399 fatura, 300 hareket). Sıra: prova tazele → prova sürüm → prova
+> temizlik → canlı sürüm → canlı temizlik (7 fiş, `fazla-kalem-temizle.sh`)
+> → doğrulama. **Sonuç:** kopya kalem 0; cari mutabakat 220 müşteri fark 0
+> (26.024,52); ERSA 260915094213 → 17.048,25 / 249 kalem, bakiye 8.616,21
+> değişmedi (ön sipariş); MARTEK bakiyesi 2.691 → 2.899,50 (+96,50 +112);
+> dört küçük alış fişi birer kalem. 101 fazla kalem silindi.
 >
-> **v1.22.17 DERLENDİ, PROVAYA KURULACAK (17 Eylül).** Müşteri şikâyeti:
-> "iadeyi kaydedip ürün ekleyip tekrar kaydedince önceki eklenenler tekrar
-> yükleniyor". Kod okundu, yerelde kanıtlandı: **düzenlemede eklenen kalemin
-> sunucu id'si ekrana yazılmıyordu; her sonraki Kaydet onu yine "yeni kalem"
-> diye gönderiyor, fiş her turda katlanıyordu.** Satış, Alış ve İade
-> ekranlarında aynı hata. Sunucu tarafı doğru. Ayrıntı: "v1.22.17" bölümü.
-> Sıra: (1) canlıda etkilenen fişleri bul (sorgu aşağıda), (2) provaya kur
-> ve dene, (3) canlıya kur, (4) katlanmış fişleri müşteriyle birlikte düzelt.
+> **Kalan (müşteri onayıyla):** (1) **Excel indir-yükle turu (G)** —
+> katmanları stoğa eşitler; temizlik stoğu düzeltti, katmanı değil; 58
+> ürün de bekliyor. (2) ERSA'da EKR00273 3 mü 5 mi — müşteriye sor, fiş
+> düzenlemeden tek satır sil; **Stok Düş'ten önce**. (3) 25 kalemin boş
+> maliyeti (SQL aşağıda). (4) "Eski kodları düzelt" düğmesi.
+>
+> Bu gecenin sürümleri: v1.22.17 katlanma düzeltmesi (müşteri şikâyeti),
+> v1.22.18 fiş sırası, v1.22.19 PDF adları, v1.22.20 açık pencere çıktıya
+> girmez, v1.22.21 anasayfada Yazdır (dördü Orhan'ın isteği).
 >
 > **CANLI v1.22.16 — 17 Eylül 2026 03:45 (Türkiye).** Prova da v1.22.16.
 > Müşteri "canlıya geçelim" dedi; beş adım sırayla uygulandı, her biri
