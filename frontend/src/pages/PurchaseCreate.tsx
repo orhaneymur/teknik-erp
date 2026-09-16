@@ -71,6 +71,8 @@ type Product = {
   /** Fişte gizlenir — yalnızca adın sadeleştirilmesinde kullanılır */
   brand?: string | null;
   model?: string | null;
+  /** Fiş sıralaması için (lib/fisSirasi.ts) */
+  category?: { name: string } | null;
   costPrice: number;
   priceTl: number;
   priceUsd: number;
