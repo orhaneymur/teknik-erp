@@ -44,6 +44,7 @@ import {
 import { printDocument } from '../lib/printMode';
 import { productDisplayName } from '../lib/productDisplayName';
 import { buildPageUrl } from '../lib/navigation';
+import { kalemIdleriniEsle } from '../lib/kalemEsleme';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
 const EXCHANGE_RATE = 1;
@@ -506,6 +507,26 @@ export default function PurchaseCreate({
     setCart((prev) => prev.filter((item) => item.rowId !== rowId));
   };
 
+  /**
+   * Sunucudan donen kalemleri sepet satirlarina baglar (POST ve PUT
+   * sonrasi). Bagli satir PUT'a `id` ile gider ve guncellenir; bagsiz
+   * satir `productId` ile gider ve YENI kalem acar — o yuzden her
+   * yanittan sonra cagrilmali.
+   */
+  const kalemleriSepeteBagla = (kalemler: unknown) => {
+    if (!Array.isArray(kalemler) || kalemler.length === 0) return;
+    const liste = kalemler as Array<{ id: number; productId: number }>;
+    setCart((onceki) =>
+      kalemIdleriniEsle(
+        onceki,
+        liste,
+        (satir) => satir.sourceInvoiceItemId,
+        (satir) => satir.product.id,
+        (satir, id) => ({ ...satir, sourceInvoiceItemId: id })
+      )
+    );
+  };
+
   const handleSubmit = async (onayli = false) => {
     if (!selectedSupplier) {
       notify('error', 'Lütfen tedarikçi seçin.');
@@ -552,7 +573,7 @@ export default function PurchaseCreate({
     setSubmitting(true);
     try {
       if (isEditMode && activeInvoiceId) {
-        await axios.put(`${API_BASE}/api/sales/invoices/${activeInvoiceId}`, {
+        const guncelleme = await axios.put(`${API_BASE}/api/sales/invoices/${activeInvoiceId}`, {
           customerId: selectedSupplier.id,
           paymentMethod,
           paymentType,
@@ -575,6 +596,9 @@ export default function PurchaseCreate({
           }),
         });
 
+        // Duzenlemede eklenen satirlarin id'si ekrana yazilmazsa bir sonraki
+        // Kaydet onlari yine "yeni kalem" diye gonderir (17 Eylul 2026 olayi).
+        kalemleriSepeteBagla(guncelleme.data?.data?.items);
         setSavedNotice(`Fatura güncellendi · ${displayInvoiceNo}`);
         void fetchCustomerBalance(selectedSupplier.id).then((b) => {
           if (b != null) setSelectedSupplier((prev) => (prev ? { ...prev, balance: b } : prev));
@@ -621,24 +645,7 @@ export default function PurchaseCreate({
         if (typeof olusanId === 'number' && olusanId > 0) {
           setSavedInvoiceId(olusanId);
         }
-        const olusanKalemler = response.data.data?.items as
-          | Array<{ id: number; productId: number }>
-          | undefined;
-        if (Array.isArray(olusanKalemler) && olusanKalemler.length > 0) {
-          const havuz = new Map<number, number[]>();
-          for (const kalem of olusanKalemler) {
-            const liste = havuz.get(kalem.productId) ?? [];
-            liste.push(kalem.id);
-            havuz.set(kalem.productId, liste);
-          }
-          setCart((onceki) =>
-            onceki.map((satir) => {
-              const liste = havuz.get(satir.product.id);
-              const kalemId = liste && liste.length > 0 ? liste.shift() : undefined;
-              return kalemId ? { ...satir, sourceInvoiceItemId: kalemId } : satir;
-            })
-          );
-        }
+        kalemleriSepeteBagla(response.data.data?.items);
 
         setPrintParty(selectedSupplier);
         setPrintTryRate(

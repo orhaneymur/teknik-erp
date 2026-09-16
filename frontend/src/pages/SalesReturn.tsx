@@ -58,6 +58,7 @@ import {
 } from '../components/ReceiptSlip';
 import { productDisplayName } from '../lib/productDisplayName';
 import { buildPageUrl } from '../lib/navigation';
+import { kalemIdleriniEsle } from '../lib/kalemEsleme';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 import SalesCreate from './SalesCreate';
 
@@ -836,7 +837,7 @@ export default function SalesReturn({
 
     setSubmitting(true);
     try {
-      await axios.put(`${API_BASE}/api/sales/invoices/${activeInvoiceId}`, {
+      const guncelleme = await axios.put(`${API_BASE}/api/sales/invoices/${activeInvoiceId}`, {
         customerId: Number(editCustomerId),
         processedBy: editProcessedBy || null,
         orderNotes: editNotes || undefined,
@@ -855,6 +856,26 @@ export default function SalesReturn({
           isChinaReturn: line.isChinaReturn,
         })),
       });
+      /*
+       * Duzenlemede eklenen satirlar PUT'a productId ile gitti; sunucu
+       * onlara id verdi. Id ekrana yazilmazsa bir sonraki Kaydet ayni
+       * satiri yine "yeni kalem" diye gonderir ve fis ikiye katlanir —
+       * 17 Eylul 2026: personel iadeye urun ekleyip kaydettikce onceki
+       * eklemeler tekrar yaziliyordu.
+       */
+      const donenKalemler = guncelleme.data?.data?.items;
+      if (Array.isArray(donenKalemler) && donenKalemler.length > 0) {
+        const liste = donenKalemler as Array<{ id: number; productId: number }>;
+        setEditLines((onceki) =>
+          kalemIdleriniEsle(
+            onceki,
+            liste,
+            (satir) => satir.invoiceItemId,
+            (satir) => satir.productId,
+            (satir, id) => ({ ...satir, invoiceItemId: id })
+          )
+        );
+      }
       setSavedNotice(`Fatura güncellendi · ${displayInvoiceNo}`);
       void fetchCustomerBalance(Number(editCustomerId)).then((b) => {
         if (b != null) setSelectedCustomer((prev) => (prev ? { ...prev, balance: b } : prev));

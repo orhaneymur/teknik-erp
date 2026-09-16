@@ -32,6 +32,7 @@ import { useAutoPrint } from '../hooks/useAutoPrint';
 import { useCartGridKeyboardNav } from '../hooks/useCartGridKeyboardNav';
 import { useExchangeRates } from '../hooks/useExchangeRates';
 import { tryEquivalent, tryRateNote } from '../lib/receiptTl';
+import { kalemIdleriniEsle } from '../lib/kalemEsleme';
 import {
   API_BASE,
   ensureArray,
@@ -826,6 +827,26 @@ export default function SalesCreate({
     setPaymentMethod(defaultPaymentMethodForCustomer(customer));
   };
 
+  /**
+   * Sunucudan donen kalemleri sepet satirlarina baglar (POST ve PUT
+   * sonrasi). Bagli satir PUT'a `id` ile gider ve guncellenir; bagsiz
+   * satir `productId` ile gider ve YENI kalem acar — o yuzden her
+   * yanittan sonra cagrilmali.
+   */
+  const kalemleriSepeteBagla = (kalemler: unknown) => {
+    if (!Array.isArray(kalemler) || kalemler.length === 0) return;
+    const liste = kalemler as Array<{ id: number; productId: number }>;
+    setCart((onceki) =>
+      kalemIdleriniEsle(
+        onceki,
+        liste,
+        (satir) => satir.sourceInvoiceItemId,
+        (satir) => satir.product.id,
+        (satir, id) => ({ ...satir, sourceInvoiceItemId: id })
+      )
+    );
+  };
+
   const handleSubmit = async (onayli = false) => {
     let customer = selectedCustomer;
     let method = paymentMethod;
@@ -890,7 +911,7 @@ export default function SalesCreate({
           return;
         }
 
-        await axios.put(`${API_BASE}/api/sales/invoices/${activeInvoiceId}`, {
+        const guncelleme = await axios.put(`${API_BASE}/api/sales/invoices/${activeInvoiceId}`, {
           customerId: customer.id,
           paymentMethod: method,
           paymentType,
@@ -917,6 +938,13 @@ export default function SalesCreate({
           }),
         });
 
+        /*
+         * Duzenlemede eklenen satirlar PUT'a productId ile gitti; sunucu
+         * onlara id verdi. Bu id ekrana yazilmazsa bir sonraki Kaydet ayni
+         * satiri yine "yeni kalem" diye gonderir ve fis ikiye katlanir
+         * (17 Eylul 2026 iade olayi).
+         */
+        kalemleriSepeteBagla(guncelleme.data?.data?.items);
         setSavedNotice(`Fatura güncellendi · ${displayInvoiceNo}`);
         notify('success', `Fatura güncellendi: ${displayInvoiceNo}`);
         setRemovedItemIds([]);
@@ -1018,24 +1046,7 @@ export default function SalesCreate({
         if (typeof olusanId === 'number' && olusanId > 0) {
           setSavedInvoiceId(olusanId);
         }
-        const olusanKalemler = response.data.data?.items as
-          | Array<{ id: number; productId: number }>
-          | undefined;
-        if (Array.isArray(olusanKalemler) && olusanKalemler.length > 0) {
-          const havuz = new Map<number, number[]>();
-          for (const kalem of olusanKalemler) {
-            const liste = havuz.get(kalem.productId) ?? [];
-            liste.push(kalem.id);
-            havuz.set(kalem.productId, liste);
-          }
-          setCart((onceki) =>
-            onceki.map((satir) => {
-              const liste = havuz.get(satir.product.id);
-              const kalemId = liste && liste.length > 0 ? liste.shift() : undefined;
-              return kalemId ? { ...satir, sourceInvoiceItemId: kalemId } : satir;
-            })
-          );
-        }
+        kalemleriSepeteBagla(response.data.data?.items);
 
         setPrintParty(customer);
         setPrintTryRate(

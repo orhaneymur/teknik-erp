@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **15 Eylül 2026**
+Son güncelleme: **17 Eylül 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -9,6 +9,15 @@ oturuma başlarken önce buraya bak.
 
 ## 0. TAM ŞU AN NEREDE KALDIK
 
+> **v1.22.17 DERLENDİ, PROVAYA KURULACAK (17 Eylül).** Müşteri şikâyeti:
+> "iadeyi kaydedip ürün ekleyip tekrar kaydedince önceki eklenenler tekrar
+> yükleniyor". Kod okundu, yerelde kanıtlandı: **düzenlemede eklenen kalemin
+> sunucu id'si ekrana yazılmıyordu; her sonraki Kaydet onu yine "yeni kalem"
+> diye gönderiyor, fiş her turda katlanıyordu.** Satış, Alış ve İade
+> ekranlarında aynı hata. Sunucu tarafı doğru. Ayrıntı: "v1.22.17" bölümü.
+> Sıra: (1) canlıda etkilenen fişleri bul (sorgu aşağıda), (2) provaya kur
+> ve dene, (3) canlıya kur, (4) katlanmış fişleri müşteriyle birlikte düzelt.
+>
 > **CANLI v1.22.16 — 17 Eylül 2026 03:45 (Türkiye).** Prova da v1.22.16.
 > Müşteri "canlıya geçelim" dedi; beş adım sırayla uygulandı, her biri
 > provadakiyle birebir çıktı:
@@ -238,6 +247,42 @@ DURUM'daki "50 kayıt / 14.860 giriş" bunların toplamıydı; +2 deneme kaydı
 5 $). Betik iki kalıbı da kapsar. Provada sonuç: 49 kasasız, kasa
 2.767,46 → **14.579,47 $**, hareket toplamı = bakiye. Bu rakam = 12
 Eylül'den beri kasaya net giren para (başlangıç nakdi 0 varsayımıyla).
+
+**v1.22.17 — DÜZENLEMEDE EKLENEN KALEM HER KAYDETTE KATLANIYORDU
+(müşteri şikâyeti, 17 Eylül).** Önce "alışta bazı kalemler iki kez
+yazılıyor" dendi, sonra netleşti: iade fişi kaydedilir → ürün eklenir →
+Kaydet → bir ürün daha → Kaydet: önceki eklenen ürün fişe ikinci kez
+yazılıyor. Ben iki Kaydet'le deneyip göremedim; hata üçüncü Kaydet'te
+çıkıyor.
+
+Mekanizma: ilk Kaydet (POST) sonrası ekran "aynı fişi güncelle" kipine
+geçer ve kalem id'lerini yanıttan eşler (v1.21.2). Düzenlemede eklenen
+satır PUT'a `productId` ile gider, sunucu ekler ve id'sini döner — ama
+**ekran PUT yanıtını hiç işlemiyordu.** Satır id'siz kaldığı için bir
+sonraki Kaydet'te yine "yeni kalem" olarak gidiyordu. Her Kaydet bir
+kopya daha; stok ve cari de o kadar kez işleniyor.
+
+| Ne | Nasıl |
+|---|---|
+| Ortak yardımcı | `frontend/src/lib/kalemEsleme.ts` — `kalemIdleriniEsle`: bağlı olmayan satırları, sunucunun döndürdüğü ve henüz sahiplenilmemiş kalemlerle ürün bazında sırayla eşler. Saf fonksiyon (eski koddaki `Map.shift()` güncelleyici içinde mutasyon yapıyordu) |
+| Satış / Alış | `kalemleriSepeteBagla` hem POST hem PUT yanıtından sonra |
+| İade | `handleEditSave` PUT yanıtından `editLines.invoiceItemId` doldurulur |
+| Sunucu | Değişmedi — PUT zaten `items` döndürüyordu |
+
+Doğrulama: `tekrar-kaydet-test.ts` (11 kontrol): iade A → B ekle Kaydet
+→ C ekle Kaydet → boş Kaydet = 3 kalem, B stoğu bir kez; alışta aynı tur
+3 kalem; son kontrol eski ekran davranışını (id'siz gönderim) bilerek
+tekrarlar ve 4 kalem çıktığını gösterir — hata ekrandaydı. `tsc` +
+`vite build` temiz.
+
+**Canlıda etkilenen fişler (kurulumdan önce çalıştır, yalnızca okur):**
+```
+kubectl exec -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t -e "SELECT i.invoiceNo, i.type, i.paymentMethod, i.updatedAt, p.sku, GROUP_CONCAT(ii.id ORDER BY ii.id) kalem_idler, GROUP_CONCAT(ii.quantity ORDER BY ii.id) adetler, GROUP_CONCAT(ii.unitPrice ORDER BY ii.id) fiyatlar, COUNT(*) n FROM InvoiceItem ii JOIN Invoice i ON i.id=ii.invoiceId JOIN Product p ON p.id=ii.productId WHERE i.deletedAt IS NULL GROUP BY i.id, ii.productId HAVING n>1 ORDER BY i.id DESC"'
+```
+Aynı ürün, aynı adet/fiyat, **aralıklı** kalem id'leri = bu hatanın izi.
+Ardışık id + alış = v1.22.13'ün bilerek açtığı ayrı satır, hata değil.
+Düzeltme: fazla kalemi fiş düzenleme ekranından silmek yeterli — sunucu
+stoğu ve cariyi geri alır (`removeItemIds`). Elle SQL gerekmez.
 
 **Canlıya geçiş sırası (müşteri "geçelim" deyince), hepsi tek satır:**
 1. Yedek: `bash k8s/prova-tazele.sh shenzhen` (canlının tam dökümü `/root/prova-kaynak-…` olarak kalır)

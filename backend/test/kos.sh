@@ -52,6 +52,7 @@ BETIKLER=(
   "kalite-test:evet"
   "kasasiz-cari-test:evet"
   "duzeltmeler-test:evet"
+  "tekrar-kaydet-test:evet"
   "fis-kur-test:evet"
   "harem-kur-test:evet"
 )
