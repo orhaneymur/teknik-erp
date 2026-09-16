@@ -829,6 +829,20 @@ async function reconcileInvoiceFinancials(
     await hareket(before.safeId, before.customerId, -onceki);
     await hareket(after.safeId, after.customerId, sonraki);
   }
+
+  /*
+   * 17 Eylul 2026: fisin MUSTERISI degisince fisin eski kasa hareketleri
+   * (satis tahsilati vb.) eski musterinin etiketinde kaliyordu; cari
+   * mutabakatinda Genel Musteri -6.241 / yeni musteri +6.203 diye
+   * gorunuyordu. Bakiye etkilenmez (nakit fis bakiyeye dokunmaz), ama
+   * ekstre ve raporlar yanlis musteride gosterir. Etiket fisi izler.
+   */
+  if (before.customerId !== after.customerId) {
+    await tx.transaction.updateMany({
+      where: { receiptNo: null, description: { startsWith: `${invoiceNo} ` } },
+      data: { customerId: after.customerId },
+    });
+  }
 }
 
 async function getReturnedQtyMap(

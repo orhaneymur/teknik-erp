@@ -223,10 +223,21 @@ Eylül'den beri kasaya net giren para (başlangıç nakdi 0 varsayımıyla).
 **Canlıya geçiş sırası (müşteri "geçelim" deyince), hepsi tek satır:**
 1. Yedek: `bash k8s/prova-tazele.sh shenzhen` (canlının tam dökümü `/root/prova-kaynak-…` olarak kalır)
 2. `kubectl exec -i -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t' < k8s/sql/kasa-hareket-tamamla.sql` → fark 0
-3. `bash k8s/update-all-tenants.sh v1.22.15 shenzhen` → migrate günlüğünde `transaction_kasasiz`
+2b. Aynı kalıpla `k8s/sql/hareket-musteri-esitle.sql` → 3 eşitlendi; `cari-mutabakat.sql` → farklı 0
+3. `bash k8s/update-all-tenants.sh v1.22.16 shenzhen` → migrate günlüğünde `transaction_kasasiz`
 4. `kubectl exec -i -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t' < k8s/sql/acilis-kayitlari-kasasiz.sql` → 49 kasasız, fark 0
 5. Müşteriye Excel indir-yükle turu (58 ürünün katmanı) ve 25 kalem maliyet SQL'i (ayrı onay)
 Geri alma: `k8s/sql/GERI-AL-*.sql`; en kötü durumda 1. adımdaki döküm geri yüklenir.
+
+**CARİ MUTABAKATI — PROVADA TEMİZ (17 Eylül 01:00).** `k8s/sql/cari-mutabakat.sql`:
+216 müşteride kayıtlı bakiye = fiş + hareket hesabı, fark 0, toplam 21.966,04.
+Açılış kayıtları carilere işlenmiş. Tek bulgu: 3 nakit fiş Genel Müşteri'ye
+kesilip sonra müşterisi değiştirilmiş, eski sürüm hareketin etiketini
+Genel'de bırakmış (Genel −6.241,50 / Ahmet Çetinkaya +6.203,50 / Murat Akyel
+27 / İsmail 11). `hareket-musteri-esitle.sql` etiketi fişin müşterisine
+eşitledi (tutar/bakiye değişmedi). **Kod düzeltmesi (v1.22.16):**
+`reconcileInvoiceFinancials` müşteri değişince fişin hareketlerini de taşır;
+`kasa-hareket-test` 6b. Canlı sırasına 2b olarak eklendi.
 
 **v1.22.15 — KASASIZ CARİ KAYDI (müşteri onayı, 16 Eylül gecesi).**
 Müşterinin üç sorusu: "kasamda ne kadar var?", "müşteri carisine para

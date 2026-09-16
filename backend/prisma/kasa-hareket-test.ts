@@ -151,6 +151,18 @@ async function main() {
   const m2 = await prisma.customer.findUniqueOrThrow({ where: { id: musteri.id } });
   kontrol('cari bakiye 0', yakin(m2.balance, 0), `bakiye=${m2.balance}`);
 
+  // ── 6b. Musteri degisince hareket etiketi fisi izler (17 Eylul 2026) ──
+  console.log('\n[6b] Fisin musterisi degisiyor');
+  const musteri2 = await prisma.customer.create({ data: { code: 'KSA002', name: 'Ikinci Musteri', balance: 0 } });
+  await fetch(`${API}/api/sales/invoices/${satis.data.id}`, {
+    method: 'PUT', headers: H,
+    body: JSON.stringify({ customerId: musteri2.id, paymentMethod: 'Nakit', exchangeRate: 1, items: [{ id: kalemId, quantity: 12, unitPrice: 10, discountPercent: 0 }] }),
+  });
+  const fisHareketleri = await prisma.transaction.findMany({ where: { receiptNo: null, description: { startsWith: `${satis.data.invoiceNo} ` } } });
+  kontrol('fisin TUM hareketleri yeni musteride', fisHareketleri.length > 0 && fisHareketleri.every((t) => t.customerId === musteri2.id), `${fisHareketleri.filter((t) => t.customerId === musteri2.id).length}/${fisHareketleri.length}`);
+  d = await esitMi('musteri degisince');
+  kontrol('kasa 1120 kaldi', yakin(d.bakiye, 1120), `bakiye=${d.bakiye}`);
+
   // ── 7. Sil ────────────────────────────────────────────────────────────
   console.log('\n[7] Fatura siliniyor');
   const silRes = await fetch(`${API}/api/sales/invoices/${satis.data.id}/trash`, {
