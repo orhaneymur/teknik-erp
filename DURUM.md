@@ -24,8 +24,15 @@ oturuma başlarken önce buraya bak.
 > **eksi stoklu** (toplam −88 adet; BAT00102 −10, EKR00461 −9…) — katman
 > eksiye inemez, beklenen istisna; alış girildikçe düzelir.
 >
-> **CANLI v1.22.22 — 16 Eylül 2026 19:57 (Türkiye). Prova da v1.22.22.
-> BU HAFTA BAŞKA SÜRÜM YOK (Orhan'ın kararı).** v1.22.22: Excel
+> **v1.22.23 DERLENDİ, KURULACAK (16 Eylül 20:30) — anasayfa Yazdır artık
+> ekran değiştirmiyor.** Orhan: "fişe giriyor, yazdırıyor, geri dönüyor —
+> çok işlem yapıyor gibi". Fiş anasayfa yerinde dururken görünmeyen bir
+> katmanda (`hidden print:block`) yüklenir, diyalog çıkar, kapanınca katman
+> kalkar; anasayfanın kökü `print:hidden`. Şablon aynı; veri yalnızca okunur.
+> Fatura Listesi'ndeki Yazdır eski akışta kaldı (liste zaten ayrı sayfa).
+> **Bundan sonra bu hafta sürüm yok.**
+>
+> **CANLI v1.22.22 — 16 Eylül 2026 19:57 (Türkiye). Prova da v1.22.22.** v1.22.22: Excel
 > "yüklenemedi" ekran hatası — ayrıştırma her 100 satırda `setImmediate`
 > ile nefes alır; ekran durum sorgusunda geçici hatada sormaya devam eder
 > (20 sn zaman aşımı; 404 ya da üst üste 30 hata bitirir). `excel-*` 5 test.

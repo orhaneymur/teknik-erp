@@ -35,7 +35,7 @@ import {
 } from '../components/DashboardCharts';
 import { useInvoiceEditorFromUrl } from '../hooks/useInvoiceEditorFromUrl';
 import { buildPageUrl, dashboardQuickLinks, type PageId } from '../lib/navigation';
-import InvoiceInlineEditor from '../components/InvoiceInlineEditor';
+import InvoiceInlineEditor, { type EditableInvoiceRef } from '../components/InvoiceInlineEditor';
 
 type SafeBalance = {
   id: number;
@@ -286,10 +286,17 @@ export default function Dashboard({
     }
   }, [refreshKey, editingInvoice, loadDashboard]);
 
-  /** Fatura Listesi'ndeki Yazdır ile aynı akış: fiş düzenleme ekranında
-   * açılır, yüklenince yazdırma diyaloğu, kapanınca anasayfaya dönüş
-   * (müşteri isteği, 17 Eylül 2026: "fişe girmeden yazdıralım") */
-  const [autoPrint, setAutoPrint] = useState(false);
+  /**
+   * Yazdır (müşteri isteği, 17 Eylül 2026: "fişe girmeden yazdıralım").
+   *
+   * İlk sürüm (v1.22.21) fişi düzenleme ekranında açıp yazdırıyor, sonra
+   * geri dönüyordu; ekranın gidip gelmesi "çok işlem yapıyor" hissi verdi.
+   * Şimdi fiş, anasayfa yerinde dururken ekranda GÖRÜNMEYEN bir katmanda
+   * yüklenir (`hidden print:block`), yazdırma diyaloğu çıkar, kapanınca
+   * katman kaldırılır. Şablon yine aynı düzenleme ekranınınki — çıktı
+   * satış/alış/iade ekranıyla birebir. Veri tarafında yalnızca okuma.
+   */
+  const [printInvoice, setPrintInvoice] = useState<EditableInvoiceRef | null>(null);
 
   const tryOpenEditor = useCallback(
     (inv: RecentInvoice) => {
@@ -396,13 +403,9 @@ export default function Dashboard({
         f2Trigger={f2Trigger}
         onNotify={onNotify}
         onDataChange={onDataChange}
-        onCancelEdit={() => {
-          setAutoPrint(false);
-          closeEditor();
-        }}
+        onCancelEdit={closeEditor}
         onSaved={handleSaved}
         onF2ContextActive={onF2ContextActive}
-        autoPrint={autoPrint}
       />
     );
   }
@@ -461,7 +464,23 @@ export default function Dashboard({
      * Sıra artık yazım sırasıyla AYNI; eskiden order-* sınıfları ikisini
      * ayırıyordu ve dosyayı okurken sayfanın nasıl göründüğü anlaşılmıyordu.
      */
-    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <>
+    {/* Görünmez yazdırma katmanı — yalnızca Yazdır basılınca var olur.
+        Ekranda hidden, çıktıda block; fiş yüklenince useAutoPrint diyaloğu
+        açar, kapanınca onCancelEdit katmanı kaldırır. Anasayfanın kendisi
+        (aşağıdaki kök) çıktıda gizlidir; yalnızca bu katmandaki fiş basılır. */}
+    {printInvoice && (
+      <div className="hidden print:block" aria-hidden="true">
+        <InvoiceInlineEditor
+          invoice={printInvoice}
+          onNotify={onNotify}
+          onCancelEdit={() => setPrintInvoice(null)}
+          onSaved={() => setPrintInvoice(null)}
+          autoPrint
+        />
+      </div>
+    )}
+    <div className="mx-auto flex max-w-6xl flex-col gap-6 print:hidden">
       <div className="order-1 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="page-title">Ana Sayfa</h1>
@@ -859,11 +878,9 @@ export default function Dashboard({
                     <>
                       <button
                         type="button"
-                        onClick={() => {
-                          setAutoPrint(true);
-                          tryOpenEditor(inv);
-                        }}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                        onClick={() => setPrintInvoice({ id: inv.id, type: inv.type })}
+                        disabled={printInvoice !== null}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-40"
                         title="Fişi yazdır"
                       >
                         <Printer className="h-4 w-4" />
@@ -1103,5 +1120,6 @@ export default function Dashboard({
         </div>
       )}
     </div>
+    </>
   );
 }
