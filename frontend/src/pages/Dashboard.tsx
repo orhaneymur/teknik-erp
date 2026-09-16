@@ -7,6 +7,7 @@ import {
   Eye,
   Package,
   Pencil,
+  Printer,
   Receipt,
   Save,
   ShoppingBag,
@@ -285,6 +286,11 @@ export default function Dashboard({
     }
   }, [refreshKey, editingInvoice, loadDashboard]);
 
+  /** Fatura Listesi'ndeki Yazdır ile aynı akış: fiş düzenleme ekranında
+   * açılır, yüklenince yazdırma diyaloğu, kapanınca anasayfaya dönüş
+   * (müşteri isteği, 17 Eylül 2026: "fişe girmeden yazdıralım") */
+  const [autoPrint, setAutoPrint] = useState(false);
+
   const tryOpenEditor = useCallback(
     (inv: RecentInvoice) => {
       if (!['SATIS', 'ALIS', 'IADE'].includes(inv.type)) {
@@ -390,9 +396,13 @@ export default function Dashboard({
         f2Trigger={f2Trigger}
         onNotify={onNotify}
         onDataChange={onDataChange}
-        onCancelEdit={closeEditor}
+        onCancelEdit={() => {
+          setAutoPrint(false);
+          closeEditor();
+        }}
         onSaved={handleSaved}
         onF2ContextActive={onF2ContextActive}
+        autoPrint={autoPrint}
       />
     );
   }
@@ -846,14 +856,27 @@ export default function Dashboard({
                     {formatMoney(invoiceAmountUsd(inv))}
                   </span>
                   {['SATIS', 'ALIS', 'IADE'].includes(inv.type) && (
-                    <button
-                      type="button"
-                      onClick={() => tryOpenEditor(inv)}
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-violet-50 hover:text-violet-600"
-                      title="Düzenle"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAutoPrint(true);
+                          tryOpenEditor(inv);
+                        }}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600"
+                        title="Fişi yazdır"
+                      >
+                        <Printer className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => tryOpenEditor(inv)}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-violet-50 hover:text-violet-600"
+                        title="Düzenle"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </>
                   )}
                 </div>
               </li>

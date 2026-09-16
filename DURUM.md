@@ -9,9 +9,10 @@ oturuma başlarken önce buraya bak.
 
 ## 0. TAM ŞU AN NEREDE KALDIK
 
-> **v1.22.20 DERLENDİ (17 Eylül) — v1.22.17 katlanma düzeltmesi + fiş
+> **v1.22.21 DERLENDİ (17 Eylül) — v1.22.17 katlanma düzeltmesi + fiş
 > sıralaması (v1.22.18) + PDF dosya adları (v1.22.19) + yazdırmada açık
-> pencereler basılmıyor.** Provaya bu kurulacak. 260915094213 (ön sipariş, ERSA ANKARA) provada temizlendi:
+> pencereler basılmıyor (v1.22.20) + anasayfada Yazdır düğmesi.** Provaya
+> bu kurulacak. 260915094213 (ön sipariş, ERSA ANKARA) provada temizlendi:
 > 80 kopya silindi, 329 → 249 kalem, bakiye değişmedi (ön sipariş cariye
 > işlememiş). Müşteriden teyit bekleniyor; canlıda **Stok Düş'ten önce**
 > temizlenmeli.
@@ -254,6 +255,11 @@ DURUM'daki "50 kayıt / 14.860 giriş" bunların toplamıydı; +2 deneme kaydı
 5 $). Betik iki kalıbı da kapsar. Provada sonuç: 49 kasasız, kasa
 2.767,46 → **14.579,47 $**, hareket toplamı = bakiye. Bu rakam = 12
 Eylül'den beri kasaya net giren para (başlangıç nakdi 0 varsayımıyla).
+
+**v1.22.21 — ANASAYFADA FİŞ YAZDIR (müşteri isteği, 17 Eylül).** "Son
+Fatura Hareketleri"nde her satıra yazıcı simgesi; Fatura Listesi'ndeki
+Yazdır ile aynı akış (`autoPrint` → düzenleme ekranı → yazdırma diyaloğu →
+anasayfaya dönüş). Fişe girmeden yazdırılır.
 
 **v1.22.20 — YAZDIRMADA AÇIK PENCERE BASILIYORDU (müşteri, 17 Eylül).**
 F2 arama kutusu açıkken fiş/PDF çıktısında kutu da basılıyordu ("ekran
