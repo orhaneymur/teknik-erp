@@ -212,17 +212,21 @@ Doğrulama: `on-siparis-rapor-test` 19 kontrol (bugün fiş/adet: ön sipariş
 saymaz, tamamlanınca sayar, silinince düşer); `tsc` + `vite build` temiz.
 **Maliyet sorusu** (fişte 46 $, kartta 40 $) ayrı — aşağıda "Maliyet".
 
-**⚠ AÇILIŞ KAYITLARI — PROVADA UYGULANDI, SONUÇ BEKLENENDEN FARKLI, MÜŞTERİ
-CEVABI BEKLENİYOR (17 Eylül 00:15).** Betik 37 "ESKİ SİSTEM" kaydını kasasız
-yaptı (doğru), kasa 2.767 → **25.850,57 $** oldu. 11 Eylül'de ayrıca **Genel
-Müşteri (120)'den 13 "cari tahsilat", 11.276,10 $** var (+1 ödeme 5 $) —
-DURUM'daki "14.860 giriş" = 3.584 (ESKİ) + 11.276 (bu). Bunların ne olduğu
-belirsiz:
-- **A)** kasanın açılış parasıysa → kasalı kalmalı, kasa 25.850 doğru;
-  Genel Müşteri'nin −11.276 alacağı tek kasasız borç kaydıyla sıfırlanır
-- **B)** eski sistem müşteri alacaklarıysa → kasasız olmalı, kasa 14.574
-Karar: **dükkandaki fiziksel dolar sayımı** (~25.800 → A, ~14.500 → B).
-Canlıya hiçbir şey gitmedi. Geri alma: `k8s/sql/GERI-AL-acilis-kayitlari.sql`.
+**AÇILIŞ KAYITLARI — PROVADA TAMAMLANDI (17 Eylül 00:40), CANLI ONAY
+BEKLİYOR.** 11 Eylül'de 49 açılış kaydı varmış: 37 "ESKİ SİSTEMDEN
+AKTARILDI" + 12 yalnızca "AKTARILDI" (ÖDM-0039…0050, 11.271,10 $ giriş —
+DURUM'daki "50 kayıt / 14.860 giriş" bunların toplamıydı; +2 deneme kaydı
+5 $). Betik iki kalıbı da kapsar. Provada sonuç: 49 kasasız, kasa
+2.767,46 → **14.579,47 $**, hareket toplamı = bakiye. Bu rakam = 12
+Eylül'den beri kasaya net giren para (başlangıç nakdi 0 varsayımıyla).
+
+**Canlıya geçiş sırası (müşteri "geçelim" deyince), hepsi tek satır:**
+1. Yedek: `bash k8s/prova-tazele.sh shenzhen` (canlının tam dökümü `/root/prova-kaynak-…` olarak kalır)
+2. `kubectl exec -i -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t' < k8s/sql/kasa-hareket-tamamla.sql` → fark 0
+3. `bash k8s/update-all-tenants.sh v1.22.15 shenzhen` → migrate günlüğünde `transaction_kasasiz`
+4. `kubectl exec -i -n tenant-shenzhen deploy/teknikerp-mysql -- sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" teknikerp -t' < k8s/sql/acilis-kayitlari-kasasiz.sql` → 49 kasasız, fark 0
+5. Müşteriye Excel indir-yükle turu (58 ürünün katmanı) ve 25 kalem maliyet SQL'i (ayrı onay)
+Geri alma: `k8s/sql/GERI-AL-*.sql`; en kötü durumda 1. adımdaki döküm geri yüklenir.
 
 **v1.22.15 — KASASIZ CARİ KAYDI (müşteri onayı, 16 Eylül gecesi).**
 Müşterinin üç sorusu: "kasamda ne kadar var?", "müşteri carisine para
