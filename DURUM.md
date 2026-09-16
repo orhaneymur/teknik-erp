@@ -18,11 +18,21 @@ oturuma başlarken önce buraya bak.
 > değişmedi (ön sipariş); MARTEK bakiyesi 2.691 → 2.899,50 (+96,50 +112);
 > dört küçük alış fişi birer kalem. 101 fazla kalem silindi.
 >
-> **Kalan (müşteri onayıyla):** (1) **Excel indir-yükle turu (G)** —
-> katmanları stoğa eşitler; temizlik stoğu düzeltti, katmanı değil; 58
-> ürün de bekliyor. (2) ERSA'da EKR00273 3 mü 5 mi — müşteriye sor, fiş
-> düzenlemeden tek satır sil; **Stok Düş'ten önce**. (3) 25 kalemin boş
-> maliyeti (SQL aşağıda). (4) "Eski kodları düzelt" düğmesi.
+> **Excel indir-yükle turu YAPILDI (19:30–19:45):** iki kez koştu (ekran
+> ikisinde de "yüklenemedi" dedi, sunucu günlüğü ikisinde de `bitti: 0
+> yeni, 5440 güncellendi`). Katman = stok: 5440 üründe ayrışan 33, hepsi
+> **eksi stoklu** (toplam −88 adet; BAT00102 −10, EKR00461 −9…) — katman
+> eksiye inemez, beklenen istisna; alış girildikçe düzelir.
+>
+> **Sonraya kalan:** (1) **Ekran hatası:** Excel yüklemede "dosya
+> ayrıştırılıyor" aşaması 72 sn boyunca olay döngüsünü kilitliyor, durum
+> sorgusu zaman aşımına düşüyor, ekran bunu "yüklenemedi" sayıp sormayı
+> bırakıyor (günlükte iş başına 2 durum sorgusu var, 2 sn'de bir değil).
+> Düzeltme: zaman aşımı hata değil, sormaya devam; ayrıştırmayı da parça
+> parça `setImmediate` ile böl. (2) ERSA'da EKR00273 3 mü 5 mi — müşteriye
+> sor, fiş düzenlemeden tek satır sil; **Stok Düş'ten önce**. (3) 33 eksi
+> stoklu ürün listesi müşteriye. (4) 25 kalemin boş maliyeti (SQL aşağıda).
+> (5) "Eski kodları düzelt" düğmesi. (6) Fiziksel kasa sayımı 14.579,47 $.
 >
 > Bu gecenin sürümleri: v1.22.17 katlanma düzeltmesi (müşteri şikâyeti),
 > v1.22.18 fiş sırası, v1.22.19 PDF adları, v1.22.20 açık pencere çıktıya
