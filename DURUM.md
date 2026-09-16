@@ -24,6 +24,34 @@ oturuma başlarken önce buraya bak.
 > **eksi stoklu** (toplam −88 adet; BAT00102 −10, EKR00461 −9…) — katman
 > eksiye inemez, beklenen istisna; alış girildikçe düzelir.
 >
+> **CANLI v1.22.22 — 16 Eylül 2026 19:57 (Türkiye). Prova da v1.22.22.
+> BU HAFTA BAŞKA SÜRÜM YOK (Orhan'ın kararı).** v1.22.22: Excel
+> "yüklenemedi" ekran hatası — ayrıştırma her 100 satırda `setImmediate`
+> ile nefes alır; ekran durum sorgusunda geçici hatada sormaya devam eder
+> (20 sn zaman aşımı; 404 ya da üst üste 30 hata bitirir). `excel-*` 5 test.
+>
+> **Gece kapanışı — hepsi yapıldı:** 7 fişte 101 fazla kalem temizlendi;
+> cari mutabakat fark 0; Excel turu (katman = stok, 33 eksi stoklu istisna);
+> ERSA EKR00273 3'lük satır silindi (ekrandan); 36 kalemin boş maliyeti
+> dolduruldu (25 + sonradan tamamlanan 11); "Eski kodları düzelt" zaten
+> basılmıştı. **Açık iş yok.** Müşteriye bilgi: 33 eksi stoklu ürün (−88
+> adet) ve fiziksel kasa sayımı (sistem 14.579,47 $).
+>
+> **CANLI v1.22.21 — 16 Eylül 2026 19:08 (Türkiye), kapanıştan sonra.**
+> Prova da v1.22.21. Yedek: `/root/prova-kaynak-shenzhen-20260916-1559.sql.gz`
+> (399 fatura, 300 hareket). Sıra: prova tazele → prova sürüm → prova
+> temizlik → canlı sürüm → canlı temizlik (7 fiş, `fazla-kalem-temizle.sh`)
+> → doğrulama. **Sonuç:** kopya kalem 0; cari mutabakat 220 müşteri fark 0
+> (26.024,52); ERSA 260915094213 → 17.048,25 / 249 kalem, bakiye 8.616,21
+> değişmedi (ön sipariş); MARTEK bakiyesi 2.691 → 2.899,50 (+96,50 +112);
+> dört küçük alış fişi birer kalem. 101 fazla kalem silindi.
+>
+> **Excel indir-yükle turu YAPILDI (19:30–19:45):** iki kez koştu (ekran
+> ikisinde de "yüklenemedi" dedi, sunucu günlüğü ikisinde de `bitti: 0
+> yeni, 5440 güncellendi`). Katman = stok: 5440 üründe ayrışan 33, hepsi
+> **eksi stoklu** (toplam −88 adet; BAT00102 −10, EKR00461 −9…) — katman
+> eksiye inemez, beklenen istisna; alış girildikçe düzelir.
+>
 > **v1.22.22 — Excel "yüklenemedi" ekran hatası düzeltildi (derlendi,
 > kurulacak).** Sebep: "dosya ayrıştırılıyor" aşaması 72 sn olay döngüsünü
 > kilitliyordu, durum sorgusu zaman aşımına düşüyor, ekran ilk hatada
