@@ -24,15 +24,20 @@ oturuma başlarken önce buraya bak.
 > **eksi stoklu** (toplam −88 adet; BAT00102 −10, EKR00461 −9…) — katman
 > eksiye inemez, beklenen istisna; alış girildikçe düzelir.
 >
-> **Sonraya kalan:** (1) **Ekran hatası:** Excel yüklemede "dosya
-> ayrıştırılıyor" aşaması 72 sn boyunca olay döngüsünü kilitliyor, durum
-> sorgusu zaman aşımına düşüyor, ekran bunu "yüklenemedi" sayıp sormayı
-> bırakıyor (günlükte iş başına 2 durum sorgusu var, 2 sn'de bir değil).
-> Düzeltme: zaman aşımı hata değil, sormaya devam; ayrıştırmayı da parça
-> parça `setImmediate` ile böl. (2) ERSA'da EKR00273 3 mü 5 mi — müşteriye
-> sor, fiş düzenlemeden tek satır sil; **Stok Düş'ten önce**. (3) 33 eksi
-> stoklu ürün listesi müşteriye. (4) 25 kalemin boş maliyeti (SQL aşağıda).
-> (5) "Eski kodları düzelt" düğmesi. (6) Fiziksel kasa sayımı 14.579,47 $.
+> **v1.22.22 — Excel "yüklenemedi" ekran hatası düzeltildi (derlendi,
+> kurulacak).** Sebep: "dosya ayrıştırılıyor" aşaması 72 sn olay döngüsünü
+> kilitliyordu, durum sorgusu zaman aşımına düşüyor, ekran ilk hatada
+> "yüklenemedi" deyip sormayı bırakıyordu (günlükte iş başına 2 sorgu). İki
+> taraf: ayrıştırma her 100 satırda `setImmediate` ile nefes alır ve
+> ilerleme bildirir; ekran geçici hatada sormaya devam eder (20 sn sorgu
+> zaman aşımı, 404 ya da üst üste 30 hata bitirir). `excel-*` 5 test geçti.
+>
+> **ERSA EKR00273:** 3'lük satır silindi (Orhan, ekrandan) — kapandı.
+>
+> **Kalan:** (1) 25 kalemin boş maliyeti (SQL aşağıda, Orhan çalıştırır).
+> (2) "Eski kodları düzelt" düğmesi (Müşteri Listesi, ekrandan).
+> (3) 33 eksi stoklu ürün (−88 adet) müşteriye bilgi. (4) Fiziksel kasa
+> sayımı 14.579,47 $.
 >
 > Bu gecenin sürümleri: v1.22.17 katlanma düzeltmesi (müşteri şikâyeti),
 > v1.22.18 fiş sırası, v1.22.19 PDF adları, v1.22.20 açık pencere çıktıya

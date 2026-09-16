@@ -910,6 +910,16 @@ export async function importProductsExcel(
   const parsedRows: ParsedRow[] = [];
 
   for (const [index, row] of rows.entries()) {
+    /*
+     * Her 100 satirda bir olay dongusune donulur (16 Eylul 2026 canli
+     * olayi): 5.440 satirlik ayristirma sunucuda 72 sn surdu ve bu
+     * surede durum sorgulari cevapsiz kaldi; ekran "yuklenemedi" dedi.
+     * Boylece durum ucu cevap verir ve ilerleme de gorunur.
+     */
+    if (index > 0 && index % 100 === 0) {
+      onProgress('dosya ayristiriliyor', index, rows.length);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
     const record = row as Record<string, unknown>;
     const sku = asString(cell(record, 'StokKodu', 'StokKod', 'SKU'));
     const name = asString(cell(record, 'StokAdi', 'StokAd', 'UrunAdi', 'UrunAd'));

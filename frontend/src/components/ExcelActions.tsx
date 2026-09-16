@@ -161,20 +161,44 @@ export default function ExcelActions({
       if (statusPath && 'jobId' in response.data.data) {
         // Arka plan isi: bitene kadar ilerlemeyi sor
         const jobId = response.data.data.jobId;
+        /*
+         * Durum sorgusu HATAYA DAYANIKLI (16 Eylul 2026 canli olayi): sunucu
+         * uzun bir asamada mesgulken sorgu zaman asimina dusuyor ya da
+         * Cloudflare 502/504 donuyordu; eski dongu ilk hatada kirilip
+         * "Excel yuklenemedi" diyordu — is arkada bitmis oldugu halde.
+         * Artik gecici hatalar sayilir ve sorulmaya devam edilir; yalnizca
+         * 404 (is kaydi yok: sunucu yeniden basladi) ya da ust uste 30
+         * basarisiz sorgu (~1 dk + zaman asimlari) donguyu bitirir.
+         */
+        let ustUsteHata = 0;
         for (;;) {
           await new Promise((r) => setTimeout(r, 2000));
-          const durum = await axios.get<{
-            success: boolean;
-            data: {
-              durum: 'calisiyor' | 'bitti' | 'hata';
-              asama: string;
-              islenen: number;
-              toplam: number;
-              sureSn: number;
-              sonuc: ImportResult | null;
-            };
-            message: string | null;
-          }>(`${API_BASE}${statusPath}/${jobId}`);
+          let durum;
+          try {
+            durum = await axios.get<{
+              success: boolean;
+              data: {
+                durum: 'calisiyor' | 'bitti' | 'hata';
+                asama: string;
+                islenen: number;
+                toplam: number;
+                sureSn: number;
+                sonuc: ImportResult | null;
+              };
+              message: string | null;
+            }>(`${API_BASE}${statusPath}/${jobId}`, { timeout: 20_000 });
+            ustUsteHata = 0;
+          } catch (sorguHatasi) {
+            if (axios.isAxiosError(sorguHatasi) && sorguHatasi.response?.status === 404) {
+              throw sorguHatasi;
+            }
+            ustUsteHata += 1;
+            if (ustUsteHata >= 30) throw sorguHatasi;
+            setIlerleme((onceki) =>
+              onceki ? { ...onceki, asama: `${onceki.asama} · sunucu bekleniyor` } : onceki
+            );
+            continue;
+          }
           const d = durum.data.data;
           setIlerleme({ asama: d.asama, islenen: d.islenen, toplam: d.toplam, sureSn: d.sureSn });
           if (d.durum === 'hata') throw new Error(durum.data.message ?? 'Excel yüklenemedi.');
