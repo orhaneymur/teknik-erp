@@ -3021,11 +3021,23 @@ app.put<{
          *   siparisi tamamla   -> mal cikar, katman tuketilir ve satirin
          *                         maliyeti o anda dondurulur
          */
+        /*
+         * Urun maliyetleri TEK sorguda okunur. Kalem basina findUnique
+         * atmak, kalabalik fiste islemi gereksiz yere uzatiyordu.
+         */
+        const varsayilanMaliyetler = new Map(
+          (
+            await tx.product.findMany({
+              where: {
+                id: { in: [...new Set(existing.items.map((i) => i.productId))] },
+              },
+              select: { id: true, costPrice: true },
+            })
+          ).map((p) => [p.id, p.costPrice] as const)
+        );
+
         for (const item of existing.items) {
-          const urun = await tx.product.findUnique({
-            where: { id: item.productId },
-            select: { costPrice: true },
-          });
+          const varsayilanMaliyet = varsayilanMaliyetler.get(item.productId) ?? 0;
 
           if (body.isPreOrder) {
             await adjustStockQuantity(tx, item.productId, merkezDepoId, item.quantity);
@@ -3036,7 +3048,7 @@ app.put<{
               // Kendi dondurulmus maliyetiyle geri koyulur
               maliyetKaynagiKalemId: item.id,
               katmanKalemId: item.id,
-              varsayilanMaliyet: urun?.costPrice ?? 0,
+              varsayilanMaliyet,
             });
           } else {
             await adjustStockQuantity(tx, item.productId, merkezDepoId, -item.quantity);
@@ -3044,7 +3056,7 @@ app.put<{
               productId: item.productId,
               branchId: merkezDepoId,
               quantity: item.quantity,
-              varsayilanMaliyet: urun?.costPrice ?? 0,
+              varsayilanMaliyet,
             });
             await tx.invoiceItem.update({
               where: { id: item.id },
@@ -3413,6 +3425,21 @@ app.post<{ Params: { id: string } }>(
          * dusuyordu: tamamlanan on siparisler kar raporunda MALIYETSIZ
          * gorunuyor, urunlerde stok ile katman ayrisiyordu.
          */
+        /*
+         * Urun maliyetleri TEK sorguda okunur. Kalem basina findUnique
+         * atmak, kalabalik fiste islemi gereksiz yere uzatiyordu.
+         */
+        const varsayilanMaliyetler = new Map(
+          (
+            await tx.product.findMany({
+              where: {
+                id: { in: [...new Set(existing.items.map((i) => i.productId))] },
+              },
+              select: { id: true, costPrice: true },
+            })
+          ).map((p) => [p.id, p.costPrice] as const)
+        );
+
         for (const item of existing.items) {
           await adjustStockQuantity(
             tx,
@@ -3420,15 +3447,12 @@ app.post<{ Params: { id: string } }>(
             merkezDepoId,
             -item.quantity
           );
-          const urun = await tx.product.findUnique({
-            where: { id: item.productId },
-            select: { costPrice: true },
-          });
+          const varsayilanMaliyet = varsayilanMaliyetler.get(item.productId) ?? 0;
           const birimMaliyet = await lotTuket(tx, {
             productId: item.productId,
             branchId: merkezDepoId,
             quantity: item.quantity,
-            varsayilanMaliyet: urun?.costPrice ?? 0,
+            varsayilanMaliyet,
           });
           await tx.invoiceItem.update({
             where: { id: item.id },
