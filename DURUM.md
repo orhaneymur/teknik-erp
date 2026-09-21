@@ -25,16 +25,32 @@ oturuma başlarken önce buraya bak.
 > ücretsiz kurulmuyor; `new-tenant.sh` yalnızca `FIYAT_LISTESI=evet` ile
 > kurar. Martech'te yok.
 >
-> **Sırada:** (1) Excel ile ürün yüklemesi — tek seferde, temiz dosyayla;
-> mükerrer ad uyarısı hâlâ yok, dosya iki kez yüklenirse ürünler ikilenir.
-> Yüklemeden önce satır sayısı / kolonlar / boş `StokKodu` kontrol edilecek,
-> sonuç kutusunda "N yeni, 0 güncellendi" ürün sayısıyla tutmalı.
-> (2) Kur farkı kararı — Orhan "sonra bakalım" dedi; şu an chart
-> varsayılanı 0,20. Orhan'ın "diğer sistemde de çalışmıyor" sözü
-> netleşmedi (kullanılmıyor mu, hata mı?) — Shenzhen'de kontrol:
+> **Martech'e ürün Excel'i hazırlandı, test için yüklendi (21 Eylül 21:55).**
+> Müşterinin dosyası `MARTECH EKRAN 20.09.2026.xlsx` (masaüstü): ekran fiyat
+> listesi, 7 marka sayfası, blok blok, sayfa başına farklı sütun dizilişi,
+> altlarında fiyatsız Çince uyumluluk katalogları. `tools/martech-excel-donustur.py`
+> bunu bizim 19 kolona çevirdi → `MARTECH-stoklar-yukleme-20260921.xlsx`
+> (**1.076 ürün**, 25 marka, hepsi `EKRAN & LCD`; Notlar / Kaynak / LCD Uyum
+> sayfaları bilgi için). Orhan müşteriye **kurcalasınlar diye** verdi; geri
+> dönüş gelince bakılacak. **Müşteriye sorulan / bekleyen cevaplar:**
+> 1. Fiyat dolar mı? (varsayıldı: Satis1 = Satis2 = FİYAT)
+> 2. KOD sütunu (`26EY94`): yıl+ay+sayı gibi; sayı alış maliyetiyse (RMB?)
+>    `Rmb`/`AlisFiyati`'na taşınır. Şimdilik Açıklama'da "Kod: …".
+> 3. Model başındaki 3 harfli ekler (KRX, PPX, JCK… 28 tane): raf/tedarikçi
+>    kodu sanıldı, Açıklama'da "Etiket: …". Anlamsızsa silinir.
+> 4. 40 ürünün fiyatı boş (Satis1 = 0; Notlar sayfasında satır satır).
+> 5. INFINIX HOT 30 ÇITALI HK SERVİS kaynakta iki kez (12 / 13 $) — "(2)" eklendi.
+> Ayrıca varsayımlar: REDMİ/POCO/Mİ → Marka XIAOMI (Shenzhen düzeni); HONOR,
+> REALME, ONEPLUS ayrı marka; Bakiye 0, maliyet ve renk boş.
+> Cevaplar gelince betik güncellenir, dosya tek komutla yeniden üretilir;
+> test verisi ekrandan silinip temiz dosya bir kez yüklenir (veritabanı boş
+> olduğu için Id/StokKodu eşleşmesi derdi yok).
+>
+> **Bekleyen (Martech):** kur farkı kararı — Orhan "sonra bakalım" dedi; şu
+> an chart varsayılanı 0,20. "Diğer sistemde de çalışmıyor" sözü netleşmedi
+> (kullanılmıyor mu, hata mı?) — Shenzhen'de kontrol:
 > `kubectl exec -n tenant-shenzhen deploy/teknikerp-backend -- sh -c 'echo KUR_FARKI=$KUR_FARKI'`.
-> (3) Para birimi / satış biçimi (dolar mı TL mi) — Excel fiyat kolonu için
-> bilinmeli.
+> Para birimi / satış biçimi (dolar mı TL mi) de fiyat sorusuyla birlikte netleşir.
 >
 > **CANLI v1.22.24 — 18 Eylül 2026 06:31 UTC. Prova da v1.22.24** (helm
 > list ile 21 Eylül'de görüldü; o gün belgeye yazılmamıştı). v1.22.24:
@@ -1124,12 +1140,11 @@ firma adı ileride değişirse etiket kaymasın diye sabitlendi.
 - [x] ~~`renumberSkus --uygula`~~ — **GEREKSİZ KALDI.** v1.19.0 ile Excel
       yüklemesi zaten okunur kod üretiyor; `SK...` biçimli kod artık
       hiç oluşmuyor. Betik duruyor ama çalıştırılacak bir şey yok.
-- [ ] **Excel yüklemesine mükerrer ad uyarısı** — aynı hata 9 ve 11
-      Eylül'de iki kez oldu ve ikincisinde 5387 ürün ikinci kez açıldı.
-      Kod eşleşmeyi yalnızca `Id` ve `StokKodu` ile yapıyor; ad üzerinden
-      bakmıyor. Yükleme ÖNCESİ "dosyadaki N satırın adı mevcut ürünlerle
-      aynı, devam edilsin mi?" diye soran bir ekran bu hatayı üçüncü kez
-      yaşatmaz. Silme eklenmeyecek — yalnızca uyarı.
+- [x] ~~**Excel yüklemesine mükerrer ad uyarısı**~~ — **YAPILMIŞ** (v1.22
+      serisi, `excelOnKontrol` + `ExcelActions.tsx`): yükleme öncesi "N
+      satırın adı sistemde zaten olan bir ürünle AYNI … yine de yüklensin
+      mi?" diye soruyor; dosya içi mükerrer adı da sayıyor. 21 Eylül'de
+      fark edildi, madde kapatıldı.
 - [ ] **Yedekleri sunucu dışına çıkar** — kalan tek gerçek veri riski.
       Gecelik yedek çalışıyor ama canlıyla AYNI diskte duruyor.
       Çözüm: yedek CronJob'unun sonuna `rclone` ile uzak hedef
