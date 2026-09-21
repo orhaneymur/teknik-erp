@@ -25,8 +25,8 @@ tenant:
 
 image:
   # DIKKAT: chart varsayilani v1.9.2 — new-tenant.sh bunu ezmez, bu dosya ezer.
-  # Canli Shenzhen ile ayni surum.
-  tag: v1.22.23
+  # Canli Shenzhen ile ayni surum (helm list, 21 Eylul 2026).
+  tag: v1.22.24
 
 ingress:
   # Kendi alan adi (zone Cloudflare'de, kayit Proxied). Tek seviye — Universal SSL kapsar.
