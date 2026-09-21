@@ -1,0 +1,36 @@
+# Martech  —  tenant-martech
+#
+# Ikinci musteri. 21 Eylul 2026'da acildi. Sifirdan basladi, urunler
+# Excel'den tek seferde yuklendi.
+#
+# Kurulum (sunucuda, /root/teknikerp):
+#   bash k8s/new-tenant.sh martech "Martech" -f tenants/martech.yaml
+# Ayar degisikligi:
+#   helm upgrade teknikerp charts/teknikerp -n tenant-martech --reuse-values -f tenants/martech.yaml
+
+tenant:
+  id: martech
+  companyName: "Martech"
+  # Doviz kuru farki (TL) — Harem SATIS kurunun uzerine eklenir.
+  # TL tahsilatin dolara cevrilmesini de etkiler. Chart varsayilani ile
+  # ayni; Orhan "kur farkina sonra bakalim" dedi (21 Eylul 2026) — karar
+  # verilince burasi ve helm upgrade.
+  kurFarki: 0.20
+  # Fisin ustune basilan logo — data URI olarak gomulu (chart /logo.png
+  # dosyasini mount ETMIYOR; tek calisan bicim bu).
+  # Kaynak: musterinin 512x512 renkli PNG'si; bosluklari kirpilip 1 bit
+  # siyah-beyaza cevrildi (termal kafa icin) -> tenants/martech-logo.png
+  # (418x138, 1,2 KB). Logo degisirse ayni islem: kirp, 1 bit, base64.
+  logoUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaIAAACKAQAAAADA+HMtAAAEbElEQVR42u2ZT28bRRjGn1kv9kDdeCkVXBDeSpE4NidUiQgPoocc+QAcIj4BHwApG4H6ETj3I3BBohKqx1UkeuQDVOo64hB6Yd246q613pfD7P9de2dWiAPKXJKJ/Mu887zPvPPHjGDeFhb6tBvqX6F40YtcbSoqes8NIiwGEAZUkHXIRI0w62xMqPzDoQmVBxYY5ctLO36vLEsjKvu0Z0T5vXwYGKVLplSqeKIFRScpFat+rEWFm6qGekm+fptSiYkSy0NPUWRiDf4qi9AzsIaUMqWkgTWce1U1NK3hZpRvsiZ5RgUmIoYZFRroH8wzKta3RmlemtbgAPAgESmVGExuejf1hpKvI8kr5qgRcjX0UqWm8NEHOSX1rHEZeezROKf8rvG2Al8ACJ9gEeRU0GkNH1+2VbYE+nOz8o5mkmeyoGJt54rSWEmXNX5c4rwxL+qyhpdJLMtqeBrrnwPgC1HRUHaO5ZRWsMrTTP2Y0o4WT4MzGi3DY0yJpLV/61qUjhJLB8AgLs8roD5nm1DLGhTWHBV3r3sA34lKhHHH+h9ISER4vOJlKtEubm6J0hJDOqlD7Owvp13IRN6fgdS/t0rW4L1OlQ4AnDOcM0SMcawYx5JhwRi2jDlAWqVSRzH16wNgGgPHwCwEGPkYSTXjWQCM/DEGyl7SqhW2GHih/EV4nOvkBwCwzquEVTpNClUKgnSteUU9Cfyq0lYp8V6t3nt71MgzxTQ2Cq80FjmV2jVRUgDgmJAy6IDCUpGwkGRbjAp2MMSRjyE+UdI5AEgCYwCjg2q+7MImdqpNES+DC+nU5jXIWK616dXVcEzWcgKoAunu2RnafdhIzaKYFzGxgxK168ZWaHheurXx1rorhVWOIrUTVzvlmN3fLLzSyNVpg+KpI+zdWo+8BnUtGxdFAKOiaDEKmxFeXsD7ozFj3uWN7yFCZnrjuO8qc7Qbqr0k24CPry4gajfRsJgXNWkLHEiO4dasGG8Kk3iNmqAqwFHNGsA2lWPLbJwzISLG69Toad0zbpcaNhAD3Nqz17VQAyA5gG037FquYm6Ley3A4vUks5RmLaa32hfDEBgCwEF6fBnXt3UCcEY0Iwr3nFIqTTICy6p+xDH19d+jBuY3378M8lRQWnfQBFsP+NX4tYd5wN8FtSwfr3eXwRjAhwU17z5EPbtw5tPVpw+vble8IfZvqrdC/+kvI3xmLXJqCGz/3D/WnedT5ga4yiW2cAInn86O8pF8fqr23nVORaWT8g5FA3859x0Ad8qfs92iirS1N4fy26+j964KiekS7z+aERFRiEm7W18SEdGM6G1+IhoiuHeiuckGeYS3QD9p2VAAV3mE18D09zTCM9JdX+vbzva1Wl/vJtrvvfzn8drL171mI1rNf1ADh5oBkmQUPpkcfmz4Im3Dh4jNK0AAYZtTG6DPy63we1AHK7cHddQvwndED4oWXg9q4/WJcPRNP+V7Ue5/96ofO30oe/z//I7jt16U6EXZN98u3VCt7R98qBl3bSmUEgAAAABJRU5ErkJggg=="
+
+image:
+  # DIKKAT: chart varsayilani v1.9.2 — new-tenant.sh bunu ezmez, bu dosya ezer.
+  # Canli Shenzhen ile ayni surum.
+  tag: v1.22.23
+
+ingress:
+  # Kendi alan adi (zone Cloudflare'de, kayit Proxied). Tek seviye — Universal SSL kapsar.
+  host: martech.mobilteknikerp.com
+
+backend:
+  replicas: 1

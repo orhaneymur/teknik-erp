@@ -4,10 +4,14 @@
 # Kullanim:
 #   bash k8s/new-tenant.sh <kisa-ad> "<Firma Adi>" [ek helm parametreleri...]
 #
-# Fiyat listesi ERP ile birlikte kurulur. Musterinin kendi alan adi varsa
-# ortam degiskeni ile verilir (3. parametre ve sonrasi helm'e gider):
-#   FIYAT_ALAN=liste.shenzhenmarket.com.tr bash k8s/new-tenant.sh shenzhen "Shenzhen Market"
-# Verilmezse kaliptan uretilir: <kisa-ad>-liste.derneklab.com
+# Fiyat listesi VARSAYILAN OLARAK KURULMAZ (karar: 21 Eylul 2026, ERP ile
+# birlikte ucretsiz verilmekten vazgecildi). Isteyen musteride acikca
+# istenir; alan adi verilmezse kaliptan uretilir (<kisa-ad>-liste.derneklab.com):
+#   FIYAT_LISTESI=evet FIYAT_ALAN=liste.shenzhenmarket.com.tr bash k8s/new-tenant.sh shenzhen "Shenzhen Market"
+#
+# Musteriye ozel ayarlar (adres, surum, logo) tenants/<kisa-ad>.yaml'da
+# durur ve helm'e -f ile verilir:
+#   bash k8s/new-tenant.sh martech "Martech" -f tenants/martech.yaml
 #
 # Ornekler:
 #   bash k8s/new-tenant.sh demo "TeknikERP Demo" --set demoReset.enabled=true
@@ -118,19 +122,27 @@ echo "     -o jsonpath='{.data.admin-password}' | base64 -d; echo"
 echo ""
 
 # ----------------------------------------------------------------------
-# Fiyat listesi — ERP'nin yaninda ucretsiz, varsayilan olarak kurulur.
+# Fiyat listesi — yalnizca FIYAT_LISTESI=evet verilirse kurulur.
 #
-# AYRI BIR DEPODUR (orhaneymur/teknik-fiyat). Kodu, imaji ve surumu
+# 21 Eylul 2026'ya kadar her ERP'nin yaninda ucretsiz ve kendiliginden
+# kuruluyordu; o tarihte bundan vazgecildi. Ayri bir urundur, ayri satilir.
+#
+# AYRI BIR DEPODUR (orhaneymur/liste-erp). Kodu, imaji ve surumu
 # ERP'den bagimsizdir; buradan yalnizca kurulum betigi cagrilir.
-# Depo sunucuda yoksa kurulum atlanir ve ERP yine calisir.
 #
 # Musterinin kendi alan adi FIYAT_ALAN ortam degiskeniyle verilir:
-#   FIYAT_ALAN=liste.shenzhenmarket.com.tr bash k8s/new-tenant.sh shenzhen "Shenzhen Market"
+#   FIYAT_LISTESI=evet FIYAT_ALAN=liste.shenzhenmarket.com.tr bash k8s/new-tenant.sh shenzhen "Shenzhen Market"
 # ----------------------------------------------------------------------
 FIYAT_DEPO="${FIYAT_DEPO:-/root/teknikfiyat}"
 FIYAT_ALAN="${FIYAT_ALAN:-}"
+FIYAT_LISTESI="${FIYAT_LISTESI:-hayir}"
 
-if [[ -x "${FIYAT_DEPO}/k8s/kur.sh" || -f "${FIYAT_DEPO}/k8s/kur.sh" ]]; then
+if [[ "$FIYAT_LISTESI" != "evet" ]]; then
+  echo ""
+  echo " Fiyat listesi kurulmadi (varsayilan). Sonradan istenirse:"
+  echo "   cd ${FIYAT_DEPO} && git pull && bash k8s/kur.sh ${TENANT_ID} \"${COMPANY_NAME}\" [alan-adi]"
+  echo ""
+elif [[ -x "${FIYAT_DEPO}/k8s/kur.sh" || -f "${FIYAT_DEPO}/k8s/kur.sh" ]]; then
   echo ""
   echo "==> Fiyat listesi kuruluyor (${FIYAT_DEPO})"
   if bash "${FIYAT_DEPO}/k8s/kur.sh" "$TENANT_ID" "$COMPANY_NAME" "$FIYAT_ALAN"; then
