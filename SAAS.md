@@ -139,8 +139,17 @@ Bu iki imajı üretir ve Docker Hub'a gönderir:
 ## 4. Yeni müşteri aç
 
 ```bash
-bash k8s/new-tenant.sh xyzoto "XYZ Oto Elektrik"
+# 1) tenants/xyzoto.yaml yaz: ingress.host, image.tag (canlının sürümü), logo
+# 2) kur
+bash k8s/new-tenant.sh xyzoto "XYZ Oto Elektrik" -f tenants/xyzoto.yaml
 ```
+
+> 🔴 **`image.tag` tenant dosyasında açıkça yazılmalı.** Chart varsayılanı
+> `v1.9.2`'dir ve `new-tenant.sh` etiketi geçmez; dosya verilmezse müşteri
+> eski sürümle açılır. Örnek: `tenants/martech.yaml`.
+>
+> Fiyat listesi **varsayılan olarak kurulmaz** (21 Eylül 2026 kararı).
+> İstenirse `FIYAT_LISTESI=evet FIYAT_ALAN=liste.musteri.com.tr` ile.
 
 Script sırasıyla: `tenant-xyzoto` namespace'ini oluşturur → rastgele şifreler
 üretip Secret'a yazar → MySQL, backend, frontend, Ingress ve gecelik yedek

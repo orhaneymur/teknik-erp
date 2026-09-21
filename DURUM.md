@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **17 Eylül 2026**
+Son güncelleme: **21 Eylül 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -9,6 +9,38 @@ oturuma başlarken önce buraya bak.
 
 ## 0. TAM ŞU AN NEREDE KALDIK
 
+> **İKİNCİ MÜŞTERİ MARTECH KURULDU — 21 Eylül 2026 21:36 (Türkiye).**
+> `tenant-martech`, `https://martech.mobilteknikerp.com`, v1.22.24 (canlı
+> Shenzhen ile aynı). Zone `mobilteknikerp.com` Cloudflare'de, kayıt
+> Proxied. Ayarlar `tenants/martech.yaml`: firma adı fişe "Martech", logo
+> gömülü (müşterinin 512×512 renkli PNG'si kırpılıp 1 bit'e çevrildi →
+> `tenants/martech-logo.png`, 418×138), `image.tag` açıkça v1.22.24
+> (**chart varsayılanı v1.9.2 — `new-tenant.sh` etiketi geçmiyor, tenant
+> dosyası ezer**). Giriş `admin`, şifre Secret'ta (`SIFRELER.md`).
+> Kurulum sonrası RAM: available 1,5 GB (kurulumdan önce 1,9). Prova
+> ortamı (`tenant-martech-test`) **açılmadı** — veri gelince gerekirse
+> `prova-tazele.sh martech`.
+>
+> **Karar (Orhan, 21 Eylül):** fiyat listesi artık ERP ile birlikte
+> ücretsiz kurulmuyor; `new-tenant.sh` yalnızca `FIYAT_LISTESI=evet` ile
+> kurar. Martech'te yok.
+>
+> **Sırada:** (1) Excel ile ürün yüklemesi — tek seferde, temiz dosyayla;
+> mükerrer ad uyarısı hâlâ yok, dosya iki kez yüklenirse ürünler ikilenir.
+> Yüklemeden önce satır sayısı / kolonlar / boş `StokKodu` kontrol edilecek,
+> sonuç kutusunda "N yeni, 0 güncellendi" ürün sayısıyla tutmalı.
+> (2) Kur farkı kararı — Orhan "sonra bakalım" dedi; şu an chart
+> varsayılanı 0,20. Orhan'ın "diğer sistemde de çalışmıyor" sözü
+> netleşmedi (kullanılmıyor mu, hata mı?) — Shenzhen'de kontrol:
+> `kubectl exec -n tenant-shenzhen deploy/teknikerp-backend -- sh -c 'echo KUR_FARKI=$KUR_FARKI'`.
+> (3) Para birimi / satış biçimi (dolar mı TL mi) — Excel fiyat kolonu için
+> bilinmeli.
+>
+> **CANLI v1.22.24 — 18 Eylül 2026 06:31 UTC. Prova da v1.22.24** (helm
+> list ile 21 Eylül'de görüldü; o gün belgeye yazılmamıştı). v1.22.24:
+> 249 kalemlik ön siparişi satışa çevirirken "expired transaction" —
+> işlem süresi 5 sn → 120 sn, maliyet okuma tek `findMany`. Demo v1.22.23'te.
+>
 > **CANLI v1.22.21 — 16 Eylül 2026 19:08 (Türkiye), kapanıştan sonra.**
 > Prova da v1.22.21. Yedek: `/root/prova-kaynak-shenzhen-20260916-1559.sql.gz`
 > (399 fatura, 300 hareket). Sıra: prova tazele → prova sürüm → prova
@@ -990,11 +1022,12 @@ Doğrulama: `backend/prisma/excel-kod-test.ts` (yerel MySQL kabıyla).
 
 | Adres | Ortam | Sürüm | Ne için |
 |---|---|---|---|
-| `teknik.shenzhenmarket.com.tr` | **CANLI MÜŞTERİ** | **v1.21.4** | Shenzhen Market — 12 Eylül'de gerçek kullanım başladı |
+| `teknik.shenzhenmarket.com.tr` | **CANLI MÜŞTERİ** | **v1.22.24** | Shenzhen Market — 12 Eylül'de gerçek kullanım başladı |
+| `martech.mobilteknikerp.com` | **CANLI MÜŞTERİ** | **v1.22.24** | Martech — 21 Eylül'de kuruldu, veri yüklemesi bekliyor; fiyat listesi yok |
 | `liste.shenzhenmarket.com.tr` | **CANLI** | fiyat **v1.6.0** | Müşterinin kendi müşterilerine gönderdiği açık fiyat listesi |
-| `test.shenzhenmarket.com.tr` | Prova | v1.21.4 | Güncellemeler önce burada denenir |
+| `test.shenzhenmarket.com.tr` | Prova | v1.22.24 | Güncellemeler önce burada denenir |
 | `shenzhen-test-liste.derneklab.com` | Prova | fiyat **v1.6.0** | Fiyat listesi provası |
-| `demo-erp.derneklab.com` | Vitrin | v1.9.2 | Müşteriye ürün gösterme |
+| `demo-erp.derneklab.com` | Vitrin | v1.22.23 | Müşteriye ürün gösterme |
 
 Namespace'ler ayrı: ayrı veritabanı, ayrı disk, ayrı şifre. ERP ve fiyat
 listesi aynı namespace'te yaşar ama **ayrı helm release**, ayrı imaj,
@@ -1226,14 +1259,15 @@ ssh -p 23422 root@213.238.168.227 "export KUBECONFIG=/etc/rancher/k3s/k3s.yaml; 
 helm rollback teknikerp -n tenant-shenzhen
 helm upgrade teknikerp charts/teknikerp -n tenant-shenzhen --reuse-values --set image.tag=v1.13.2
 
-# Yeni musteri — ERP + fiyat listesi birlikte kurulur
-# Once Cloudflare A kayitlari (ikisi de Proxied):
-#   <ad>-erp  -> 213.238.168.227      (musterinin kendi alan adi yoksa)
-#   liste     -> 213.238.168.227      (musterinin alan adinda)
+# Yeni musteri — once Cloudflare A kaydi (Proxied, TEK seviye adres),
+# sonra tenants/<ad>.yaml (host, image.tag = canlinin surumu, logo),
+# sonra kurulum. DIKKAT: chart varsayilani image.tag v1.9.2 — tenant
+# dosyasi vermezsen ESKI surum kurulur.
 cd /root/teknikerp && git pull
-cd /root/teknikfiyat && git pull
-cd /root/teknikerp
-FIYAT_ALAN=liste.musteri.com.tr bash k8s/new-tenant.sh xyzoto "XYZ Oto Elektrik"
+bash k8s/new-tenant.sh martech Martech -f tenants/martech.yaml
+
+# Fiyat listesi VARSAYILAN KURULMAZ (21 Eylul 2026 karari). Istenirse:
+FIYAT_LISTESI=evet FIYAT_ALAN=liste.musteri.com.tr bash k8s/new-tenant.sh xyzoto "XYZ Oto" -f tenants/xyzoto.yaml
 
 # Yalnizca fiyat listesi (ERP zaten kurulu)
 cd /root/teknikfiyat && git pull
@@ -1253,13 +1287,14 @@ Mimari ve müşteri düzeni için: `SAAS.md`, `tenants/README.md`
 ## 7. Kapasite
 
 ```
-Sunucu   7.8 GB RAM  |  ~2.5 GB bos  |  musteri basina ~600-800 MB
+Sunucu   7.8 GB RAM  |  21 Eylul 2026: available 1,5 GB, swap 234 MB dolu
+         Martech kurulumu ~400 MB aldi (1,9 -> 1,5 GB)
 ```
 
-Fiyat listesi müşteri başına ~150-250 MB daha ekler (ayrı pod). İkisi
-birlikte ~800 MB-1 GB eder, yani **2-3 müşteri daha sığar.** Rancher
-kaldırılırsa bir tane daha. Ondan sonra RAM yükseltmek veya ikinci
-sunucu gerekir — satış yaparken bilinmesi gereken sınır.
+Fiyat listesi müşteri başına ~150-250 MB daha ekler (ayrı pod). Bugünkü
+haliyle **en fazla bir müşteri daha** sığar, o da sıkışık. Üçüncü
+müşteriden önce RAM yükseltmek (ya da Rancher'ı kaldırmak, ~1 GB) şart —
+satış yaparken bilinmesi gereken sınır.
 
 ---
 
