@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **21 Eylül 2026**
+Son güncelleme: **5 Ekim 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -8,6 +8,20 @@ oturuma başlarken önce buraya bak.
 ---
 
 ## 0. TAM ŞU AN NEREDE KALDIK
+
+> **FİYAT LİSTESİ BAKIMDA — 5 Ekim 2026 (Orhan'ın isteği).**
+> `liste.shenzhenmarket.com.tr` geliştirme için "Sitemizi güncelliyoruz"
+> sayfasına alındı. Chart 1.1.0'a `bakim.aktif` anahtarı eklendi
+> (`liste-erp` 2452080): alan adı küçük bir nginx'e (`teknikfiyat-bakim`)
+> yönlenir, uygulama (v1.6.0) arkada çalışmaya devam eder. Önce provada
+> (`tenant-shenzhen-test`) görüldü, beğenildi; canlı komutu verildi ama
+> **çıktısı bana gelmedi** — sonraki oturumda doğrula:
+> `kubectl get ingress teknikfiyat-ingress -n tenant-shenzhen -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}'`
+> (bakımdaysa `teknikfiyat-bakim`). **Prova da bakımda kalmış olabilir.**
+> Başlık/metin `--set-string bakim.baslik=… bakim.mesaj=…` ile verildi
+> (metinde virgül yok — `--set` virgülü ayırıcı sayar).
+> **Geri açmak:** `helm upgrade teknikfiyat /root/teknikfiyat/charts/teknikfiyat -n tenant-shenzhen --reuse-values --set bakim.aktif=false`
+> (`--reuse-values` şart; yoksa imaj etiketi v1.0.0'a döner).
 
 > **İKİNCİ MÜŞTERİ MARTECH KURULDU — 21 Eylül 2026 21:36 (Türkiye).**
 > `tenant-martech`, `https://martech.mobilteknikerp.com`, v1.22.24 (canlı
