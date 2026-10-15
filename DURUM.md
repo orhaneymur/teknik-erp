@@ -15,9 +15,8 @@ oturuma başlarken önce buraya bak.
 > yapıldı (helm revision 20, 13:27). Pod yeniden başlayınca Harem bağlantısı
 > tazelendi ve kur kendiliğinden düzeldi (ekran: Harem +0,70 · $ 50,10) —
 > yani sorun **açık duran ama fiyat göndermeyen soket**. Orhan "+0,20'de
-> kalalım" dedi; geri alma komutu verildi, **sonucu görülmedi** — doğrula:
-> `kubectl exec -n tenant-shenzhen deploy/teknikerp-backend -- sh -c 'echo KUR_FARKI=$KUR_FARKI'`
-> (0.20 olmalı). Martech'e dokunulmadı (0,20). Kalıcı düzeltme bir sonraki
+> kalalım" dedi; 0,20'ye geri alındı, Orhan kontrol etti (15 Ekim).
+> Martech'e dokunulmadı (0,20). Kalıcı düzeltme bir sonraki
 > sürümde — bkz. §4 Öncelikli, "Kur bayatlığı".
 
 > **FİYAT LİSTESİ BAKIMDA — 5 Ekim 2026 (Orhan'ın isteği).**
