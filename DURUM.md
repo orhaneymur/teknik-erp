@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **5 Ekim 2026**
+Son güncelleme: **15 Ekim 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -8,6 +8,17 @@ oturuma başlarken önce buraya bak.
 ---
 
 ## 0. TAM ŞU AN NEREDE KALDIK
+
+> **KUR GÜNCEL GELMİYORDU — 15 Ekim 2026 (müşteri aradı, Orhan bildirdi).**
+> Ekrandaki dolar kuru eski kalmıştı; ekranda hiçbir uyarı yoktu, müşteri
+> kendisi fark etti. Geçici çare olarak Shenzhen'de `kurFarki` 0,20 → 0,70
+> yapıldı (helm revision 20, 13:27). Pod yeniden başlayınca Harem bağlantısı
+> tazelendi ve kur kendiliğinden düzeldi (ekran: Harem +0,70 · $ 50,10) —
+> yani sorun **açık duran ama fiyat göndermeyen soket**. Orhan "+0,20'de
+> kalalım" dedi; geri alma komutu verildi, **sonucu görülmedi** — doğrula:
+> `kubectl exec -n tenant-shenzhen deploy/teknikerp-backend -- sh -c 'echo KUR_FARKI=$KUR_FARKI'`
+> (0.20 olmalı). Martech'e dokunulmadı (0,20). Kalıcı düzeltme bir sonraki
+> sürümde — bkz. §4 Öncelikli, "Kur bayatlığı".
 
 > **FİYAT LİSTESİ BAKIMDA — 5 Ekim 2026 (Orhan'ın isteği).**
 > `liste.shenzhenmarket.com.tr` geliştirme için "Sitemizi güncelliyoruz"
@@ -1151,6 +1162,20 @@ firma adı ileride değişirse etiket kaymasın diye sabitlendi.
 
 ### Öncelikli
 
+- [ ] **Kur bayatlığı (15 Ekim 2026, Orhan — müşteri şikâyeti)** — bir
+      sonraki sürüme, diğer güncellemelerle birlikte:
+      1. **Kendini toparlama:** `haremKuru.ts` yalnızca soket *kapanınca*
+         yeniden bağlanıyor; açık kalıp fiyat göndermezse sonsuza dek eski
+         kurda kalıyor. Birkaç dakika `price_changed` gelmezse soketi
+         kendisi kapatıp yeniden açsın.
+      2. **Uyarı görünür olsun:** `uyari` alanı yalnızca Tahsilat sayfasında,
+         TL/EUR girişinde gösteriliyor (`CustomerPayment.tsx:819`). Üst
+         bardaki kur satırı bayatlıkta sarıya dönüp "X dakikadır
+         güncellenmedi" yazsın.
+      3. **Ekran sık yenilensin:** `useExchangeRates` 30 dakikada bir
+         soruyor; 1–2 dakikaya indir.
+      Önce yerelde (Harem soketini susturup bayatlık senaryosu), sonra prova,
+      sonra canlı.
 - [x] ~~`renumberSkus --uygula`~~ — **GEREKSİZ KALDI.** v1.19.0 ile Excel
       yüklemesi zaten okunur kod üretiyor; `SK...` biçimli kod artık
       hiç oluşmuyor. Betik duruyor ama çalıştırılacak bir şey yok.
