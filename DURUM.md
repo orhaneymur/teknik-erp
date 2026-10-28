@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **15 Ekim 2026**
+Son güncelleme: **29 Ekim 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -8,6 +8,31 @@ oturuma başlarken önce buraya bak.
 ---
 
 ## 0. TAM ŞU AN NEREDE KALDIK
+
+> **CANLI v1.22.25 — KUR KALICI DÜZELTMESİ, 29 Ekim 2026 00:49 (Türkiye).**
+> Prova da v1.22.25 (00:45). Martech ve demo **hâlâ v1.22.24 / v1.22.23**.
+> Kur 15 Ekim'den sonra yine takıldı (Orhan, 29 Ekim gecesi).
+> **Teşhis (kanıtlı):** Harem çalışıyordu (yerelden 90 sn'de 13 fiyat);
+> canlı pod 13 gündür ayaktaydı ve son 9 saatin logunda tek kopma /
+> yeniden deneme satırı yoktu → soket sessizce ölmüş (yarı açık hat), elle
+> yazılan istemci yalnızca soket KAPANINCA yeniden bağlanıyordu. Harem bizi
+> reddetmiyor (reddetseydi log dakikada bir "kapandi" yazardı).
+>
+> | Madde | Kimin isteği |
+> |---|---|
+> | Bekçi: 45 sn hiç çerçeve yoksa / 3 dk fiyat yoksa / sunucu "41" derse soket kapatılıp yeniden açılır | Müşteri şikâyeti (15 + 29 Ekim), Orhan iletti |
+> | Harem 5 dk bayatsa **Truncgil**'e geçiş (`finans.truncgil.com/v4/today.json`, dakikalık); kaynak yazısı "Truncgil +0,20", uyarı dolu; Harem dönünce geri. Truncgil damgası 30 dk'dan eski ya da son Harem'den %5+ sapıyorsa reddedilir | Orhan: "düzgün çekemiyorsan başka yerden çekelim" — **11 Eylül "Harem dışına geçme" kararının yerine** |
+> | Ekran kuru 1 dk'da bir sorar; uyarı varsa üst bar kur satırı sarı + sebep | 15 Ekim bekleyen madde |
+> | Sunucuya ulaşılamazsa ekran son kuru korur (46,39'a düşmez) | Benim önerim (sık sorgunun yan etkisi) |
+>
+> Teşhis ucu: `/api/exchange-rates` artık `harem.bagli / yasSn /
+> tazelemeSayisi / sonTazelemeNedeni` döner. Log: `grep -i harem` —
+> "tazeleniyor" satırı bekçinin devreye girdiğini gösterir.
+> Doğrulama: `harem-bekci-test` (21 kontrol, sahte Harem sunucusu), `npm
+> test` 20/20. Canlı öncesi ayrı yedek **alınmadı** (DB'ye dokunmayan
+> sürüm; gecelik yedek mevcut). Sunucudaki chart eski (`helm list` APP
+> VERSION v1.22.24 gösteriyor) — sonraki sürümde `git pull`.
+> **Açık:** ekran kontrolü (üst bar gri "Harem +0,20"), Martech'e v1.22.25.
 
 > **KUR GÜNCEL GELMİYORDU — 15 Ekim 2026 (müşteri aradı, Orhan bildirdi).**
 > Ekrandaki dolar kuru eski kalmıştı; ekranda hiçbir uyarı yoktu, müşteri
@@ -1161,7 +1186,7 @@ firma adı ileride değişirse etiket kaymasın diye sabitlendi.
 
 ### Öncelikli
 
-- [ ] **Kur bayatlığı (15 Ekim 2026, Orhan — müşteri şikâyeti)** — bir
+- [x] **YAPILDI v1.22.25 (29 Ekim)** — bkz. §0. ~~Kur bayatlığı (15 Ekim 2026, Orhan — müşteri şikâyeti)~~ — bir
       sonraki sürüme, diğer güncellemelerle birlikte:
       1. **Kendini toparlama:** `haremKuru.ts` yalnızca soket *kapanınca*
          yeniden bağlanıyor; açık kalıp fiyat göndermezse sonsuza dek eski
