@@ -55,6 +55,8 @@ BETIKLER=(
   "tekrar-kaydet-test:evet"
   "fis-kur-test:evet"
   "harem-kur-test:evet"
+  # kendi backend'ini 3011'de sahte Harem'le acar
+  "harem-bekci-test:hayir"
 )
 
 log() { printf '\n\033[1m== %s\033[0m\n' "$*"; }

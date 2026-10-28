@@ -2411,43 +2411,139 @@ function farkYazisi(): string {
   return ` +${KUR_FARKI.toFixed(2).replace('.', ',')}`;
 }
 
+/*
+ * YEDEK CANLI KAYNAK: Truncgil (finans.truncgil.com) — Kapalicarsi tipi
+ * piyasa kuru, dakikada bir guncellenir, anahtar istemez. Harem'e cok yakin
+ * (29 Ekim 2026 00:20: Harem 49,8910 / Truncgil 49,8569).
+ *
+ * Yalnizca Harem bayatken kullanilir. Iki koruma:
+ *  - Truncgil'in kendi zaman damgasi TRUNCGIL_TAZE_MS'den eskiyse alinmaz
+ *    (o da takilmissa bayat kuru "taze" diye gostermeyelim).
+ *  - Son Harem kurundan YEDEK_SAPMA_SINIRI'ndan fazla sapiyorsa alinmaz
+ *    (bozuk veri fise basilmasin).
+ */
+const TRUNCGIL_URL = 'https://finans.truncgil.com/v4/today.json';
+const TRUNCGIL_ONBELLEK_MS = 60 * 1000;
+const TRUNCGIL_TAZE_MS = 30 * 60 * 1000;
+const YEDEK_SAPMA_SINIRI = 0.05;
+
+type YedekKur = { usd: number; eur: number; kaynakTarihi: number; alindiAt: number };
+let truncgilOnbellek: YedekKur | null = null;
+let truncgilIstek: Promise<YedekKur | null> | null = null;
+
+/** "2026-10-29 00:20:01" — Istanbul saati (UTC+3, yaz saati yok). */
+function truncgilTarihi(deger: unknown): number | null {
+  if (typeof deger !== 'string') return null;
+  const t = Date.parse(`${deger.trim().replace(' ', 'T')}+03:00`);
+  return Number.isFinite(t) ? t : null;
+}
+
+async function truncgilGetir(): Promise<YedekKur | null> {
+  try {
+    const yanit = await fetch(TRUNCGIL_URL, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TeknikERP)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!yanit.ok) throw new Error(`HTTP ${yanit.status}`);
+    const govde = (await yanit.json()) as {
+      Update_Date?: unknown;
+      USD?: { Selling?: unknown };
+      EUR?: { Selling?: unknown };
+    };
+    const usd = Number(govde.USD?.Selling);
+    const eur = Number(govde.EUR?.Selling);
+    const kaynakTarihi = truncgilTarihi(govde.Update_Date);
+    if (!(usd > 0) || !(eur > 0) || kaynakTarihi === null) {
+      throw new Error('beklenmeyen bicim');
+    }
+    truncgilOnbellek = { usd, eur, kaynakTarihi, alindiAt: Date.now() };
+    return truncgilOnbellek;
+  } catch (err) {
+    console.warn('[kur] Truncgil alinamadi:', err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/** Kullanilabilir yedek kur ya da null. Ayni anda tek istek gider. */
+async function yedekKur(sonHaremUsd: number | null): Promise<YedekKur | null> {
+  let kur = truncgilOnbellek;
+  if (!kur || Date.now() - kur.alindiAt > TRUNCGIL_ONBELLEK_MS) {
+    truncgilIstek ??= truncgilGetir().finally(() => {
+      truncgilIstek = null;
+    });
+    kur = (await truncgilIstek) ?? truncgilOnbellek;
+  }
+  if (!kur) return null;
+  if (Date.now() - kur.kaynakTarihi > TRUNCGIL_TAZE_MS) return null;
+  if (sonHaremUsd && Math.abs(kur.usd - sonHaremUsd) / sonHaremUsd > YEDEK_SAPMA_SINIRI) {
+    console.warn(
+      `[kur] Truncgil reddedildi: ${kur.usd} son Harem kurundan (${sonHaremUsd}) cok uzak`
+    );
+    return null;
+  }
+  return kur;
+}
+
 /**
  * Uygulamanin KULLANDIGI kur — hem fisteki TL karsiligi hem TL tahsilatin
  * dolara cevrilmesi buradan gecer.
  *
- * Oncelik Harem'dir. Baglanti koparsa SON BILINEN HAREM KURU kullanilmaya
- * devam eder (proje karari, 11 Eylul 2026): sessizce baska bir kaynaga
- * gecmek marji kaydirir ve bunu kimse fark etmez. Bayatlik gizlenmez,
- * `uyari` alaniyla disari verilir.
- *
- * TCMB yalnizca HIC Harem verisi alinamadiginda devreye girer (ornegin
- * pod yeni acildi ve socket henuz baglanmadi). O durumda kaynak yazisi
- * bunu acikca soyler.
+ * Sira (karar 29 Ekim 2026, Orhan — "duzgun cekemiyorsan baska yerden
+ * cekelim"; 11 Eylul'deki "son Harem kurunda kal" kararinin yerine):
+ *   1. Harem, taze ise.
+ *   2. Harem bayat ya da hic yoksa Truncgil (canli yedek). Kaynak yazisi
+ *      "Truncgil" der, uyari doludur — gecis gizlenmez.
+ *   3. Truncgil de yoksa son bilinen Harem kuru (bayat, uyarili).
+ *   4. Hic Harem verisi de yoksa TCMB -> ECB -> sabit.
+ * Harem geri gelince bir sonraki istekte kendiliginden ona donulur.
  */
 async function cozulmusKur(): Promise<CozulmusKur> {
   const harem = haremDurum();
+  const dakika = harem.yasSn != null ? Math.floor(harem.yasSn / 60) : null;
 
-  if (harem.veriVar && harem.usd) {
-    const dakika = harem.yasSn != null ? Math.floor(harem.yasSn / 60) : null;
+  if (harem.veriVar && harem.usd && !harem.bayat) {
     return {
       usd: farkEkle(harem.usd),
       eur: harem.eur ? farkEkle(harem.eur) : 0,
       source: `Harem${farkYazisi()}`,
       updatedAt: new Date(Date.now() - (harem.yasSn ?? 0) * 1000).toISOString(),
-      uyari: harem.bayat
-        ? `Harem kuru ${dakika ?? '?'} dakikadir guncellenmedi.`
-        : null,
+      uyari: null,
     };
   }
 
-  // Hic Harem verisi yok — TCMB ile basla, ama bunu gizleme.
+  const haremNeden = harem.veriVar
+    ? `Harem kuru ${dakika ?? '?'} dakikadır gelmiyor`
+    : 'Harem kuru alınamadı';
+
+  const yedek = await yedekKur(harem.usd);
+  if (yedek) {
+    return {
+      usd: farkEkle(yedek.usd),
+      eur: farkEkle(yedek.eur),
+      source: `Truncgil${farkYazisi()}`,
+      updatedAt: new Date(yedek.kaynakTarihi).toISOString(),
+      uyari: `${haremNeden}, Truncgil kuru kullanılıyor.`,
+    };
+  }
+
+  if (harem.veriVar && harem.usd) {
+    return {
+      usd: farkEkle(harem.usd),
+      eur: harem.eur ? farkEkle(harem.eur) : 0,
+      source: `Harem${farkYazisi()}`,
+      updatedAt: new Date(Date.now() - (harem.yasSn ?? 0) * 1000).toISOString(),
+      uyari: `${haremNeden}, yedek kaynak da alınamadı — kur ESKİ.`,
+    };
+  }
+
+  // Hic canli veri yok — TCMB ile basla, ama bunu gizleme.
   const tcmb = await fetchTcmbRates();
   return {
     usd: farkEkle(tcmb.usd),
     eur: farkEkle(tcmb.eur),
     source: `${tcmb.source}${farkYazisi()}`,
     updatedAt: tcmb.updatedAt,
-    uyari: 'Harem kuru alinamadi, TCMB kuru kullaniliyor.',
+    uyari: `${haremNeden}, Truncgil de alınamadı; ${tcmb.source} kuru kullanılıyor.`,
   };
 }
 
@@ -2490,6 +2586,7 @@ app.get('/api/exchange-rates', async () => {
    * zorundadir — bayat kurla para islemi yapildigi gizlenmemeli.
    */
   const kur = await cozulmusKur();
+  const harem = haremDurum();
   return {
     success: true,
     data: {
@@ -2498,6 +2595,13 @@ app.get('/api/exchange-rates', async () => {
       source: kur.source,
       updatedAt: kur.updatedAt,
       uyari: kur.uyari,
+      // Teshis icin: "kur gelmiyor" denince ilk bakilacak yer
+      harem: {
+        bagli: harem.bagli,
+        yasSn: harem.yasSn,
+        tazelemeSayisi: harem.tazelemeSayisi,
+        sonTazelemeNedeni: harem.sonTazelemeNedeni,
+      },
     },
     message: 'Exchange rates retrieved successfully.',
   };
@@ -8148,6 +8252,14 @@ async function start() {
     await ensureDepots();
     // Harem kur akisi — baglanti arka planda kurulur, acilisi bekletmez.
     haremBaslat();
+    /*
+     * Harem bayatken yedek kuru onceden isit: fis kaydi kuru en fazla 1,5 sn
+     * bekler (receiptTryRate), Truncgil istegi o sureye sigmayabilir.
+     */
+    setInterval(() => {
+      const harem = haremDurum();
+      if (harem.bayat) void yedekKur(harem.usd);
+    }, 30_000).unref();
     await app.listen({ port: PORT, host: '0.0.0.0' });
     app.log.info(`API sunucusu http://localhost:${PORT} adresinde çalışıyor`);
   } catch (error) {

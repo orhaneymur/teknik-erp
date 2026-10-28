@@ -125,11 +125,23 @@ export default function CurrencyConverter() {
         <SymbolPicker value={to} onChange={handleToChange} ariaLabel="Hedef para birimi" />
       </div>
 
-      <p className="mt-1 truncate text-center text-[10px] text-slate-500">
+      <p
+        className={`mt-1 truncate text-center text-[10px] ${
+          !loading && rates.uyari
+            ? 'rounded bg-amber-100 font-semibold text-amber-800'
+            : 'text-slate-500'
+        }`}
+        title={!loading && rates.uyari ? rates.uyari : undefined}
+      >
         {loading
           ? 'Kurlar yükleniyor…'
-          : `${rates.source} · $ ${rateFormatter.format(rates.usd)} · € ${rateFormatter.format(rates.eur)}`}
+          : `${rates.uyari ? '⚠ ' : ''}${rates.source} · $ ${rateFormatter.format(rates.usd)} · € ${rateFormatter.format(rates.eur)}`}
       </p>
+      {!loading && rates.uyari && (
+        <p className="truncate text-center text-[10px] font-semibold text-amber-700">
+          {rates.uyari}
+        </p>
+      )}
     </div>
   );
 }
