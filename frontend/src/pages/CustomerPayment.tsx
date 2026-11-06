@@ -112,6 +112,15 @@ export default function CustomerPayment({
    * gorunmez, ekstrede "cari kaydi" olarak gorunur.
    */
   const [kasasiz, setKasasiz] = useState(false);
+  /*
+   * Islem tarihi. Varsayilan BUGUN — `toLocaleDateString('en-CA')` tarayicinin
+   * saat dilimini kullanir. `toISOString().split('T')[0]` yazmak yanlis olur:
+   * o UTC verir ve Turkiye UTC+3 oldugu icin gece 00:00-03:00 arasinda DUNU
+   * gosterir.
+   */
+  const [paymentDate, setPaymentDate] = useState(() =>
+    new Date().toLocaleDateString('en-CA')
+  );
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -393,6 +402,7 @@ export default function CustomerPayment({
             safeId: kasasiz ? null : Number(selectedSafe),
             kasasiz,
             customerId: customer.id,
+            paymentDate,
           }
         );
         if (guncelleme.data.success) {
@@ -418,6 +428,7 @@ export default function CustomerPayment({
         type,
         method: kasasiz ? undefined : paymentMethod,
         description: description.trim() || undefined,
+        paymentDate,
       });
 
       if (response.data.success) {
@@ -447,7 +458,14 @@ export default function CustomerPayment({
             (type === 'GIRIS'
               ? `${customer.code} cari tahsilat`
               : `${customer.code} cari ödeme`),
-          createdAt: new Date().toISOString(),
+          /*
+           * Fisin tarihi SUNUCUDAN gelir. Burada `new Date()` yazmak,
+           * gecmis tarihli bir tahsilatin fisine BUGUNU basardi.
+           */
+          createdAt:
+            typeof response.data.data?.createdAt === 'string'
+              ? response.data.data.createdAt
+              : new Date().toISOString(),
           customerLabel: `${customer.code} — ${customer.name}`,
           customerName: customer.name,
           partyLines: buildReceiptPartyLines(customer),
@@ -773,6 +791,36 @@ export default function CustomerPayment({
                 </span>
               </label>
             </div>
+          </div>
+
+          <div className="sm:max-w-xs">
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              İşlem Tarihi
+            </label>
+            <input
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              className={inputClass}
+            />
+            {/*
+              Gecmis/ileri tarih sessiz kalmasin: kayit cari bakiyeyi ve
+              kasayi degistiriyor, yanlis gune yazildigi fark edilmezse
+              ekstre ve kasa raporu ayrisir.
+            */}
+            {paymentDate !== new Date().toLocaleDateString('en-CA') && (
+              <p className="mt-1 text-caption text-amber-700">
+                Bugünün tarihi değil — kayıt{' '}
+                <strong>
+                  {new Date(`${paymentDate}T12:00:00`).toLocaleDateString('tr-TR', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </strong>{' '}
+                gününe yazılacak.
+              </p>
+            )}
           </div>
 
           {!kasasiz && (

@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import { getTenantConfig } from './tenantConfig';
+import { yetkiVar, type Alan, type Yetki } from './yetki';
 import {
   BarChart3,
   ClipboardList,
@@ -44,6 +45,7 @@ export type PageId =
   | 'def-models'
   | 'def-safes'
   | 'def-users'
+  | 'settings-company'
   | 'invoices'
   | 'deleted-invoices'
   | 'pre-orders';
@@ -74,6 +76,14 @@ export type MenuItem = {
   id: PageId;
   label: string;
   badge?: string;
+  /**
+   * Bu ekranı açmak için gereken yetki. Verilmezse herkese görünür.
+   *
+   * Yalnızca MENÜDE gizlemek için; gerçek kapı sunucudaki yetki kancası.
+   * Burada işaretlenmemiş bir ekran yine 403 alır, sadece kullanıcı
+   * gidip boş ekranla karşılaşır.
+   */
+  izin?: { alan: Alan; yetki: Yetki };
 };
 
 export type MenuCategory = {
@@ -95,9 +105,9 @@ export const menuCategories: MenuCategory[] = [
     label: 'Satış ve Alış',
     icon: ShoppingCart,
     items: [
-      { id: 'sales', label: 'Satış Yap', badge: 'F2' },
-      { id: 'sales-return', label: 'Satış İade' },
-      { id: 'invoice-purchase', label: 'Alış Faturası' },
+      { id: 'sales', label: 'Satış Yap', badge: 'F2', izin: { alan: 'satis', yetki: 'yaz' } },
+      { id: 'sales-return', label: 'Satış İade', izin: { alan: 'iade', yetki: 'yaz' } },
+      { id: 'invoice-purchase', label: 'Alış Faturası', izin: { alan: 'alis', yetki: 'yaz' } },
       { id: 'pre-orders', label: 'Ön Siparişler' },
     ],
   },
@@ -107,10 +117,10 @@ export const menuCategories: MenuCategory[] = [
     icon: Layers,
     items: [
       { id: 'stock-list', label: 'Stok Listesi' },
-      { id: 'deleted-products', label: 'Silinen Ürünler' },
-      { id: 'stock-transfer', label: 'Depo Transfer' },
+      { id: 'deleted-products', label: 'Silinen Ürünler', izin: { alan: 'stok', yetki: 'sil' } },
+      { id: 'stock-transfer', label: 'Depo Transfer', izin: { alan: 'stok', yetki: 'guncelle' } },
       { id: 'stock-movements', label: 'Stok Hareketleri' },
-      { id: 'product-create', label: 'Stok Kartı Oluştur' },
+      { id: 'product-create', label: 'Stok Kartı Oluştur', izin: { alan: 'stok', yetki: 'yaz' } },
       { id: 'barcode-label', label: 'Barkod Etiket' },
     ],
   },
@@ -120,8 +130,8 @@ export const menuCategories: MenuCategory[] = [
     icon: Users,
     items: [
       { id: 'customer-list', label: 'Müşteri Listesi' },
-      { id: 'customer-create', label: 'Yeni Müşteri Kartı' },
-      { id: 'customer-payments', label: 'Tahsilat / Ödeme', badge: 'F2' },
+      { id: 'customer-create', label: 'Yeni Müşteri Kartı', izin: { alan: 'musteri', yetki: 'yaz' } },
+      { id: 'customer-payments', label: 'Tahsilat / Ödeme', badge: 'F2', izin: { alan: 'tahsilat', yetki: 'yaz' } },
       { id: 'report-customer-statement', label: 'Müşteri Ekstre' },
       { id: 'customer-balance', label: 'Müşteri Borç / Alacak' },
     ],
@@ -133,22 +143,32 @@ export const menuCategories: MenuCategory[] = [
     items: [
       { id: 'report-analytics', label: 'İşletme Özeti' },
       { id: 'report-sales-breakdown', label: 'Satış Kırılımı' },
-      { id: 'report-sales', label: 'Kâr-Zarar Raporu' },
-      { id: 'report-stock-value', label: 'Stok Değeri' },
-      { id: 'report-cash-flow', label: 'Kasa Raporu' },
+      { id: 'report-sales', label: 'Kâr-Zarar Raporu', izin: { alan: 'maliyet', yetki: 'oku' } },
+      { id: 'report-stock-value', label: 'Stok Değeri', izin: { alan: 'maliyet', yetki: 'oku' } },
+      { id: 'report-cash-flow', label: 'Kasa Raporu', izin: { alan: 'kasa', yetki: 'oku' } },
     ],
   },
+  /*
+   * SITE AYARLARI — eskiden "Tanimlar".
+   *
+   * Sistem ayarlari dort ayri basliga dagilmisti; "kasa nereden tanimlaniyor,
+   * personel nereden ekleniyor" diye araniyordu. Tek basligin altinda
+   * toplandi (musteri istegi, 6 Kasim 2026). Sira gunluk kullanim
+   * sikligina gore degil, YONETIM sirasina gore: firma -> kullanici ->
+   * kasa -> urun siniflandirmasi.
+   */
   {
     id: 'definitions',
-    label: 'Tanımlar',
+    label: 'Site Ayarları',
     icon: Settings,
     items: [
-      { id: 'def-products', label: 'Ürün Tanımları' },
-      { id: 'def-categories', label: 'Kategoriler' },
-      { id: 'def-brands', label: 'Markalar' },
-      { id: 'def-models', label: 'Modeller' },
-      { id: 'def-safes', label: 'Kasa Tanımları' },
-      { id: 'def-users', label: 'Personel Tanımları' },
+      { id: 'settings-company', label: 'Firma Bilgileri', izin: { alan: 'ayarlar', yetki: 'guncelle' } },
+      { id: 'def-users', label: 'Kullanıcı Yönetimi', izin: { alan: 'ayarlar', yetki: 'guncelle' } },
+      { id: 'def-safes', label: 'Kasa Tanımları', izin: { alan: 'ayarlar', yetki: 'guncelle' } },
+      { id: 'def-categories', label: 'Kategoriler', izin: { alan: 'ayarlar', yetki: 'guncelle' } },
+      { id: 'def-brands', label: 'Markalar', izin: { alan: 'ayarlar', yetki: 'guncelle' } },
+      { id: 'def-models', label: 'Modeller', izin: { alan: 'ayarlar', yetki: 'guncelle' } },
+      { id: 'def-products', label: 'Ürün Tanımları', izin: { alan: 'ayarlar', yetki: 'guncelle' } },
     ],
   },
   {
@@ -157,10 +177,27 @@ export const menuCategories: MenuCategory[] = [
     icon: FileText,
     items: [
       { id: 'invoices', label: 'Fatura Listesi' },
-      { id: 'deleted-invoices', label: 'Silinen İşlemler' },
+      { id: 'deleted-invoices', label: 'Silinen İşlemler', izin: { alan: 'satis', yetki: 'sil' } },
     ],
   },
 ];
+
+/**
+ * Rolün görebileceği kalemler. Kalem kalmayan başlık hiç çizilmez.
+ *
+ * Menüyü gizlemek koruma değil; sunucu zaten 403 veriyor. Amaç kullanıcıya
+ * yapamayacağı işi göstermemek.
+ */
+export function gorunurKategoriler(): MenuCategory[] {
+  return menuCategories
+    .map((kategori) => ({
+      ...kategori,
+      items: kategori.items.filter(
+        (kalem) => !kalem.izin || yetkiVar(kalem.izin.alan, kalem.izin.yetki)
+      ),
+    }))
+    .filter((kategori) => kategori.items.length > 0);
+}
 
 export function getCategoryForPage(pageId: PageId): MenuCategoryId | null {
   if (pageId === 'pre-orders') return 'sales';
@@ -254,6 +291,7 @@ const VALID_PAGES = new Set<PageId>([
   'def-models',
   'def-safes',
   'def-users',
+  'settings-company',
   'invoices',
   'deleted-invoices',
   'pre-orders',
@@ -346,7 +384,15 @@ export type DocumentTitleOptions = {
   customerName?: string;
 };
 
-function getDocumentTitleLabel(
+/**
+ * Sekmedeki SOL parca — sayfanin adi ("Satis Yap", "Alis Faturasi Duzenle").
+ *
+ * Disa aciktir cunku satis/alis/iade ekranlari sekme basligini kendileri
+ * tazeliyor (secilen musteri adini yazmak icin) ve ayni etiketi yeniden
+ * uretmek zorunda kalmasinlar — iki yerde ayri mantik olursa duzenleme
+ * basligi ("... Duzenle") bir tarafta eskir.
+ */
+export function getDocumentTitleLabel(
   page: PageId,
   options?: DocumentTitleOptions
 ): string {
@@ -375,9 +421,17 @@ function getDocumentTitleLabel(
   return getPageLabel(page);
 }
 
-export function formatDocumentTitle(pageTitle: string): string {
+/**
+ * Sekme basligi: "<sayfa> · <firma>".
+ *
+ * `firma` verilirse ConfigMap'teki firma adinin YERINE yazilir. Satis, alis
+ * ve iade ekranlari buraya secilen musterinin adini gecirer: ayni anda bes
+ * sekme acikken hangisinin hangi musteriye ait oldugu sekmeden okunur
+ * (musteri istegi, 6 Kasim 2026). Bos/secilmemisse firma adina doner.
+ */
+export function formatDocumentTitle(pageTitle: string, firma?: string): string {
   const label = pageTitle.trim();
-  const appTitle = appDocumentTitle();
+  const appTitle = firma?.trim() || appDocumentTitle();
   return label ? `${label} · ${appTitle}` : appTitle;
 }
 

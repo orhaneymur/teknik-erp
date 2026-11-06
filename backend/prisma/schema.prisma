@@ -7,14 +7,80 @@ generator client {
 }
 
 model User {
-  id        Int       @id @default(autoincrement())
-  name      String
-  email     String    @unique
-  password  String
-  role      String    @default("staff")
+  id       Int    @id @default(autoincrement())
+  name     String
+  email    String @unique
+  password String
+
+  /// Yetki rolu: admin | satis | depo | okur  (bkz. src/lib/yetki.ts)
+  ///
+  /// 6 Kasim 2026'ya kadar varsayilan "staff"ti ve HICBIR YERDE
+  /// KONTROL EDILMIYORDU — her personel fatura silebiliyor, maliyet ve
+  /// kar raporunu gorebiliyordu. Eski "staff" kayitlari migration ile
+  /// "satis"a cevrildi; tanimadigi bir deger gelirse kod en kisitli
+  /// role duser (rolCoz).
+  role String @default("satis")
+
+  /// PASIFE ALMA — isten ayrilan personel.
+  ///
+  /// Kayit SILINMEZ: gecmis faturalar userId ile bu kullaniciya isaret
+  /// ediyor ve "bu fisi kim kesti" bilgisi kaybolmamali. Pasif kullanici
+  /// giris YAPAMAZ, fis kesen personel listesinde gorunmez.
+  isActive Boolean @default(true)
+
   invoices  Invoice[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  auditLogs AuditLog[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([isActive])
+}
+
+/// DENETIM KAYDI (audit trail) — salt okunur iz.
+///
+/// Kapsam karari (6 Kasim 2026): PARA ve SILME islemleri tutulur —
+/// girisler, fatura/tahsilat olusturma-duzenleme-silme, fiyat ve stok
+/// duzeltmeleri, kullanici ve yetki degisiklikleri. Okuma islemleri
+/// tutulmaz; her okumayi yazmak tabloyu gunde binlerce satir buyutur ve
+/// hesap sorulacak bilgiyi icinde kaybettirir.
+///
+/// Kullanici adi ve rolu KOPYA olarak saklanir: kullanici sonradan pasife
+/// alinsa ya da adi degisse bile kaydin o anki hali okunabilir kalmali.
+model AuditLog {
+  id Int @id @default(autoincrement())
+
+  /// Islemi yapan. Secret'tan giren yonetici icin null (veritabaninda
+  /// karsiligi yok), adi yine `userName`de durur.
+  userId   Int?
+  user     User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userName String
+  userRole String
+
+  /// Ne yapildi — ornek: GIRIS, FATURA_SIL, TAHSILAT_GUNCELLE
+  action String
+
+  /// Hangi kayit — ornek: Invoice / 1423
+  entity   String?
+  entityId String?
+
+  /// Insan okuyacagi tek satir ozet
+  summary String @db.Text
+
+  /// Degisiklik oncesi ve sonrasi (JSON metni). Yalnizca degisen alanlar
+  /// yazilir; tum kaydi kopyalamak tabloyu gereksiz buyutuyor.
+  oncesi String? @db.Text
+  sonrasi String? @db.Text
+
+  /// Istegi yapanin IP adresi. Cloudflare arkasindan CF-Connecting-IP
+  /// okunur; yoksa X-Forwarded-For'un ilk adresi, o da yoksa soket IP'si.
+  ip String?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([action])
+  @@index([entity, entityId])
 }
 
 model Branch {

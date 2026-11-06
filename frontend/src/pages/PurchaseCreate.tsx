@@ -43,7 +43,8 @@ import {
 } from '../lib/receiptParty';
 import { printDocument, musteriDosyaAdi } from '../lib/printMode';
 import { productDisplayName } from '../lib/productDisplayName';
-import { buildPageUrl } from '../lib/navigation';
+import { buildPageUrl, getDocumentTitleLabel } from '../lib/navigation';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { kalemIdleriniEsle } from '../lib/kalemEsleme';
 import { fisKalemleriSirala } from '../lib/fisSirasi';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
@@ -143,6 +144,17 @@ export default function PurchaseCreate({
     nextInvoiceNo: '',
   });
   const [selectedSupplier, setSelectedSupplier] = useState<Customer | null>(null);
+
+  /*
+   * Sekme basligi secilen musterinin adini gosterir: "Satis Yap · ERSA
+   * TELEKOM". Ayni anda bircok sekme acik calisildigi icin hangisinin hangi
+   * musteriye ait oldugu sekmeden okunabilsin (musteri istegi, 6 Kasim 2026).
+   * Musteri secilmeden once ve secim temizlenince firma adina doner.
+   */
+  useDocumentTitle(
+    getDocumentTitleLabel('invoice-purchase', { editInvoiceId: editInvoiceId ?? undefined }),
+    selectedSupplier?.name
+  );
   const [supplierSearch, setSupplierSearch] = useState('');
   const [selectedBranch, setSelectedBranch] = useState<number | ''>('');
   const [selectedSafe, setSelectedSafe] = useState<number | ''>('');

@@ -31,7 +31,17 @@ import {
 } from './utils/compatibility.js';
 import { foldSearchText } from './utils/textSearch.js';
 import {
+  gecerliRolMu,
+  rolCoz,
+  rolMatrisi,
+  ROLLER,
+  yetkiliMi,
+  yolYetkisi,
+  type Rol,
+} from './lib/yetki.js';
+import {
   buildInvoiceCreatedAt,
+  gecerliGunMetni,
   mergeInvoiceDate,
   formatTimestampInvoiceNo,
   getIstanbulYear,
@@ -2211,12 +2221,49 @@ app.addHook('onRequest', async (request, reply) => {
 
   if (KIMLIKSIZ_UCLAR.has(`${request.method} ${yol}`)) return;
 
+  let payload: AuthUserPayload;
   try {
-    await request.jwtVerify();
+    payload = await request.jwtVerify<AuthUserPayload>();
   } catch {
     return reply.status(401).send({
       success: false,
       message: 'Oturum gerekli. Lütfen tekrar giriş yapın.',
+      errors: null,
+    });
+  }
+
+  /*
+   * ROL KONTROLU — tek zorlama noktasi.
+   *
+   * Ekranda dugmeyi gizlemek koruma DEGILDIR: 7 Eylul 2026'da 62 ucun
+   * hicbirinde kimlik kontrolu olmadigi, adresi bilen herkesin
+   * /api/customers'i indirebildigi boyle ortaya cikti. Yetki de ayni
+   * yerde, istek govdeye girmeden kesilir.
+   *
+   * Tabloda karsiligi olmayan yol yalnizca yoneticiye acik: yeni bir uc
+   * eklenip yetki tablosuna yazilmazsa sessizce herkese acilmaz.
+   */
+  const rol = rolCoz(payload.role);
+  const gereken = yolYetkisi(request.method, yol);
+
+  if (!gereken) {
+    if (rol !== 'admin') {
+      app.log.warn(
+        `[yetki] tabloda olmayan yol, yonetici disina kapali: ${request.method} ${yol} (rol=${rol})`
+      );
+      return reply.status(403).send({
+        success: false,
+        message: 'Bu işlem için yetkiniz yok.',
+        errors: null,
+      });
+    }
+    return;
+  }
+
+  if (!yetkiliMi(rol, gereken.alan, gereken.yetki)) {
+    return reply.status(403).send({
+      success: false,
+      message: `Bu işlem için yetkiniz yok (${gereken.alan} / ${gereken.yetki}).`,
       errors: null,
     });
   }
@@ -2303,6 +2350,20 @@ app.post<{ Body: { username: string; password: string } }>(
       },
     });
 
+    /*
+     * PASIF KULLANICI GIRMEZ. Isten ayrilan personelin kaydi silinmiyor
+     * (gecmis faturalar ona isaret ediyor), bu yuzden tek kapi burasi.
+     * Sifre dogru olsa bile reddedilir; mesaj "hatali sifre" degil ki
+     * personel neden giremedigini anlasin.
+     */
+    if (dbUser && dbUser.isActive === false) {
+      return reply.status(403).send({
+        success: false,
+        message: 'Bu kullanıcı pasife alınmış. Yöneticinize başvurun.',
+        errors: null,
+      });
+    }
+
     if (dbUser) {
       const stored = dbUser.password;
       const validPassword =
@@ -2314,7 +2375,9 @@ app.post<{ Body: { username: string; password: string } }>(
         const token = await issueAuthToken(reply, {
           sub: String(dbUser.id),
           name: dbUser.name,
-          role: dbUser.role,
+          /* Eski "staff" degeri jetona oldugu gibi yazilmaz; rolCoz onu
+             "satis"a cevirir ve tanimadigini en kisitli role duser. */
+          role: rolCoz(dbUser.role),
         });
         return {
           success: true,
@@ -2323,7 +2386,7 @@ app.post<{ Body: { username: string; password: string } }>(
             user: {
               username: dbUser.email,
               name: dbUser.name,
-              role: dbUser.role,
+              role: rolCoz(dbUser.role),
             },
           },
           message: 'Giriş başarılı.',
@@ -2342,12 +2405,20 @@ app.post<{ Body: { username: string; password: string } }>(
 app.get('/api/auth/me', async (request, reply) => {
   try {
     const payload = await request.jwtVerify<AuthUserPayload>();
+    const rol = rolCoz(payload.role);
+    /*
+     * YETKI MATRISI SUNUCUDAN GIDER. Arayuz kendi kopyasini tutmaz:
+     * iki kopya olursa biri eskir ve ekran "yapabilirsin" derken sunucu
+     * 403 doner. Ekran yalnizca burada yazani uygular.
+     */
     return {
       success: true,
       data: {
         username: payload.sub,
         name: payload.name,
-        role: payload.role,
+        role: rol,
+        roleLabel: ROLLER.find((r) => r.kod === rol)?.ad ?? rol,
+        yetkiler: rolMatrisi(rol),
       },
       message: 'Oturum geçerli.',
     };
@@ -3626,7 +3697,10 @@ app.get('/api/sales/init', async () => {
       include: { branch: { select: { id: true, name: true, type: true } } },
       orderBy: { name: 'asc' },
     }),
+    /* Pasife alinan personel "islemi yapan" listesinde cikmaz; gecmis
+       fislerdeki adi aynen okunmaya devam eder. */
     prisma.user.findMany({
+      where: { isActive: true },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),
@@ -3650,7 +3724,10 @@ app.get('/api/purchases/init', async () => {
       include: { branch: { select: { id: true, name: true, type: true } } },
       orderBy: { name: 'asc' },
     }),
+    /* Pasife alinan personel "islemi yapan" listesinde cikmaz; gecmis
+       fislerdeki adi aynen okunmaya devam eder. */
     prisma.user.findMany({
+      where: { isActive: true },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),
@@ -3745,7 +3822,16 @@ app.post<{
           totalAmountTl,
           totalAmountUsd,
           tryRate,
-          ...(invoiceDate ? { createdAt: new Date(invoiceDate) } : {}),
+          /*
+           * Alis fisinin saati.
+           *
+           * Onceden `new Date(invoiceDate)` yaziliyordu: "2026-11-06" gibi
+           * tarih-saatsiz bir metin UTC gece yarisi olarak cozulur, ekranda
+           * Istanbul saatiyle her alis fisi 03:00 gorunurdu (417 canli fis).
+           * buildInvoiceCreatedAt secilen TARIHI o anki Istanbul SAATIYLE
+           * birlestirir — satis ucu (invoiceCreatedAt) zaten bunu kullaniyor.
+           */
+          ...(invoiceDate ? { createdAt: buildInvoiceCreatedAt(invoiceDate) } : {}),
           items: {
             create: items.map((item) => {
               const lineTotal = calcLineTotalTl(item);
@@ -4195,9 +4281,22 @@ app.post<{
      * bakiyeleri, karsilikli mahsup, iskonto icin. Kasa raporunda gorunmez.
      */
     kasasiz?: boolean;
+    /**
+     * Islemin TARIHI — "2026-11-06". Bos ise bugun.
+     *
+     * Neden gerekti: tahsilat/tediye hep "o an" kaydediliyordu; gun
+     * sonunda ya da ertesi gun islenen bir odeme yanlis gune yaziliyordu
+     * (musteri istegi, 6 Kasim 2026). Saat secilmez — secilen gun, kaydin
+     * girildigi SAATLE birlestirilir (buildInvoiceCreatedAt): fisin gun
+     * icindeki sirasi korunur, satis/alis ucu da ayni mantikla calisir.
+     *
+     * Fis no (ODM-YYYY-NNNN) icinde bulunulan YILA gore uretilmeye devam
+     * eder; fatura tarafinda da fis no giris anindan gelir.
+     */
+    paymentDate?: string;
   };
 }>('/api/customers/payment', async (request, reply) => {
-  const { customerId, amount, type, method, description } = request.body;
+  const { customerId, amount, type, method, description, paymentDate } = request.body;
   const kasasiz = request.body.kasasiz === true;
   const safeId = kasasiz ? null : (request.body.safeId ?? null);
 
@@ -4216,6 +4315,22 @@ app.post<{
       errors: null,
     });
   }
+
+  /*
+   * Tarih gecersizse SESSIZCE bugune dusmuyoruz: bu kayit cari bakiyeyi ve
+   * kasayi degistiriyor, yanlis gune yazilmasi fark edilmeden kalir.
+   */
+  if (paymentDate !== undefined && paymentDate !== '' && !gecerliGunMetni(paymentDate)) {
+    return reply.status(400).send({
+      success: false,
+      message: 'Geçersiz işlem tarihi. Biçim: YYYY-AA-GG.',
+      errors: null,
+    });
+  }
+
+  const paymentCreatedAt = paymentDate?.trim()
+    ? buildInvoiceCreatedAt(paymentDate)
+    : undefined;
 
   // Fis uzerindeki TL karsiligi icin — transaction disinda, bir kez.
   const tryRate = await receiptTryRate();
@@ -4275,6 +4390,7 @@ app.post<{
           tryRate,
           method: kasasiz ? null : method?.trim() || null,
           receiptNo,
+          ...(paymentCreatedAt ? { createdAt: paymentCreatedAt } : {}),
           description:
             description?.trim() ||
             (kasasiz
@@ -4354,6 +4470,19 @@ app.put<{
     description?: string;
     /** true: kasadan cikarilip kasasiz cari kaydina cevrilir */
     kasasiz?: boolean;
+    /**
+     * Islemin TARIHI — "2026-11-06".
+     *
+     * Odeme ekrani kaydettikten sonra kutular temizlenmez; ayni fis
+     * uzerinde "Kaydet"e tekrar basmak bu uca gelir. Tarih burada da
+     * kabul edilmezse kullanici tarihi degistirip tekrar kaydettiginde
+     * degisiklik SESSIZCE kaybolurdu.
+     *
+     * mergeInvoiceDate: tarih gercekten degismediyse kayda dokunulmaz;
+     * degistiyse yeni gun, kaydin KENDI saatiyle birlestirilir — gun
+     * icindeki sirasi bozulmaz (fatura duzenlemesiyle ayni kural).
+     */
+    paymentDate?: string;
   };
 }>('/api/customers/payment/:id', async (request, reply) => {
   const id = Number(request.params.id);
@@ -4366,6 +4495,18 @@ app.put<{
   }
 
   const body = request.body ?? {};
+
+  if (
+    body.paymentDate !== undefined &&
+    body.paymentDate !== '' &&
+    !gecerliGunMetni(body.paymentDate)
+  ) {
+    return reply.status(400).send({
+      success: false,
+      message: 'Geçersiz işlem tarihi. Biçim: YYYY-AA-GG.',
+      errors: null,
+    });
+  }
 
   try {
     const updated = await prisma.$transaction(async (tx) => {
@@ -4477,6 +4618,9 @@ app.put<{
             : body.method !== undefined
               ? { method: body.method.trim() || null }
               : {}),
+          ...(body.paymentDate?.trim()
+            ? { createdAt: mergeInvoiceDate(existing.createdAt, body.paymentDate) }
+            : {}),
           description: nextDescription,
         },
         include: {
@@ -7196,12 +7340,14 @@ app.post<{
 
 app.get('/api/settings/personnels', async () => {
   const personnels = await prisma.user.findMany({
-    orderBy: { name: 'asc' },
+    /* Pasifler listenin sonuna */
+    orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     select: {
       id: true,
       name: true,
       email: true,
       role: true,
+      isActive: true,
       createdAt: true,
       updatedAt: true,
       _count: { select: { invoices: true } },
@@ -7220,6 +7366,7 @@ app.post<{
     name: string;
     email: string;
     password: string;
+    /** admin | satis | depo | okur — bkz. src/lib/yetki.ts */
     role?: string;
   };
 }>('/api/settings/personnel', async (request, reply) => {
@@ -7235,6 +7382,19 @@ app.post<{
     });
   }
 
+  /*
+   * Rol DOGRULANIR. Tanimsiz bir rol yazilsa kod onu en kisitli role
+   * duser (rolCoz) ve kullanici neden hicbir sey yapamadigini anlamaz;
+   * yazim hatasi sessiz kalmasin diye istek reddedilir.
+   */
+  if (role !== undefined && !gecerliRolMu(role)) {
+    return reply.status(400).send({
+      success: false,
+      message: `Geçersiz rol. Seçenekler: ${ROLLER.map((r) => r.kod).join(', ')}.`,
+      errors: null,
+    });
+  }
+
   try {
     const hashedPassword = password.startsWith('$2')
       ? password
@@ -7244,13 +7404,14 @@ app.post<{
         name: trimmedName,
         email: trimmedEmail,
         password: hashedPassword,
-        role: role ?? 'staff',
+        role: (role as Rol | undefined) ?? 'satis',
       },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        isActive: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -7276,11 +7437,22 @@ app.put<{
     name?: string;
     email?: string;
     password?: string;
+    /** admin | satis | depo | okur */
     role?: string;
+    /** false: pasife alinir — giris yapamaz, kaydi silinmez */
+    isActive?: boolean;
   };
 }>('/api/settings/personnel/:id', async (request, reply) => {
   const id = Number(request.params.id);
-  const { name, email, password, role } = request.body;
+  const { name, email, password, role, isActive } = request.body;
+
+  if (role !== undefined && !gecerliRolMu(role)) {
+    return reply.status(400).send({
+      success: false,
+      message: `Geçersiz rol. Seçenekler: ${ROLLER.map((r) => r.kod).join(', ')}.`,
+      errors: null,
+    });
+  }
 
   if (Number.isNaN(id)) {
     return reply.status(400).send({
@@ -7305,14 +7477,29 @@ app.put<{
       data: {
         ...(name?.trim() ? { name: name.trim() } : {}),
         ...(email?.trim() ? { email: email.trim().toLowerCase() } : {}),
-        ...(password ? { password } : {}),
-        ...(role ? { role } : {}),
+        /*
+         * SIFRE HASH'LENIR.
+         *
+         * HATA (6 Kasim 2026'da bulundu): burada `{ password }` yaziyordu —
+         * ekrandan sifre degistiren kullanicinin sifresi veritabanina DUZ
+         * METIN yaziliyordu. Olusturma ucu (POST) hash'liyordu, guncelleme
+         * ucu hic hash'lemiyordu. Login'de bcrypt tutmazsa
+         * `stored === password` dalina dusuldugu icin giris yine calisiyor
+         * ve hata fark edilmiyordu. POST ile ayni kalip kullaniliyor:
+         * zaten hash gelmisse tekrar hash'lenmez.
+         */
+        ...(password
+          ? { password: password.startsWith('$2') ? password : bcrypt.hashSync(password, 10) }
+          : {}),
+        ...(role ? { role: role as Rol } : {}),
+        ...(isActive === undefined ? {} : { isActive }),
       },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        isActive: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -7331,6 +7518,57 @@ app.put<{
     });
   }
 });
+
+/**
+ * KULLANICI SILME — yalnizca hic fis kesmemis kayitlar.
+ *
+ * Fis kesmis bir kullanici SILINEMEZ: gecmis faturalar `userId` ile ona
+ * isaret ediyor ve "bu fisi kim kesti" bilgisi raporlarda kullaniliyor.
+ * O durumda dogru islem PASIFE ALMAKTIR (PUT isActive=false) — yanit da
+ * bunu soyler, kullanici ne yapacagini aramasin.
+ */
+app.delete<{ Params: { id: string } }>(
+  '/api/settings/personnel/:id',
+  async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return reply.status(400).send({
+        success: false,
+        message: 'Geçersiz personel kimliği.',
+        errors: null,
+      });
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, _count: { select: { invoices: true } } },
+    });
+
+    if (!existing) {
+      return reply.status(404).send({
+        success: false,
+        message: 'Personel bulunamadı.',
+        errors: null,
+      });
+    }
+
+    if (existing._count.invoices > 0) {
+      return reply.status(409).send({
+        success: false,
+        message: `${existing.name} ${existing._count.invoices} fiş kesmiş; kaydı silinemez. Bunun yerine pasife alın — giriş yapamaz, geçmiş fişleri okunur kalır.`,
+        errors: null,
+      });
+    }
+
+    await prisma.user.delete({ where: { id } });
+
+    return {
+      success: true,
+      data: { id },
+      message: 'Personel silindi.',
+    };
+  }
+);
 
 app.get('/api/settings/branches', async () => {
   const branches = await prisma.branch.findMany({ orderBy: { name: 'asc' } });

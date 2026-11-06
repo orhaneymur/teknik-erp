@@ -52,7 +52,8 @@ import {
 } from '../lib/receiptParty';
 import { printDocument, musteriDosyaAdi } from '../lib/printMode';
 import { productDisplayName } from '../lib/productDisplayName';
-import { buildPageUrl } from '../lib/navigation';
+import { buildPageUrl, getDocumentTitleLabel } from '../lib/navigation';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useTrashInvoice } from '../hooks/useTrashInvoice';
 
 type Branch = {
@@ -216,6 +217,17 @@ export default function SalesCreate({
   });
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+
+  /*
+   * Sekme basligi secilen musterinin adini gosterir: "Satis Yap · ERSA
+   * TELEKOM". Ayni anda bircok sekme acik calisildigi icin hangisinin hangi
+   * musteriye ait oldugu sekmeden okunabilsin (musteri istegi, 6 Kasim 2026).
+   * Musteri secilmeden once ve secim temizlenince firma adina doner.
+   */
+  useDocumentTitle(
+    getDocumentTitleLabel('sales', { editInvoiceId: editInvoiceId ?? undefined }),
+    selectedCustomer?.name
+  );
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerResults, setCustomerResults] = useState<Customer[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | ''>('');

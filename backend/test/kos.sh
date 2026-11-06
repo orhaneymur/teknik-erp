@@ -54,6 +54,9 @@ BETIKLER=(
   "duzeltmeler-test:evet"
   "tekrar-kaydet-test:evet"
   "fis-kur-test:evet"
+  "alis-saat-test:evet"
+  "odeme-tarihi-test:evet"
+  "yetki-test:evet"
   "harem-kur-test:evet"
   # kendi backend'ini 3011'de sahte Harem'le acar
   "harem-bekci-test:hayir"

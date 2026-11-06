@@ -4,6 +4,7 @@ import { Pencil, Plus, Search, Users, X } from 'lucide-react';
 import CustomerNameLink from '../components/CustomerNameLink';
 import PaginationBar from '../components/PaginationBar';
 import ExcelActions from '../components/ExcelActions';
+import CityDistrictSelect from '../components/CityDistrictSelect';
 import {
   API_BASE,
   balanceStyles,
@@ -457,6 +458,44 @@ export default function CustomerList({ onNotify }: CustomerListProps = {}) {
                   }
                   className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
+              </div>
+              {/*
+                IL / ILCE ve VERGI alanlari.
+
+                Bu dort deger (city, district, taxOffice, taxNumber) form
+                durumunda BASTAN BERI vardi: duzenlemede kayittan yuklenip
+                kaydetmede geri gonderiliyordu, ama ekrana hic basilmamisti.
+                Sonucu: listeden yeni musteri acarken il/ilce hic girilemiyor,
+                duzenlerken de gorunmuyordu. Musteri Karti'ndaki duzenleme
+                ekraninda bu alanlar zaten var; iki ekran ayrismasin
+                (musteri istegi, 6 Kasim 2026).
+              */}
+              <div className="grid grid-cols-2 gap-3">
+                <CityDistrictSelect
+                  city={form.city}
+                  district={form.district}
+                  onChange={(next) => setForm((f) => ({ ...f, ...next }))}
+                  fieldClass="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  labelClass="text-xs font-medium text-slate-600"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Vergi Dairesi</label>
+                  <input
+                    value={form.taxOffice}
+                    onChange={(e) => setForm((f) => ({ ...f, taxOffice: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600">Vergi / TC No</label>
+                  <input
+                    value={form.taxNumber}
+                    onChange={(e) => setForm((f) => ({ ...f, taxNumber: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  />
+                </div>
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-600">Adres</label>

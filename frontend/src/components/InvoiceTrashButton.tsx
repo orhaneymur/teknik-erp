@@ -1,4 +1,5 @@
 import { Trash2 } from 'lucide-react';
+import { yetkiVar } from '../lib/yetki';
 
 type InvoiceTrashButtonProps = {
   onTrash: () => void;
@@ -18,6 +19,16 @@ export default function InvoiceTrashButton({
   trashing,
   disabled = false,
 }: InvoiceTrashButtonProps) {
+  /*
+   * Silme yetkisi yoksa dugme HIC cizilmez.
+   *
+   * Silinen fis stogu, kasayi ve cari bakiyeyi geri aliyor; yanlis silme
+   * sessiz para kaybidir, bu yuzden silme yalnizca yoneticide (bkz.
+   * backend/src/lib/yetki.ts). Gizlemek koruma DEGIL — sunucu da 403
+   * doner; buradaki amac personele yapamayacagi isi gostermemek.
+   */
+  if (!yetkiVar('satis', 'sil')) return null;
+
   return (
     <div className="flex justify-start pt-1 print:hidden">
       <button

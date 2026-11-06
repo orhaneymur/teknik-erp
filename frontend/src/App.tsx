@@ -44,7 +44,9 @@ import CustomerStatement from './pages/CustomerStatement';
 import CustomerDetail from './pages/CustomerDetail';
 import AnalyticsReport from './pages/AnalyticsReport';
 import SalesBreakdownReport from './pages/SalesBreakdownReport';
+import CompanySettings from './pages/CompanySettings';
 import Login from './pages/Login';
+import { yetkileriTemizle, yetkileriYukle } from './lib/yetki';
 import { AppNavigationContext } from './context/AppNavigationContext';
 
 const F2_ENABLED_PAGES: PageId[] = [
@@ -94,6 +96,13 @@ function App() {
       if (category) menus[category] = true;
       return menus;
     });
+  /*
+   * Yetkiler yuklendi mi. Sol menu role gore suzuldugu icin yukleme
+   * bitmeden cizilirse BOS gorunur: bu sayac yuklenince bir kez artar ve
+   * menu yeniden cizilir. Yetkiler bos baslar — ag hatasinda kullaniciya
+   * yapamayacagi dugmeler gosterilmesin.
+   */
+  const [yetkiSurumu, setYetkiSurumu] = useState(0);
   const [f2Trigger, setF2Trigger] = useState(0);
   const [embeddedSalesEditorOpen, setEmbeddedSalesEditorOpen] = useState(false);
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
@@ -280,6 +289,20 @@ function App() {
       editInvoiceId,
     });
   }, [isLoggedIn, activePage, invoiceFilter, preOrderOnly, editInvoiceId]);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      yetkileriTemizle();
+      return;
+    }
+    let iptal = false;
+    void yetkileriYukle().then(() => {
+      if (!iptal) setYetkiSurumu((n) => n + 1);
+    });
+    return () => {
+      iptal = true;
+    };
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -519,6 +542,8 @@ function App() {
         return <BrandModelDefinitions kind="MODEL" onNotify={showNotification} />;
       case 'def-safes':
         return <SafeManager />;
+      case 'settings-company':
+        return <CompanySettings />;
       case 'def-users':
         return <PersonnelManager />;
       default:
@@ -564,6 +589,8 @@ function App() {
       )}
 
       <Sidebar
+        /* Yetkiler gelince menu yeniden cizilsin — kalemler role gore suzuluyor */
+        key={`menu-${yetkiSurumu}`}
         activePage={activePage}
         openMenus={openMenus}
         mobileOpen={mobileNavOpen}

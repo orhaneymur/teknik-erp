@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { Pencil, Plus, Shield, UserCog, Users, X } from 'lucide-react';
+import { Pencil, Plus, Power, Shield, Trash2, UserCog, Users, X } from 'lucide-react';
 import { API_BASE } from '../lib/api';
 
 type Personnel = {
@@ -8,18 +8,43 @@ type Personnel = {
   name: string;
   email: string;
   role: string;
+  isActive?: boolean;
   createdAt: string;
   _count?: { invoices: number };
 };
 
-const roleLabels: Record<string, string> = {
-  admin: 'Yönetici',
-  staff: 'Personel',
-};
+/*
+ * ROLLER — sunucudaki yetki matrisiyle ayni dort rol
+ * (backend/src/lib/yetki.ts). Aciklamalar burada yazili ki yonetici
+ * rolu secerken neyi actigini bilsin; yetkinin kendisi SUNUCUDA zorlanir.
+ *
+ * Eski "staff" rolu artik "satis" — migration ile cevrildi. Tanimadigi bir
+ * deger gelirse (elle duzenlenmis kayit) kod en kisitli role duser.
+ */
+const ROLLER: Array<{ kod: string; ad: string; aciklama: string }> = [
+  { kod: 'admin', ad: 'Yönetici', aciklama: 'Tüm yetkiler — ayarlar ve fiş silme dahil' },
+  {
+    kod: 'satis',
+    ad: 'Satış',
+    aciklama: 'Satış, iade, tahsilat, müşteri. Maliyet/kâr görmez, fiş silemez.',
+  },
+  {
+    kod: 'depo',
+    ad: 'Depo',
+    aciklama: 'Stok, alış, depo transferi. Maliyeti görür, tahsilat yapamaz.',
+  },
+  { kod: 'okur', ad: 'Salt Okunur', aciklama: 'Yalnızca görüntüleme ve Excel indirme' },
+];
+
+const roleLabels: Record<string, string> = Object.fromEntries(
+  ROLLER.map((r) => [r.kod, r.ad])
+);
 
 const roleStyles: Record<string, string> = {
   admin: 'bg-violet-100 text-violet-700 ring-violet-200',
-  staff: 'bg-sky-100 text-sky-700 ring-sky-200',
+  satis: 'bg-sky-100 text-sky-700 ring-sky-200',
+  depo: 'bg-amber-100 text-amber-700 ring-amber-200',
+  okur: 'bg-slate-100 text-slate-600 ring-slate-200',
 };
 
 export default function PersonnelManager() {
@@ -32,7 +57,7 @@ export default function PersonnelManager() {
     name: '',
     email: '',
     password: '',
-    role: 'staff',
+    role: 'satis',
   });
 
   const loadData = useCallback(async () => {
@@ -54,7 +79,7 @@ export default function PersonnelManager() {
   }, [loadData]);
 
   const resetForm = () => {
-    setForm({ name: '', email: '', password: '', role: 'staff' });
+    setForm({ name: '', email: '', password: '', role: 'satis' });
     setEditing(null);
     setShowForm(false);
   };
@@ -73,6 +98,47 @@ export default function PersonnelManager() {
       role: person.role,
     });
     setShowForm(true);
+  };
+
+  /** Pasife al / geri aç — kayit SILINMEZ, gecmis fisler okunur kalir */
+  const aktiflikDegistir = async (person: Personnel) => {
+    const pasifeAl = person.isActive !== false;
+    if (
+      !window.confirm(
+        pasifeAl
+          ? `${person.name} pasife alınsın mı? Giriş yapamaz, geçmiş fişleri olduğu gibi kalır.`
+          : `${person.name} tekrar aktif edilsin mi?`
+      )
+    ) {
+      return;
+    }
+    try {
+      await axios.put(`${API_BASE}/api/settings/personnel/${person.id}`, {
+        isActive: !pasifeAl,
+      });
+      await loadData();
+    } catch {
+      alert('İşlem başarısız.');
+    }
+  };
+
+  /**
+   * Kalici silme — sunucu yalnizca HIC FIS KESMEMIS kaydi siler.
+   * Fisi olan kullanici icin 409 ve "pasife alin" mesaji doner; mesaji
+   * oldugu gibi gosteriyoruz ki kullanici ne yapacagini aramasin.
+   */
+  const kaliciSil = async (person: Personnel) => {
+    if (!window.confirm(`${person.name} kaydı kalıcı olarak silinsin mi?`)) return;
+    try {
+      await axios.delete(`${API_BASE}/api/settings/personnel/${person.id}`);
+      await loadData();
+    } catch (error) {
+      const mesaj =
+        axios.isAxiosError(error) && error.response?.data?.message
+          ? String(error.response.data.message)
+          : 'Silme başarısız.';
+      alert(mesaj);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -124,11 +190,9 @@ export default function PersonnelManager() {
             <UserCog className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="page-title">
-              Personel Tanımları
-            </h1>
+            <h1 className="page-title">Kullanıcı Yönetimi</h1>
             <p className="text-sm text-slate-500">
-              Yıllık ciro raporlarındaki personel kartları
+              Giriş yapan kullanıcılar, rolleri ve yetkileri
             </p>
           </div>
         </div>
@@ -138,7 +202,7 @@ export default function PersonnelManager() {
           className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md"
         >
           <Plus className="w-4 h-4" />
-          Yeni Personel Ekle
+          Yeni Kullanıcı
         </button>
       </div>
 
@@ -187,9 +251,17 @@ export default function PersonnelManager() {
                 onChange={(e) => setForm({ ...form, role: e.target.value })}
                 className="w-full rounded-xl border-slate-300 text-sm px-3 py-2 border"
               >
-                <option value="staff">Personel</option>
-                <option value="admin">Yönetici</option>
+                {ROLLER.map((rol) => (
+                  <option key={rol.kod} value={rol.kod}>
+                    {rol.ad}
+                  </option>
+                ))}
               </select>
+              {/* Rolun ne actigi secim aninda yazilir — yonetici
+                  "Satis ne gorur?" diye kilavuza bakmasin */}
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-500">
+                {ROLLER.find((r) => r.kod === form.role)?.aciklama}
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -227,7 +299,11 @@ export default function PersonnelManager() {
         {personnels.map((person) => (
           <div
             key={person.id}
-            className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 hover:shadow-md transition-shadow"
+            className={`rounded-2xl border p-5 shadow-sm transition-shadow hover:shadow-md ${
+              person.isActive === false
+                ? 'border-slate-200 bg-slate-50 opacity-70'
+                : 'border-slate-200/80 bg-white'
+            }`}
           >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
@@ -243,13 +319,39 @@ export default function PersonnelManager() {
                   <p className="text-xs text-slate-500">{person.email}</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => openEdit(person)}
-                className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => openEdit(person)}
+                  title="Düzenle / şifre sıfırla"
+                  className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-lg"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => aktiflikDegistir(person)}
+                  title={person.isActive === false ? 'Tekrar aktif et' : 'Pasife al'}
+                  className={`rounded-lg p-1.5 ${
+                    person.isActive === false
+                      ? 'text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600'
+                      : 'text-slate-400 hover:bg-amber-50 hover:text-amber-600'
+                  }`}
+                >
+                  <Power className="w-4 h-4" />
+                </button>
+                {/* Fis kesmis kullanici silinemez; sunucu 409 ile
+                    "pasife alin" diyor. Dugme yine duruyor ki yonetici
+                    sebebini ekrandan ogrensin. */}
+                <button
+                  type="button"
+                  onClick={() => kaliciSil(person)}
+                  title="Kalıcı sil (yalnızca hiç fiş kesmemiş kullanıcı)"
+                  className="rounded-lg p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-600"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="mt-4 flex items-center justify-between">
               <span
@@ -258,7 +360,12 @@ export default function PersonnelManager() {
                 <Shield className="w-3 h-3" />
                 {roleLabels[person.role] ?? person.role}
               </span>
-              <span className="text-xs text-slate-400">
+              <span className="flex items-center gap-2 text-xs text-slate-400">
+                {person.isActive === false && (
+                  <span className="rounded-md bg-slate-200 px-1.5 py-0.5 font-semibold text-slate-600">
+                    PASİF
+                  </span>
+                )}
                 {person._count?.invoices ?? 0} fatura
               </span>
             </div>

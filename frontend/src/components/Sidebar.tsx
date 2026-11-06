@@ -6,7 +6,7 @@ import {
   buildPageUrl,
   dashboardItem,
   dashboardQuickLinks,
-  menuCategories,
+  gorunurKategoriler,
 } from '../lib/navigation';
 
 type SidebarProps = {
@@ -43,7 +43,7 @@ export default function Sidebar({
   const isCategoryActive = (categoryId: MenuCategoryId) => {
     if (categoryId === 'customer' && activePage === 'customer-detail') return true;
     return (
-      menuCategories
+      gorunurKategoriler()
         .find((c) => c.id === categoryId)
         ?.items.some((item) => item.id === activePage) ?? false
     );
@@ -149,7 +149,7 @@ export default function Sidebar({
           })}
         </div>
 
-        {menuCategories.map((category) => {
+        {gorunurKategoriler().map((category) => {
           const CategoryIcon = category.icon;
           const isOpen = openMenus[category.id];
           const categoryActive = isCategoryActive(category.id);

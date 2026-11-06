@@ -35,6 +35,26 @@ export function mergeInvoiceDate(mevcut: Date, yeniTarih: string): Date {
   return new Date(`${temiz}T${al('hour')}:${al('minute')}:${al('second')}+03:00`);
 }
 
+/**
+ * Disaridan gelen gun metni gercekten gun mu — "2026-11-06".
+ *
+ * Yalnizca bicim bakmak yetmez: "2026-02-31" bicime uyar ama JavaScript
+ * onu sessizce 3 Mart'a kaydirir. Bu yuzden metin geri cevrilip
+ * karsilastirilir; tutmuyorsa gun yoktur.
+ *
+ * Para kaydi yazan uclarda (odeme tarihi) girdi dogrulamasi icin kullanilir:
+ * gecersiz tarih sessizce "bugun" olmamali, istek reddedilmeli.
+ */
+export function gecerliGunMetni(value: string | undefined | null): boolean {
+  const temiz = value?.trim() ?? '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(temiz)) return false;
+  const d = new Date(`${temiz}T12:00:00+03:00`);
+  if (Number.isNaN(d.getTime())) return false;
+  return (
+    new Intl.DateTimeFormat('en-CA', { timeZone: ISTANBUL_TZ }).format(d) === temiz
+  );
+}
+
 export function buildInvoiceCreatedAt(invoiceDate?: string): Date {
   const datePart =
     invoiceDate?.trim() ||
