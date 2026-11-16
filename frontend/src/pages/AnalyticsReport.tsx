@@ -6,6 +6,7 @@ import {
   Package,
   TrendingUp,
   Users,
+  Wallet,
 } from 'lucide-react';
 import {
   API_BASE,
@@ -17,6 +18,7 @@ import {
   LowStockMeter,
   RankingChart,
 } from '../components/DashboardCharts';
+import OzetKart from '../components/OzetKart';
 
 type StaffTurnover = {
   userId: number;
@@ -45,6 +47,7 @@ type AnalyticsData = {
   staffTurnover: StaffTurnover[];
   charts: {
     dailySales: { label: string; total: number }[];
+    weeklySales?: { thisWeek: number; lastWeek: number };
     monthlySales: { label: string; total: number }[];
     topProducts: ProductSaleRow[];
     bottomProducts: ProductSaleRow[];
@@ -52,6 +55,7 @@ type AnalyticsData = {
     staffComparison: { name: string; monthly: number }[];
   };
   lowStock: { id: number; sku: string; name: string; quantity: number }[];
+  safeBalances: { id: number; name: string; balance: number }[];
 };
 
 function SectionCard({
@@ -111,6 +115,7 @@ export default function AnalyticsReport() {
               staffComparison: ensureArray(payload.charts?.staffComparison),
             },
             lowStock: ensureArray(payload.lowStock),
+            safeBalances: ensureArray(payload.safeBalances),
           });
         }
       })
@@ -119,11 +124,10 @@ export default function AnalyticsReport() {
 
   const summary = useMemo(() => {
     if (!data) {
-      return { monthly: 0, weekly: 0, lowStock: 0, staff: 0 };
+      return { monthly: 0, lowStock: 0, staff: 0 };
     }
     return {
       monthly: data.staffTurnover.reduce((sum, s) => sum + s.monthly, 0),
-      weekly: data.charts.dailySales.reduce((sum, d) => sum + d.total, 0),
       lowStock: data.lowStock.length,
       staff: data.staffTurnover.length,
     };
@@ -145,6 +149,29 @@ export default function AnalyticsReport() {
 
   const topCustomers = data.charts.topCustomers ?? [];
 
+  /*
+   * Satis ve kasa kartlari — anasayfadan buraya tasindi (16 Kasim 2026).
+   * "Bugun satis" BRUT satistir, iade dusulmez.
+   */
+  const bugunSatis = data.charts.dailySales.at(-1)?.total ?? 0;
+  const dunSatis = data.charts.dailySales.at(-2)?.total ?? 0;
+  const buHaftaSatis = data.charts.weeklySales?.thisWeek ?? 0;
+  const gecenHaftaSatis = data.charts.weeklySales?.lastWeek ?? 0;
+  const buAySatis = data.charts.monthlySales.at(-1)?.total ?? 0;
+  const gecenAySatis = data.charts.monthlySales.at(-2)?.total ?? 0;
+
+  // Kasa etiketi (USD/TRY) gosterim icindir; butun tutarlar USD tutulur
+  const kasaToplami = data.safeBalances.reduce(
+    (toplam, safe) => toplam + safe.balance,
+    0
+  );
+
+  /** Onceki doneme gore yuzde degisim; onceki 0 ise oran anlamsizdir */
+  const degisim = (simdi: number, onceki: number): number | null => {
+    if (!onceki) return null;
+    return ((simdi - onceki) / Math.abs(onceki)) * 100;
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex items-center gap-3">
@@ -160,14 +187,41 @@ export default function AnalyticsReport() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
-          <p className="text-caption font-medium uppercase tracking-wide text-slate-400">
-            Son 7 gün
-          </p>
-          <p className="mt-1 text-lg font-bold tabular-nums text-slate-900">
-            {formatMoney(summary.weekly)}
-          </p>
-        </div>
+        <OzetKart
+          etiket="Bugün satış"
+          deger={formatMoney(bugunSatis)}
+          degisim={degisim(bugunSatis, dunSatis)}
+          altBilgi="düne göre"
+          Ikon={TrendingUp}
+        />
+        <OzetKart
+          etiket="Bu hafta satış"
+          deger={formatMoney(buHaftaSatis)}
+          degisim={degisim(buHaftaSatis, gecenHaftaSatis)}
+          altBilgi="son 7 gün · önceki 7 güne göre"
+          Ikon={TrendingUp}
+        />
+        <OzetKart
+          etiket="Bu ay satış"
+          deger={formatMoney(buAySatis)}
+          degisim={degisim(buAySatis, gecenAySatis)}
+          altBilgi="geçen aya göre"
+          Ikon={TrendingUp}
+        />
+        <OzetKart
+          etiket="Kasa"
+          deger={formatMoney(kasaToplami)}
+          altBilgi={
+            data.safeBalances.length === 1
+              ? data.safeBalances[0].name
+              : `${data.safeBalances.length} kasa toplamı`
+          }
+          Ikon={Wallet}
+          sayfa="report-cash-flow"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <div className="rounded-2xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm">
           <p className="text-caption font-medium uppercase tracking-wide text-slate-400">
             Personel aylık

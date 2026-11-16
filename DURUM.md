@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **29 Ekim 2026**
+Son güncelleme: **16 Kasım 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -8,6 +8,25 @@ oturuma başlarken önce buraya bak.
 ---
 
 ## 0. TAM ŞU AN NEREDE KALDIK
+
+> **CANLI v1.22.32 — 16 Kasım 2026 17:09 (Türkiye). Prova da v1.22.32**
+> (13:28). Martech v1.22.24, demo v1.22.23 — dokunulmadı.
+>
+> | Madde | Kimin isteği |
+> |---|---|
+> | Anasayfadaki Bugün / Bu hafta / Bu ay satış ve Kasa kartları Raporlar → İşletme Özeti'nin üstüne taşındı | Kazım (16 Kasım) |
+> | İşletme Özeti'ndeki küçük "Son 7 gün" kutusu kalktı ("Bu hafta satış" ile aynı rakam) | Benim eklemem |
+> | Anasayfada "Düşük stok" kartı "Bugün fiş / adet" satırına indi | Benim eklemem |
+>
+> `/api/reports/analytics` artık `safeBalances` da döner; kart bileşeni
+> `frontend/src/components/OzetKart.tsx` (anasayfa + İşletme Özeti ortak).
+> DB'ye dokunmayan sürüm; ayrı yedek alınmadı. Doğrulama: `tsc` + `vite
+> build`, pod'lar yeni imajda; ekrandan Kazım baktı (prova).
+> **Açık:** anasayfada ciro grafikleri, en iyi müşteriler ve kasa
+> bakiyeleri bölümü duruyor — amaç personelden gizlemekse ayrıca kaldırılır.
+> **Bu belgede eksik:** 6 Kasım'da çıkan v1.22.26 … v1.22.31 (alış fişi
+> saati, ödeme tarihi, sekme başlığı, Site Ayarları, rol bazlı yetki)
+> yalnızca commit 4488f7f'te yazılı.
 
 > **CANLI v1.22.25 — KUR KALICI DÜZELTMESİ, 29 Ekim 2026 00:49 (Türkiye).**
 > Prova da v1.22.25 (00:45). Martech ve demo **hâlâ v1.22.24 / v1.22.23**.

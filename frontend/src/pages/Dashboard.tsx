@@ -36,6 +36,7 @@ import {
 import { useInvoiceEditorFromUrl } from '../hooks/useInvoiceEditorFromUrl';
 import { buildPageUrl, dashboardQuickLinks, type PageId } from '../lib/navigation';
 import InvoiceInlineEditor, { type EditableInvoiceRef } from '../components/InvoiceInlineEditor';
+import OzetKart from '../components/OzetKart';
 
 type SafeBalance = {
   id: number;
@@ -113,82 +114,6 @@ function SeeAllLink({
       {label}
       <ArrowRight className="h-3.5 w-3.5" />
     </a>
-  );
-}
-
-/**
- * Ozet karti — sayfanin ust seridindeki tek rakam.
- *
- * Rakam buyuk ve kalin; etiket ve karsilastirma kucuk. Renk yalnizca
- * ANLAM tasidiginda kullanilir (dusus kirmizi, uyari amber); geri kalan
- * her sey notr kalir ki goz once rakama gitsin.
- */
-function OzetKart({
-  etiket,
-  deger,
-  degisim,
-  altBilgi,
-  Ikon,
-  sayfa,
-  uyari = false,
-}: {
-  etiket: string;
-  deger: string;
-  degisim?: number | null;
-  altBilgi?: string;
-  Ikon: typeof Wallet;
-  sayfa?: PageId;
-  uyari?: boolean;
-}) {
-  const icerik = (
-    <>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-caption font-medium uppercase tracking-wide text-slate-500">
-          {etiket}
-        </span>
-        <Ikon
-          className={`h-4 w-4 ${uyari ? 'text-amber-500' : 'text-slate-300'}`}
-        />
-      </div>
-
-      <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
-        {deger}
-      </p>
-
-      <div className="mt-1 flex items-center gap-1.5 text-xs">
-        {degisim != null && (
-          <span
-            className={`inline-flex items-center gap-0.5 font-semibold ${
-              degisim >= 0 ? 'text-emerald-600' : 'text-red-600'
-            }`}
-          >
-            {degisim >= 0 ? (
-              <ArrowUpRight className="h-3.5 w-3.5" />
-            ) : (
-              <ArrowDownLeft className="h-3.5 w-3.5" />
-            )}
-            %{Math.abs(degisim).toFixed(0)}
-          </span>
-        )}
-        {altBilgi && <span className="text-slate-400">{altBilgi}</span>}
-      </div>
-    </>
-  );
-
-  const sinif =
-    'block rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm ring-1 ring-slate-900/5 no-underline transition';
-
-  return sayfa ? (
-    <a
-      href={buildPageUrl(sayfa)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`${sinif} hover:border-indigo-300 hover:shadow-md`}
-    >
-      {icerik}
-    </a>
-  ) : (
-    <div className={sinif}>{icerik}</div>
   );
 }
 
@@ -420,43 +345,13 @@ export default function Dashboard({
 
   const { insights } = data;
 
-  /*
-   * Ozet rakamlari mevcut veriden turetilir — ek API cagrisi yok.
-   * "Bugun ne oldu" sorusunu sayfanin en ustunde cevaplamak icin:
-   * eskiden bu bilgi yalnizca grafigin icinde, okunmasi zor bicimde vardi.
-   */
-  const bugunSatis = insights.dailySales.at(-1)?.total ?? 0;
-  const dunSatis = insights.dailySales.at(-2)?.total ?? 0;
-  const buHaftaSatis = insights.weeklySales.thisWeek;
-  const gecenHaftaSatis = insights.weeklySales.lastWeek;
-  const buAySatis = insights.monthlySales.at(-1)?.total ?? 0;
-  const gecenAySatis = insights.monthlySales.at(-2)?.total ?? 0;
-
-  /*
-   * Kasa karti butun kasalarin bakiye toplamidir.
-   *
-   * Eskiden yalnizca `currency === 'TRY'` olan kasalar toplaniyordu; bu
-   * uygulamada butun tutarlar USD tutulur ve kasalar "USD" etiketiyle
-   * acilir, o yuzden kart canlida hep 0 gosteriyordu (musteri bildirdi,
-   * 15 Eylul 2026). Kasa etiketi gosterim icindir, tutari degistirmez.
-   */
-  const kasaToplami = data.safeBalances.reduce(
-    (toplam, safe) => toplam + safe.balance,
-    0
-  );
-
-  /** Onceki doneme gore yuzde degisim; onceki 0 ise oran anlamsizdir */
-  const degisim = (simdi: number, onceki: number): number | null => {
-    if (!onceki) return null;
-    return ((simdi - onceki) / Math.abs(onceki)) * 100;
-  };
-
   return (
     /*
      * Blok sırası (üst → alt):
      *   1 başlık
      *   2 hızlı işlemler
-     *   3 özet — bugün/bu ay/kasa/düşük stok
+     *   3 özet — bugün fiş/adet, düşük stok (satış tutarları ve kasa
+     *     toplamı İşletme Özeti'ne taşındı, 16 Kasım 2026)
      *   4 kasa bakiyeleri
      *   5 son faturalar + kasa hareketleri   ← gün içinde en sık bakılan
      *   6 grafikler ve düşük stok listesi
@@ -531,50 +426,6 @@ export default function Dashboard({
         </div>
       </section>
 
-      {/* Ozet — sayfanin en cok bakilan satiri, en buyuk rakamlar burada */}
-      <section className="order-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <OzetKart
-          etiket="Bugün satış"
-          deger={formatMoney(bugunSatis)}
-          degisim={degisim(bugunSatis, dunSatis)}
-          altBilgi="düne göre"
-          Ikon={TrendingUp}
-        />
-        <OzetKart
-          etiket="Bu hafta satış"
-          deger={formatMoney(buHaftaSatis)}
-          degisim={degisim(buHaftaSatis, gecenHaftaSatis)}
-          altBilgi="son 7 gün · önceki 7 güne göre"
-          Ikon={TrendingUp}
-        />
-        <OzetKart
-          etiket="Bu ay satış"
-          deger={formatMoney(buAySatis)}
-          degisim={degisim(buAySatis, gecenAySatis)}
-          altBilgi="geçen aya göre"
-          Ikon={TrendingUp}
-        />
-        <OzetKart
-          etiket="Kasa"
-          deger={formatMoney(kasaToplami)}
-          altBilgi={
-            data.safeBalances.length === 1
-              ? data.safeBalances[0].name
-              : `${data.safeBalances.length} kasa toplamı`
-          }
-          Ikon={Wallet}
-          sayfa="report-cash-flow"
-        />
-        <OzetKart
-          etiket="Düşük stok"
-          deger={`${insights.lowStock.length}`}
-          altBilgi="5 adet ve altı"
-          Ikon={Package}
-          sayfa="stock-list"
-          uyari={insights.lowStock.length > 0}
-        />
-      </section>
-
       {/* Bugunun sayilari — musteri istegi (16 Eylul 2026): tutarin yaninda
           kac fis kesildi, kac adet satildi da gorunsun. Ayri satir; ust
           satiri sikistirmiyor. 00:00'dan itibaren, teslim edilmis satislar. */}
@@ -592,6 +443,14 @@ export default function Dashboard({
           altBilgi="00:00'dan beri satılan ürün adedi"
           Ikon={ShoppingBag}
           sayfa="report-sales-breakdown"
+        />
+        <OzetKart
+          etiket="Düşük stok"
+          deger={`${insights.lowStock.length}`}
+          altBilgi="5 adet ve altı"
+          Ikon={Package}
+          sayfa="stock-list"
+          uyari={insights.lowStock.length > 0}
         />
       </section>
 

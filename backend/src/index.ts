@@ -2754,10 +2754,17 @@ app.get('/api/sales/dashboard', async () => {
 });
 
 app.get('/api/reports/analytics', async () => {
-  const data = await buildAnalyticsReport();
+  // Kasa toplami karti anasayfadan Isletme Ozeti'ne tasindi (16 Kasim 2026)
+  const [data, safeBalances] = await Promise.all([
+    buildAnalyticsReport(),
+    prisma.safe.findMany({
+      select: { id: true, name: true, balance: true },
+      orderBy: { name: 'asc' },
+    }),
+  ]);
   return {
     success: true,
-    data,
+    data: { ...data, safeBalances },
     message: 'Analytics report retrieved successfully.',
   };
 });
