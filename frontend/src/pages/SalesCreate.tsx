@@ -138,8 +138,6 @@ type SalesCreateProps = {
   onSaved?: () => void;
   /** Listeden "Yazdır": fiş yüklenince yazdır, bitince onCancelEdit ile dön */
   autoPrint?: boolean;
-  /** Fatura düzenleme modunda F2'nin App seviyesinde tanınması için */
-  onF2ContextActive?: (active: boolean) => void;
 };
 
 function calcLineTotalUsd(
@@ -181,7 +179,6 @@ export default function SalesCreate({
   onCancelEdit,
   onSaved,
   autoPrint = false,
-  onF2ContextActive,
 }: SalesCreateProps) {
   /**
    * MUKERRER FIS KORUMASI (11 Eylul 2026).
@@ -200,15 +197,7 @@ export default function SalesCreate({
   const isEditMode = activeInvoiceId != null && activeInvoiceId > 0;
 
   const onCancelEditRef = useRef(onCancelEdit);
-  const onF2ContextActiveRef = useRef(onF2ContextActive);
   onCancelEditRef.current = onCancelEdit;
-  onF2ContextActiveRef.current = onF2ContextActive;
-
-  useEffect(() => {
-    if (!isEditMode) return;
-    onF2ContextActiveRef.current?.(true);
-    return () => onF2ContextActiveRef.current?.(false);
-  }, [isEditMode]);
   const [initData, setInitData] = useState<InitData>({
     branches: [],
     safes: [],
@@ -218,16 +207,6 @@ export default function SalesCreate({
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
-  /*
-   * Sekme basligi secilen musterinin adini gosterir: "Satis Yap · ERSA
-   * TELEKOM". Ayni anda bircok sekme acik calisildigi icin hangisinin hangi
-   * musteriye ait oldugu sekmeden okunabilsin (musteri istegi, 6 Kasim 2026).
-   * Musteri secilmeden once ve secim temizlenince firma adina doner.
-   */
-  useDocumentTitle(
-    getDocumentTitleLabel('sales', { editInvoiceId: editInvoiceId ?? undefined }),
-    selectedCustomer?.name
-  );
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerResults, setCustomerResults] = useState<Customer[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<number | ''>('');
@@ -248,6 +227,20 @@ export default function SalesCreate({
   const [orderNotes, setOrderNotes] = useState('');
   const [isPreOrder, setIsPreOrder] = useState(false);
   const [shouldPrint, setShouldPrint] = useState(false);
+  /*
+   * Sekme basligi secilen musterinin adini gosterir: "SF · ERSA TELEKOM".
+   * Ayni anda bircok sekme acik calisildigi icin hangisinin hangi
+   * musteriye ait oldugu sekmeden okunabilsin (musteri istegi, 6 Kasim 2026).
+   * Musteri secilmeden once ve secim temizlenince firma adina doner.
+   * On sipariste "OS" (isPreOrder'dan sonra cagrilir).
+   */
+  useDocumentTitle(
+    getDocumentTitleLabel('sales', {
+      editInvoiceId: editInvoiceId ?? undefined,
+      preOrderOnly: isPreOrder,
+    }),
+    selectedCustomer?.name
+  );
   const [printParty, setPrintParty] = useState<ReceiptParty | null>(null);
   /**
    * Fişteki TL karşılığının kuru. Kaydedilmiş faturada kur KAYITTA durur
@@ -989,7 +982,23 @@ export default function SalesCreate({
         onDataChange?.();
         // Listeden duzenlemeye gelindiyse listeye don. Bu ekranda kesilmis
         // fisi guncelliyorsak EKRANDA KALINIR; kullanici yine duzeltebilir.
-        if (editInvoiceId) onSaved?.();
+        const duzenlemeBitti = () => {
+          if (editInvoiceId) onSaved?.();
+        };
+        /*
+         * On sipariste "Kayittan sonra fis yazdir" kutusu (musteri istegi,
+         * 18 Kasim 2026). Yazdirma listeye donmeden ONCE yapilir; donunce
+         * fis ekrandan kalkar. window.print diyalog kapanana kadar bekler.
+         */
+        if (shouldPrint) {
+          setShouldPrint(false);
+          window.setTimeout(() => {
+            printDocument(pdfDosyaAdi);
+            duzenlemeBitti();
+          }, 150);
+        } else {
+          duzenlemeBitti();
+        }
         return;
       }
 
@@ -1803,7 +1812,9 @@ export default function SalesCreate({
               />
               <span className="text-sm font-medium text-slate-700">Ön Sipariş</span>
             </label>
-            {!isEditMode && (
+            {/* On sipariste duzenlemede de kutu var; satis duzenlemesinde
+                asagidaki "Fis Yazdir" dugmesi kalir. */}
+            {(!isEditMode || isPreOrder) && (
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1860,7 +1871,7 @@ export default function SalesCreate({
             </button>
           )}
 
-          {isEditMode && (
+          {isEditMode && !isPreOrder && (
             <button
               type="button"
               onClick={handlePrint}

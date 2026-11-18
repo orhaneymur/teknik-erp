@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import F2CustomerList from './F2CustomerList';
 import { useF2CustomerSearch } from '../hooks/useF2CustomerSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
-import type { Customer } from '../lib/api';
+import { MUSTERI_ARAMA_MIN_KARAKTER, type Customer } from '../lib/api';
 
 type CustomerSearchPanelProps = {
   onSelect: (customer: Customer) => void;
@@ -92,7 +92,11 @@ export default function CustomerSearchPanel({
         )}
         {!search.loading && search.results.length === 0 && (
           <p className="px-3 py-8 text-center text-sm text-slate-400">
-            {search.searchQuery.trim() ? 'Sonuç bulunamadı.' : 'Müşteri bulunamadı.'}
+            {!search.searchQuery.trim()
+              ? 'Müşteri bulunamadı.'
+              : search.searchQuery.trim().length < MUSTERI_ARAMA_MIN_KARAKTER
+                ? `En az ${MUSTERI_ARAMA_MIN_KARAKTER} karakter yazın`
+                : 'Sonuç bulunamadı.'}
           </p>
         )}
       </div>

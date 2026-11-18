@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import {
   API_BASE,
-  SEARCH_MIN_CHARS,
+  MUSTERI_ARAMA_MIN_KARAKTER,
   ensureArray,
   type Customer,
   type PaginatedListResponse,
@@ -108,7 +108,7 @@ export function useF2CustomerSearch(options: {
     }
 
     // 1-2 harf: arama başlatma (en az 3 harf gerekli). Boş sorgu tümünü listeler.
-    if (trimmed.length > 0 && trimmed.length < SEARCH_MIN_CHARS) {
+    if (trimmed.length > 0 && trimmed.length < MUSTERI_ARAMA_MIN_KARAKTER) {
       setResults([]);
       setTotalCount(0);
       setHasMore(false);

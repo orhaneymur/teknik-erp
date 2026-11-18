@@ -20,6 +20,8 @@ type ProductSearchPopoverProps = {
   children: ReactNode;
   emptyHint?: string;
   showEmpty?: boolean;
+  /** Arama icin en az karakter — musteri penceresi 3 kullanir */
+  minKarakter?: number;
   searchPlaceholder?: string;
 };
 
@@ -42,6 +44,7 @@ export default function ProductSearchPopover({
   children,
   emptyHint = 'Ürünler yükleniyor...',
   showEmpty = true,
+  minKarakter = SEARCH_MIN_CHARS,
   searchPlaceholder = 'SKU, barkod veya ürün adı...',
 }: ProductSearchPopoverProps) {
   useEffect(() => {
@@ -122,8 +125,8 @@ export default function ProductSearchPopover({
         {!searchLoading && showEmpty && (
           <p className="px-3 py-6 text-center text-slate-400 text-xs">
             {searchQuery.trim().length > 0 &&
-            searchQuery.trim().length < SEARCH_MIN_CHARS
-              ? `En az ${SEARCH_MIN_CHARS} harf yazın`
+            searchQuery.trim().length < minKarakter
+              ? `En az ${minKarakter} karakter yazın`
               : emptyHint}
           </p>
         )}

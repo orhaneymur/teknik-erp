@@ -1297,241 +1297,388 @@ export default function SalesReturn({
               <ArrowLeft className="h-5 w-5" />
             </button>
           )}
-          <div className="rounded-xl bg-amber-600 p-2.5 text-white">
+          <div className="rounded-xl bg-emerald-600 p-2.5 text-white">
             <RotateCcw className="h-5 w-5" />
           </div>
           <div>
             <h1 className="page-title">İade Faturası Düzenle</h1>
-            <p className="text-sm text-slate-500">
+            <p className="page-subtitle">
               {savedInvoiceId != null
                 ? `${displayInvoiceNo} kaydedildi · tekrar Kaydet aynı fişi günceller · yeni iade için "Yeni İade"`
-                : `${displayInvoiceNo} · ${editCustomerLabel}`}
+                : `${displayInvoiceNo} · ${editCustomerLabel} · F2 stok ara · Fiyatlar $ (USD)`}
             </p>
           </div>
         </div>
 
         {/*
-          IADE DUZENLEME — "Hizli Iade Al" ekraniyla AYNI TEZGAH DUZENI
-          (musteri istegi, 11 Eylul 2026).
-
-          Onceden tek sutunlu, digerlerine benzemeyen bir duzendi: satis ve
-          alis faturalari duzenlenirken kendi "yap" ekranlarinda aciliyor,
-          yalniz iade farkli gorunuyordu. Alanlar ve isleyiciler aynen
-          korundu; yalnizca yerlesim iki sutuna alindi — solda kalemler,
-          sagda fatura bilgileri ve toplam.
+          IADE DUZENLEME — "Hizli Iade Al" ekraninin BIREBIR DUZENI
+          (musteri istegi, 18 Kasim 2026: "satis iadedeki gibi gorunsun,
+          diger turlu kafa karistiriyor"). Ustte dort kart, ortada F2
+          dugmesi, altta Akilli Sepet + Fatura Ozeti. Alanlar ve
+          isleyiciler degismedi; yalnizca yerlesim. Musteri ve iade turu
+          kayitli fisten gelir, duzenlemede degistirilemez.
         */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3 print:hidden">
-          <div className="space-y-4 xl:col-span-2">
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm print:hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-700">Fatura Kalemleri</p>
-              <button
-                type="button"
-                onClick={() => setSearchModal(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 hover:bg-amber-100"
-              >
-                <Search className="h-4 w-4" />
-                Ürün Ekle (F2)
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100 text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                      SKU
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
-                      Ürün
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
-                      Adet
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
-                      Birim ($)
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-slate-500">
-                      Çin İade
-                    </th>
-                    <th className="w-12 px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {editLines.map((line) => (
-                    <tr key={line.rowId} className="hover:bg-slate-50/60">
-                      <td className="px-4 py-3 font-mono font-semibold">{line.productSku}</td>
-                      <td className="px-4 py-3">
-                        {line.productName}
-                        {line.invoiceItemId == null && (
-                          <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-caption font-semibold text-emerald-700">
-                            yeni
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <NumericInput
-                          ref={setEditInputRef(line.rowId, 'quantity')}
-                          decimal={false}
-                          min={1}
-                          value={line.quantity}
-                          onValueChange={(qty) => {
-                            setSavedNotice(null);
-                            setEditLines((prev) =>
-                              prev.map((row) =>
-                                row.rowId === line.rowId
-                                  ? { ...row, quantity: qty > 0 ? qty : row.quantity }
-                                  : row
-                              )
-                            );
-                          }}
-                          onKeyDown={(e) => onEditFieldKeyDown(e, line.rowId, 'quantity')}
-                          className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <NumericInput
-                          ref={setEditInputRef(line.rowId, 'unitPriceTl')}
-                          min={0}
-                          value={line.unitPriceTl}
-                          onValueChange={(price) => {
-                            setSavedNotice(null);
-                            setEditLines((prev) =>
-                              prev.map((row) =>
-                                row.rowId === line.rowId
-                                  ? {
-                                      ...row,
-                                      unitPriceTl: price >= 0 ? roundPrice(price) : row.unitPriceTl,
-                                    }
-                                  : row
-                              )
-                            );
-                          }}
-                          onKeyDown={(e) => onEditFieldKeyDown(e, line.rowId, 'unitPriceTl')}
-                          className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-right text-sm"
-                        />
-                      </td>
-                      {/*
-                        * Cin iade tiki: isaretli satirin stogu MERKEZ_DEPO
-                        * yerine CIN_IADE_DEPO'ya isler. Duzenlemede tik
-                        * degistirilirse sunucu miktari iki depo arasinda
-                        * tasir.
-                        */}
-                      <td className="px-4 py-3 text-center">
-                        <input
-                          type="checkbox"
-                          checked={line.isChinaReturn}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setSavedNotice(null);
-                            setEditLines((prev) =>
-                              prev.map((row) =>
-                                row.rowId === line.rowId
-                                  ? { ...row, isChinaReturn: checked }
-                                  : row
-                              )
-                            );
-                          }}
-                          title={
-                            line.isChinaReturn
-                              ? depotLabel('CIN_IADE_DEPO')
-                              : depotLabel('MERKEZ_DEPO')
-                          }
-                          className="h-4 w-4 rounded border-slate-300 text-orange-600"
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => removeEditLine(line.rowId)}
-                          className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {editLines.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
-                        Kalem yok
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-          </div>
-
-          <aside className="h-fit space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm xl:sticky xl:top-0">
-            <h2 className="font-semibold text-slate-800">Fatura Bilgileri</h2>
-
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 print:hidden">
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="border-b border-indigo-100 pb-2 text-sm font-bold text-indigo-700">
+              Evrak Bilgileri
+            </h2>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Müşteri</label>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-                {editCustomerLabel || '—'}
-              </div>
+              <label className="field-label">İade Fiş No</label>
+              <input
+                type="text"
+                readOnly
+                value={displayInvoiceNo}
+                className="field-input bg-slate-50 font-mono font-bold text-indigo-700"
+              />
             </div>
-
-          <div className="space-y-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Fatura Tarihi</label>
+              <label className="field-label">İade Tarihi</label>
               <input
                 type="date"
                 value={editInvoiceDate}
                 onChange={(e) => setEditInvoiceDate(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="field-input"
               />
             </div>
-            <div className="">
-              <label className="mb-1 block text-sm font-medium text-slate-700">İşlemi Yapan</label>
+            <div>
+              <label className="field-label">İşlemi Yapan</label>
               <input
                 type="text"
                 value={editProcessedBy}
                 onChange={(e) => setEditProcessedBy(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="field-input"
               />
             </div>
-          </div>
+          </section>
 
-          <div className="print:hidden">
-            <label className="mb-1 block text-sm font-medium text-slate-700">Not</label>
-            <textarea
-              rows={2}
-              value={editNotes}
-              onChange={(e) => setEditNotes(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </div>
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="border-b border-indigo-100 pb-2 text-sm font-bold text-indigo-700">
+              Müşteri Bilgileri
+            </h2>
+            <div>
+              <label className="field-label">Müşteri</label>
+              <div className="flex items-stretch gap-2">
+                <div className="min-w-0 flex-1 truncate rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                  {editCustomerLabel || '—'}
+                </div>
+                {editCustomerId !== '' && (
+                  <button
+                    type="button"
+                    title="Müşteri ekstresini yeni sekmede aç"
+                    onClick={() =>
+                      window.open(
+                        buildPageUrl('report-customer-statement', {
+                          customerId: Number(editCustomerId),
+                        }),
+                        '_blank',
+                        'noopener,noreferrer'
+                      )
+                    }
+                    className="inline-flex shrink-0 items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 text-indigo-700 hover:bg-indigo-100"
+                  >
+                    <FileText className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="field-label">Müşteri Limiti</label>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                  {selectedCustomer ? formatMoney(selectedCustomer.creditLimit) : '—'}
+                </div>
+              </div>
+              <div>
+                <label className="field-label">Müşteri Bakiyesi</label>
+                <div
+                  className={`rounded-lg border px-3 py-2 text-sm font-bold ${
+                    selectedCustomer && selectedCustomer.balance > 0
+                      ? 'border-red-200 bg-red-50 text-red-700'
+                      : selectedCustomer && selectedCustomer.balance < 0
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                        : 'border-slate-200 bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  {selectedCustomer ? formatMoney(selectedCustomer.balance) : '—'}
+                </div>
+              </div>
+            </div>
+          </section>
 
-          <div className="space-y-3 border-t border-slate-100 pt-3">
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="border-b border-indigo-100 pb-2 text-sm font-bold text-indigo-700">
+              Fatura Tipi
+            </h2>
+            <div>
+              <label className="field-label">İade Türü</label>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+                {editAffectsBalance
+                  ? 'Açık Fatura — müşteri carisine işler'
+                  : 'Kapalı Fatura — kasadan para çıkar'}
+              </div>
+              <p className="mt-1 text-caption text-slate-400">
+                Kayıtlı fişin türüdür; düzenlemede değişmez.
+              </p>
+            </div>
+          </section>
+
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="border-b border-indigo-100 pb-2 text-sm font-bold text-indigo-700">
+              Teslimat &amp; Açıklama
+            </h2>
+            <div className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              <p>
+                <span className="font-semibold text-emerald-700">{depotLabel('MERKEZ_DEPO')}</span>
+                {' — '}normal iade stok girişi
+              </p>
+              <p>
+                <span className="font-semibold text-orange-700">{depotLabel('CIN_IADE_DEPO')}</span>
+                {' — '}satırda &quot;Çin İade&quot; işaretleyin
+              </p>
+            </div>
+            <div>
+              <label className="field-label">Sipariş Açıklaması</label>
+              <textarea
+                rows={3}
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="İade notu, açıklama..."
+                className="field-input resize-none"
+              />
+            </div>
+          </section>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setSearchModal(true)}
+          className="btn btn-secondary btn-block print:hidden"
+        >
+          <Search className="h-5 w-5" />
+          Hızlı Stok Kartı Bul (F2)
+        </button>
+
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-4 print:hidden">
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:col-span-3">
+            <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3">
+              <ShoppingCart className="h-5 w-5 text-indigo-600" />
+              <h2 className="font-semibold text-slate-800">Akıllı Sepet</h2>
+              <span className="text-sm text-slate-500">({editLines.length} kalem)</span>
+            </div>
+
+            {editLines.length === 0 ? (
+              <p className="px-5 py-12 text-center text-sm text-slate-400">
+                Kalem yok.{' '}
+                <kbd className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">F2</kbd> ile ürün
+                ekleyin.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                        Ürün
+                      </th>
+                      <th className="w-24 px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                        İade Adet
+                      </th>
+                      <th className="w-20 px-4 py-3 text-center text-xs font-semibold uppercase text-slate-500">
+                        Çin İade
+                      </th>
+                      <th className="w-28 px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                        Birim ($)
+                      </th>
+                      <th className="w-28 px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">
+                        Toplam ($)
+                      </th>
+                      <th className="w-20 px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {editLines.map((line) => (
+                      <tr
+                        key={line.rowId}
+                        className={line.isChinaReturn ? 'bg-orange-50/50' : undefined}
+                      >
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setHistoryProduct({
+                                id: line.productId,
+                                sku: line.productSku,
+                                name: line.productName,
+                              })
+                            }
+                            className="text-left text-sm font-medium text-slate-900 hover:text-violet-700 hover:underline"
+                            title="Stok hareketlerini görüntüle"
+                          >
+                            {line.productName}
+                          </button>
+                          {line.invoiceItemId == null && (
+                            <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-caption font-semibold text-emerald-700">
+                              yeni
+                            </span>
+                          )}
+                          <p className="text-xs text-slate-500">{line.productSku}</p>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <NumericInput
+                            ref={setEditInputRef(line.rowId, 'quantity')}
+                            decimal={false}
+                            min={1}
+                            value={line.quantity}
+                            onValueChange={(qty) => {
+                              setSavedNotice(null);
+                              setEditLines((prev) =>
+                                prev.map((row) =>
+                                  row.rowId === line.rowId
+                                    ? { ...row, quantity: qty > 0 ? qty : row.quantity }
+                                    : row
+                                )
+                              );
+                            }}
+                            onKeyDown={(e) => onEditFieldKeyDown(e, line.rowId, 'quantity')}
+                            className="w-20 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
+                          />
+                        </td>
+                        {/*
+                          * Cin iade tiki: isaretli satirin stogu MERKEZ_DEPO
+                          * yerine CIN_IADE_DEPO'ya isler. Duzenlemede tik
+                          * degistirilirse sunucu miktari iki depo arasinda
+                          * tasir.
+                          */}
+                        <td className="px-4 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={line.isChinaReturn}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setSavedNotice(null);
+                              setEditLines((prev) =>
+                                prev.map((row) =>
+                                  row.rowId === line.rowId
+                                    ? { ...row, isChinaReturn: checked }
+                                    : row
+                                )
+                              );
+                            }}
+                            title={
+                              line.isChinaReturn
+                                ? depotLabel('CIN_IADE_DEPO')
+                                : depotLabel('MERKEZ_DEPO')
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-orange-600"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm">
+                          <NumericInput
+                            ref={setEditInputRef(line.rowId, 'unitPriceTl')}
+                            min={0}
+                            value={line.unitPriceTl}
+                            onValueChange={(price) => {
+                              setSavedNotice(null);
+                              setEditLines((prev) =>
+                                prev.map((row) =>
+                                  row.rowId === line.rowId
+                                    ? {
+                                        ...row,
+                                        unitPriceTl: price >= 0 ? roundPrice(price) : row.unitPriceTl,
+                                      }
+                                    : row
+                                )
+                              );
+                            }}
+                            onKeyDown={(e) => onEditFieldKeyDown(e, line.rowId, 'unitPriceTl')}
+                            className="w-20 rounded-md border border-violet-200 px-2 py-1 text-right text-sm"
+                            title="Birim fiyat USD — iade fiyatı değiştirilebilir"
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-semibold">
+                          {formatUsd(roundPrice(line.quantity * line.unitPriceTl))}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => removeEditLine(line.rowId)}
+                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            title="Satırı kaldır"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <aside className="h-fit space-y-4 rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm sm:p-5 xl:sticky xl:top-0 xl:col-span-1 xl:max-h-[calc(100dvh-7rem)] xl:overflow-y-auto">
+            <h2 className="border-b border-slate-200 pb-2 text-center font-bold text-slate-800">
+              Fatura Özeti
+            </h2>
+
             {displayInvoiceNo && (
               <KayitliFisRozeti fisNo={displayInvoiceNo} tarih={editInvoiceDate} />
             )}
-            <p className="text-sm font-semibold text-slate-700">
-              Toplam: {formatUsd(editTotalTl)}
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handlePrint}
-                disabled={editLines.length === 0}
-                className="btn inline-flex items-center gap-2 border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
-              >
-                <Printer className="h-5 w-5" />
-                Fiş Yazdır
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleEditSave()}
-                disabled={submitting}
-                className="btn btn-lg btn-primary inline-flex items-center gap-2"
-              >
-                <Save className="h-5 w-5" />
-                {submitting ? 'Kaydediliyor...' : 'DEĞİŞİKLİKLERİ KAYDET'}
-              </button>
+
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-wide text-slate-500">
+                Toplam Ürün Adedi
+              </p>
+              <p className="text-2xl font-extrabold text-blue-600">{editTotalQty} Adet</p>
             </div>
-          </div>
+
+            <div className="text-center">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Net Toplam ($)</p>
+              <p className="text-3xl font-black tabular-nums text-red-600">
+                {formatUsd(editTotalTl)}
+              </p>
+            </div>
+
+            <div className="space-y-2 border-t border-slate-200 pt-2 text-sm">
+              <div className="flex justify-between text-slate-600">
+                <span>Fatura tipi</span>
+                <span className="font-medium text-indigo-700">
+                  {editAffectsBalance ? 'Açık (Cari)' : 'Kapalı (Kasa)'}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>{depotLabel('MERKEZ_DEPO')}</span>
+                <span className="font-medium text-emerald-700">
+                  {editLines.filter((l) => !l.isChinaReturn).length} kalem
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>{depotLabel('CIN_IADE_DEPO')}</span>
+                <span className="font-medium text-orange-700">
+                  {editLines.filter((l) => l.isChinaReturn).length} kalem
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={editLines.length === 0}
+              className="btn btn-block inline-flex items-center justify-center gap-2 border-2 border-indigo-300 bg-indigo-50 font-bold text-indigo-800 hover:bg-indigo-100"
+            >
+              <Printer className="h-5 w-5" />
+              Fiş Yazdır
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleEditSave()}
+              disabled={submitting}
+              className="btn btn-lg btn-primary btn-block uppercase tracking-wide"
+            >
+              <Save className="h-5 w-5" />
+              {submitting ? 'Kaydediliyor...' : 'DEĞİŞİKLİKLERİ KAYDET'}
+            </button>
           </aside>
         </div>
 
@@ -1580,6 +1727,13 @@ export default function SalesReturn({
             />
           )}
         </ProductSearchPopover>
+
+        <ProductStockHistoryModal
+          open={historyProduct != null}
+          onClose={() => setHistoryProduct(null)}
+          product={historyProduct}
+          initialCustomer={selectedCustomer}
+        />
       </div>
     );
   }

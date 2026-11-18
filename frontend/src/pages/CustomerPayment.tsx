@@ -17,6 +17,7 @@ import { useF2CustomerSearch } from '../hooks/useF2CustomerSearch';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
 import {
   API_BASE,
+  MUSTERI_ARAMA_MIN_KARAKTER,
   balanceStyles,
   ensureArray,
   formatMoney,
@@ -1273,6 +1274,7 @@ export default function CustomerPayment({
             : undefined
         }
         emptyHint="Müşteri kodu veya adı yazın..."
+        minKarakter={MUSTERI_ARAMA_MIN_KARAKTER}
         showEmpty={!f2.loading && f2.results.length === 0}
       >
         <F2CustomerList

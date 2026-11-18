@@ -1,6 +1,6 @@
 # Durum ve Devam Notu
 
-Son güncelleme: **16 Kasım 2026**
+Son güncelleme: **18 Kasım 2026**
 
 Bu belge "nerede kaldık, sırada ne var" sorusunu cevaplar. Yeni bir
 oturuma başlarken önce buraya bak.
@@ -8,6 +8,20 @@ oturuma başlarken önce buraya bak.
 ---
 
 ## 0. TAM ŞU AN NEREDE KALDIK
+
+> **CANLI v1.22.38 — 18 Kasım 2026. Prova da v1.22.38.** Martech
+> v1.22.24, demo v1.22.23 — dokunulmadı. Kazım her sürümü provada kontrol
+> edip altısını birlikte canlıya aldırdı. Hepsi yalnızca arayüz; DB'ye
+> dokunmuyor, ayrı yedek alınmadı.
+>
+> | Sürüm | Madde | Kimin isteği |
+> |---|---|---|
+> | v1.22.33 | İade düzenleme ekranı "Hızlı İade Al" düzeninde (4 kart + Akıllı Sepet + Fatura Özeti); müşteri ve iade türü düzenlemede yalnızca gösterilir | Kazım |
+> | v1.22.34 | Müşteri seçiminde en az 3 karakter (`MUSTERI_ARAMA_MIN_KARAKTER`); ürün araması 2'de kaldı | Kazım |
+> | v1.22.35 | Ön sipariş düzenlemesinde "Fiş Yazdır" yerine "Kayıttan sonra fiş yazdır" kutusu; yazdırma listeye dönmeden önce | Kazım |
+> | v1.22.36 | Anasayfadan düzenlenen fiş kayıttan sonra kapanıyor, aynı fişe tekrar girince anasayfaya atıyordu — `refreshKey` effect'i kaldırıldı; düzenleyiciyi yalnızca adres kapatır, kayıttan sonra ekranda kalınır | Kazım (hata bildirimi) |
+> | v1.22.37 | Fiş sekme başlıkları kısa: SF / ÖS / AF / İF, düzenlemede "✎" | Kazım |
+> | v1.22.38 | Gömülü alış/iade fişinde F2 "yalnızca … ekranlarında çalışır" diyordu — F2 bağlamı `InvoiceInlineEditor`'da (context: `f2Trigger`, `setF2ContextActive`); müşteri kartı/ekstreden açılan fişlerde de çalışır | Kazım (hata bildirimi) |
 
 > **CANLI v1.22.32 — 16 Kasım 2026 17:09 (Türkiye). Prova da v1.22.32**
 > (13:28). Martech v1.22.24, demo v1.22.23 — dokunulmadı.

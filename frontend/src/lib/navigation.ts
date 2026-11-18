@@ -409,14 +409,19 @@ export function getDocumentTitleLabel(
     return name || 'Müşteri Kartı';
   }
 
-  if (options?.editInvoiceId) {
-    if (page === 'sales' || page === 'dashboard' || page === 'pre-orders') {
-      return 'Satış Faturası Düzenle';
-    }
-    if (page === 'invoice-purchase') return 'Alış Faturası Düzenle';
-    if (page === 'sales-return') return 'İade Faturası Düzenle';
-    return 'Fatura Düzenle';
+  /*
+   * Fis ekranlarinda KISALTMA (musteri istegi, 18 Kasim 2026): bircok
+   * sekme acikken sekmede musteri adi okunabilsin.
+   *   SF = satis faturasi · OS = on siparis · AF = alis · IF = iade
+   * Kayitli fis duzenleniyorsa sonuna kalem isareti gelir: "SF ✎".
+   */
+  const duzenle = options?.editInvoiceId ? ' ✎' : '';
+  if (page === 'sales' || ((page === 'pre-orders' || page === 'dashboard') && duzenle)) {
+    return `${options?.preOrderOnly ? 'ÖS' : 'SF'}${duzenle}`;
   }
+  if (page === 'invoice-purchase') return `AF${duzenle}`;
+  if (page === 'sales-return') return `İF${duzenle}`;
+  if (duzenle) return 'Fatura ✎';
 
   return getPageLabel(page);
 }

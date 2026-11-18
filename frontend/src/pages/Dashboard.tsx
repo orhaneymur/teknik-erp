@@ -61,11 +61,9 @@ type RecentInvoice = {
 
 type DashboardProps = {
   refreshKey?: number;
-  f2Trigger?: number;
   initialEditInvoiceId?: number;
   onNotify?: (type: 'success' | 'error', message: string) => void;
   onDataChange?: () => void;
-  onF2ContextActive?: (active: boolean) => void;
 };
 
 type RecentPayment = {
@@ -128,11 +126,9 @@ type DashboardData = {
 
 export default function Dashboard({
   refreshKey = 0,
-  f2Trigger = 0,
   initialEditInvoiceId,
   onNotify,
   onDataChange,
-  onF2ContextActive,
 }: DashboardProps) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -150,7 +146,7 @@ export default function Dashboard({
   const [editSafeId, setEditSafeId] = useState<number | ''>('');
   const [editSubmitting, setEditSubmitting] = useState(false);
 
-  const { editingInvoice, openEditor, closeEditor, setEditingInvoice } = useInvoiceEditorFromUrl(
+  const { editingInvoice, openEditor, closeEditor } = useInvoiceEditorFromUrl(
     'dashboard',
     undefined,
     initialEditInvoiceId
@@ -201,10 +197,16 @@ export default function Dashboard({
     }
   }, []);
 
-  useEffect(() => {
-    setEditingInvoice(null);
-  }, [refreshKey, setEditingInvoice]);
-
+  /*
+   * Duzenleyiciyi YALNIZCA adres kapatir (useInvoiceEditorFromUrl):
+   * geri tusu / Ana Sayfa invoiceId'yi dusurunce editingInvoice null olur.
+   *
+   * Onceden burada refreshKey her degistiginde editingInvoice null
+   * yapiliyordu. Kayit onDataChange ile refreshKey'i artirdigi icin fis
+   * kayittan hemen sonra kapaniyor, adreste invoiceId kaliyordu; ayni fise
+   * tekrar tiklaninca adres degismedigi icin fis yeniden yuklenmiyor ve
+   * kullanici anasayfaya geri atiliyordu (musteri bildirdi, 18 Kasim 2026).
+   */
   useEffect(() => {
     if (editingInvoice === null) {
       void loadDashboard();
@@ -325,12 +327,10 @@ export default function Dashboard({
     return (
       <InvoiceInlineEditor
         invoice={editingInvoice}
-        f2Trigger={f2Trigger}
         onNotify={onNotify}
         onDataChange={onDataChange}
         onCancelEdit={closeEditor}
         onSaved={handleSaved}
-        onF2ContextActive={onF2ContextActive}
       />
     );
   }

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useF2KeyboardNav } from '../hooks/useF2KeyboardNav';
 import {
   API_BASE,
-  SEARCH_MIN_CHARS,
+  MUSTERI_ARAMA_MIN_KARAKTER,
   type Customer,
   type PaginatedListResponse,
 } from '../lib/api';
@@ -57,7 +57,7 @@ export default function InlineCustomerSearchInput({
   placeholder = 'Kod veya isim ile ara...',
   inputClassName = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm',
   accentClass = 'indigo',
-  minQueryLength = SEARCH_MIN_CHARS,
+  minQueryLength = MUSTERI_ARAMA_MIN_KARAKTER,
   showSelectedHint = true,
   onResultsChange,
   inputRef: externalInputRef,
@@ -222,7 +222,7 @@ export default function InlineCustomerSearchInput({
             value.trim().length > 0 &&
             value.trim().length < minQueryLength && (
               <li className="px-3 py-2 text-sm text-slate-400">
-                En az {minQueryLength} harf yazın
+                En az {minQueryLength} karakter yazın
               </li>
             )}
           {!loading &&

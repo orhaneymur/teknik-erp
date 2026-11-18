@@ -37,13 +37,11 @@ type InvoicesProps = {
   initialFilter?: FilterType;
   preOrderOnly?: boolean;
   refreshKey?: number;
-  f2Trigger?: number;
   initialEditInvoiceId?: number;
   title?: string;
   description?: string;
   onNotify?: (type: 'success' | 'error', message: string) => void;
   onDataChange?: () => void;
-  onF2ContextActive?: (active: boolean) => void;
 };
 
 export default function Invoices({
@@ -51,13 +49,11 @@ export default function Invoices({
   initialFilter = 'ALL',
   preOrderOnly = false,
   refreshKey = 0,
-  f2Trigger = 0,
   initialEditInvoiceId,
   title = 'Fatura Listesi',
   description = 'Satış, alış ve iade faturaları — görüntüle ve düzenle',
   onNotify,
   onDataChange,
-  onF2ContextActive,
 }: InvoicesProps) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   /** Listeden "Yazdir" ile acildiysa: yuklenince yazdir, bitince listeye don */
@@ -181,7 +177,6 @@ export default function Invoices({
     return (
       <InvoiceInlineEditor
         invoice={editingInvoice}
-        f2Trigger={f2Trigger}
         onNotify={onNotify}
         onDataChange={onDataChange}
         onCancelEdit={() => {
@@ -189,7 +184,6 @@ export default function Invoices({
           closeEditor();
         }}
         onSaved={handleSaved}
-        onF2ContextActive={onF2ContextActive}
         autoPrint={autoPrint}
       />
     );

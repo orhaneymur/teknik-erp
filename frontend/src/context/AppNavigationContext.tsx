@@ -13,6 +13,14 @@ type AppNavigationValue = {
    * Görünüm kapanırken `null` ile kaydı kaldırın.
    */
   registerBackHandler: (handler: (() => boolean) | null) => void;
+  /** Ust seviyede her F2 basisinda artan sayac */
+  f2Trigger: number;
+  /**
+   * Sayfa ici gomulu fis duzenleyicisi (satis / alis / iade) acikken F2'nin
+   * F2'siz sayfalarda da (anasayfa, fatura listesi, musteri karti) calismasi
+   * icin. Yalnizca InvoiceInlineEditor cagirir.
+   */
+  setF2ContextActive: (active: boolean) => void;
 };
 
 export const AppNavigationContext = createContext<AppNavigationValue | null>(null);

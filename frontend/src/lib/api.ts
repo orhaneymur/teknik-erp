@@ -12,6 +12,12 @@ export const API_BASE =
  * 2 harf: kısa stok kodları ("A1", "TX") ve iki harfli marka kısaltmaları da bulunur.
  */
 export const SEARCH_MIN_CHARS = 2;
+/**
+ * Musteri secim kutulari icin minimum karakter — musteri istegi (18 Kasim
+ * 2026): en az 3 rakam/harf yazilinca sonuc gelsin. Musteri kodlari 120'den
+ * basladigi icin 3 hane kodu bulmaya yeter. Urun aramasi 2'de kalir.
+ */
+export const MUSTERI_ARAMA_MIN_KARAKTER = 3;
 export const DEFAULT_USD = 46.39;
 export const DEFAULT_EUR = 53.628;
 /** @deprecated fetchExchangeRates veya useExchangeRates kullanın */

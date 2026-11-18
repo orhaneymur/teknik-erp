@@ -257,8 +257,10 @@ function App() {
       },
       goBack,
       registerBackHandler,
+      f2Trigger,
+      setF2ContextActive: setEmbeddedSalesEditorOpen,
     }),
-    [navigateTo, goBack, registerBackHandler]
+    [navigateTo, goBack, registerBackHandler, f2Trigger]
   );
 
   const toggleMenu = useCallback((id: MenuCategoryId) => {
@@ -380,11 +382,9 @@ function App() {
         return (
           <Dashboard
             refreshKey={dashboardRefreshKey}
-            f2Trigger={f2Trigger}
             initialEditInvoiceId={editInvoiceId}
             onNotify={showNotification}
             onDataChange={handleDataChange}
-            onF2ContextActive={setEmbeddedSalesEditorOpen}
           />
         );
       case 'sales':
@@ -422,7 +422,6 @@ function App() {
             initialFilter={invoiceFilter}
             preOrderOnly={preOrderOnly}
             initialEditInvoiceId={editInvoiceId}
-            f2Trigger={f2Trigger}
             title={preOrderOnly ? 'Ön Siparişler' : 'Fatura Listesi'}
             description={
               preOrderOnly
@@ -431,7 +430,6 @@ function App() {
             }
             onNotify={showNotification}
             onDataChange={handleDataChange}
-            onF2ContextActive={setEmbeddedSalesEditorOpen}
           />
         );
       case 'deleted-invoices':
@@ -456,13 +454,11 @@ function App() {
             refreshKey={dashboardRefreshKey}
             preOrderOnly
             initialEditInvoiceId={editInvoiceId}
-            f2Trigger={f2Trigger}
             initialFilter="SATIS"
             title="Ön Siparişler"
             description="Stok düşümü yapılmamış bekleyen satış siparişleri"
             onNotify={showNotification}
             onDataChange={handleDataChange}
-            onF2ContextActive={setEmbeddedSalesEditorOpen}
           />
         );
       case 'stock-list':
